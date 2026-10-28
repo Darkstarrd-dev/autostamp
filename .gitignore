@@ -1,0 +1,24 @@
+# 构建产物
+dist/
+*.exe
+*.dll
+*.syso
+*.log
+
+# 本地一次性探针 / 验证输出（截图、对比样本、临时 PDF）
+tmp/
+scratch/
+testresults/
+
+# 用户运行期数据（若有本地调试覆盖）
+/settings.local.json
+/seals.local/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 约定：不忽略 vendor（pdf.js 等第三方前端资产随仓库提交）；
+# 测试样本 PDF 随 testdata/ 提交，因此这里不屏蔽 *.pdf。
