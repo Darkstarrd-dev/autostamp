@@ -9,6 +9,7 @@
 |文档|作用|
 |`AGENTS.md`（本文件）|技术栈、目录结构、HTTP 契约、编码规范、验证要求、禁止事项|
 |`docs/IMPLEMENTATION_PLAN.md`|唯一权威的实施阶段计划（P0–P7，含每阶段验收命令）；**§0 = 新对话的执行入口（恢复协议）**|
+|`docs/UI_SPEC.md`|UI 状态机、参数词表、控件↔字段绑定、**用户确认决策表**（P0.5 产出；与 §6 字段必须一致）|
 |`docs/FACTS.md`|第三方库/浏览器的**实测事实**与体积数据（含复现方式），决策不得凭记忆|
 |`docs/changelog/<doc 同名>.md`|各文档的变更叙述历史（最新在上）；正文只留当前态事实|
 |`PROJECT_MAP.md`|代码地图（P0 起创建并维护；新增/删除包必须同步）|
@@ -69,7 +70,10 @@ AutoStamp/
     app/          server.go browser.go port.go
     console/      logger.go
   tools/verify/               headless Chromium 数值验证脚本（node，无依赖）
-  docs/  PROJECT_MAP.md  README.md
+  tools/genfix/main.go        生成 mock fixtures 的 stdlib 探针（P0.5）
+  docs/  docs/UI_SPEC.md  PROJECT_MAP.md  README.md
+  docs/ui/mockup.html       可交互 UI mock（P0.5 设计产物：不进 embed、不进 exe）
+  docs/ui/fixtures/         mock 用的假数据（由 tools/genfix 生成，含 alpha 印章 PNG）
 ```
 
 ## 4. 构建与运行
@@ -128,7 +132,7 @@ go build -tags webview -trimpath -ldflags "-s -w" -o dist/autostamp-webview-stri
     （防 DNS-rebinding）；上传走 `MaxBytesHandler`；pdfcpu `MaxImageBytes`/`MaxImagePixels`
     显式设限（默认 512MB/100MP 太大）。无鉴权（本机工具），但不得暴露非 loop 接口。
 
-## 6. HTTP 契约（`/api/*`，全部 JSON；P1 起冻结，改动必须同步本文与前端）
+## 6. HTTP 契约（`/api/*`，全部 JSON；字段在 **P0.5 与用户确认后**才冻结，改动必须同步本文、`docs/UI_SPEC.md` 与前端）
 
 |路由|用途|
 |---|---|
@@ -164,8 +168,13 @@ go build -tags webview -trimpath -ldflags "-s -w" -o dist/autostamp-webview-stri
   4. 落盘后回读：把保存的 PDF 再喂给 pdf.js 渲染采样，必须与预览像素一致；
   5. `ctx.filter` 是上下文状态，每次叠加前后必须 `save()/restore()` 且显式 `filter='none'`，
      否则残留 filter 污染下一层（该污染已在 FACTS §1.4 实测复现）。
+  6. UI 契约三方校验（P0.5 起常驻）：`node tools/verify/ui-smoke.mjs`（0 error、
+     无横向溢出、每个控件有 en/cn i18n key）+ `node tools/verify/ui-contract.mjs`
+     （`docs/ui/mockup.html` 的 `data-field` ↔ `UI_SPEC` 字段表 ↔ 本文 §6 请求字段）。
 - `go test ./...` 全绿；`go vet ./...` 无输出。
 - UI 阶段用真实窗口（WebView2）+ headless 各跑一次，console 必须 0 error。
+- **UI 语义门槛：**任何 UI 语义/字段改动必须能在 `UI_SPEC` 决策表找到用户确认记录
+  （选项 + 日期）；无记录即视为未确认，按 P0.5 交互协议先问用户，**禁止虚构确认**。
 
 ## 9. 不要做的事
 
@@ -175,6 +184,7 @@ go build -tags webview -trimpath -ldflags "-s -w" -o dist/autostamp-webview-stri
 - 不做 OCR/文字改写/表单编辑/加密破解/PDF 合并编辑器等无关能力（OCR 若将来需要，
   走可插拔外部模型，且默认关闭）。
 - 不交付占位实现：任何 `TODO: implement`、返回假数据、no-op 存根一律视为未完成。
+  `docs/ui/mockup.html` 是设计产物（假数据驱动），**不得**复制进 `web/static/` 当实现。
 - 不修改 `C:/opencode/tinyrouter` 仓库来支持本项目（模式可复制，代码不共享）。
 
 ## 10. 文档同步（强制）
@@ -199,3 +209,4 @@ go build -tags webview -trimpath -ldflags "-s -w" -o dist/autostamp-webview-stri
 |改预览渲染|`docs/FACTS.md` §1|`web/static/app-preview.js`、`web/static/vendor/pdfjs/`|
 |新增路由|本文件 §6|`internal/api/register.go`、`web/static/app-api.js`|
 |窗口/端口/浏览器回退|本文件 §5|`host_webview_windows.go`、`internal/app/`|
+|改 UI 契约 / 参数词表|`docs/UI_SPEC.md` + 本文件 §6 + `IMPLEMENTATION_PLAN.md` P0.5|`docs/ui/mockup.html`、`web/static/app-panel.js`、`web/static/app-overlay.js`、`internal/api/{pdf,seal,export}.go`|
