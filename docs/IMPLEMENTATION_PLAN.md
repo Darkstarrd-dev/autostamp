@@ -3,6 +3,20 @@
 > 最后核对：2026-10-28。本文是唯一权威的阶段计划；每阶段完成后勾选状态并回填实测数据。
 > 依赖/浏览器事实引用 `docs/FACTS.md` 编号，禁止凭记忆改写。约束见 `AGENTS.md`。
 
+## 0. 新对话恢复执行协议（执行入口）
+
+1. 工作目录必须是 `C:\AutoStamp`（否则先 `/add-dir C:\AutoStamp`）。`AGENTS.md` 随仓库自动加载。
+2. 依次读：`AGENTS.md`（约束）→ 本文件 **§10 状态跟踪** → `docs/FACTS.md`（实测事实）。
+3. 状态表中第一个 `[ ]` 的阶段即为当前阶段；只在该阶段的「交付 / 关键实现 / 验收」范围内动手，
+   不跨阶段抢做（P0 未 `[x]` 之前不动 P1）。
+4. 开工前基线：`git status` 干净；已有代码时跑 `go vet ./... ; go test ./...` 记录起点是否全绿。
+5. 事实（版本号、体积、参数键、切点、像素值）只允许引用 `docs/FACTS.md` 编号；
+   标 `UNVERIFIED` 的必须先写探针实测、回填 FACTS（标重跑日期）再据此决策，**禁止凭记忆**。
+   注意 FACTS §5：原一次性探针已删除，首次需要时重写进 `tools/verify/`。
+6. 完成判据：该阶段验收命令全部通过 → 状态表勾 `[x]` + 回填实测数据 → 文档同步（`AGENTS.md` §10）。
+   阶段收尾提交信息：`P<n>: <摘要>`（例 `P4: blend ExtGState 注入与回读一致性`）。
+7. 卡住时优先照 §7 风险表对策做；仍不通就把实测现象写进 FACTS，而不是改需求。
+
 ## 1. 目标 / 非目标
 
 目标（产品需求 1–5 全量）：PDF 查看（文本/图片/混合）、透明印章叠加与调参预览、
@@ -79,6 +93,28 @@ settings 写盘两次不损坏（单测：中断写 → 文件完整或回滚）
 `internal/api/pdf.go`：`POST /api/fs/pick`（native picker）、`POST /api/pdf/open`、
 `GET /api/pdf/raw`（Range/ETag）；`internal/pdfcore/read.go`（页数、每页 pt 尺寸、
 rotation、是否含文字标记——由 pdf.js 抽取，服务端只做结构信息）。
+
+资产获取（本机 2026-10-28 实测可行：`npm pack` 得 `pdfjs-dist-6.4.299.tgz`
+8,539,589 B；node v24.18.0 / npm 11.16.0）：
+
+```bash
+mkdir -p tmp/asset && cd tmp/asset && npm pack pdfjs-dist@6.4.299
+tar -xzf pdfjs-dist-6.4.299.tgz                       # → package/
+mkdir -p web/static/vendor/pdfjs/build
+cp package/build/pdf.min.mjs package/build/pdf.worker.min.mjs \
+   web/static/vendor/pdfjs/build/
+cp -r package/cmaps package/wasm package/image_decoders package/standard_fonts \
+   web/static/vendor/pdfjs/
+cp package/LICENSE web/static/vendor/pdfjs/LICENSE
+sha256sum web/static/vendor/pdfjs/build/*.mjs > web/static/vendor/pdfjs/SHA256.txt
+# 另写 web/static/vendor/pdfjs/README.md：来源 tarball 名+版本+用途+当前裁剪状态
+rm -rf tmp/asset                                      # 清理；tmp/ 已 gitignore
+```
+
+P1 先 vendor **全量**（≈5.98 MB，FACTS §3）以保证扫描型样本的 JBIG2/JPX 可渲染；
+发布期裁剪（`wasm`/`image_decoders`/`standard_fonts`）留到 P6 用实测样本决定，
+裁剪后 exe 体积必须回填 §10。PowerShell 下 `tar` 为 bsdtar 等价；`sha256sum`
+不可用时改 `Get-FileHash`。
 
 关键实现：pdf.js 仅 ESM，用 `import()` 动态加载（FACTS §1.1）；
 `MaxBytesHandler` 上限 256 MiB；Range 直读避免整文件进内存。

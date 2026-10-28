@@ -111,6 +111,11 @@
 
 ## 3. 前端资产体积（`pdfjs-dist@6.4.299` tarball 实测）
 
+获取方式（本机实测 2026-10-28，node v24.18.0 / npm 11.16.0）：
+`npm pack pdfjs-dist@6.4.299` → `pdfjs-dist-6.4.299.tgz` = **8,539,589 B**（554 files），
+`tar -xzf` 后目录名为 `package/`；命令全文见 `docs/IMPLEMENTATION_PLAN.md` P1「资产获取」。
+（旧会话曾用 jsdelivr CDN 逐文件下载，同样可行；`npm pack` 更快更完整。）
+
 |文件|原始|brotli(q6)|
 |---|---|---|
 |`build/pdf.min.mjs`|448 KB|118 KB|
