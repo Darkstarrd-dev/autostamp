@@ -71,6 +71,7 @@ AutoStamp/
     console/      logger.go
   tools/verify/               headless Chromium 数值验证脚本（node，无依赖）
   tools/genfix/main.go        生成 mock fixtures 的 stdlib 探针（P0.5）
+  build.ps1               自动编译/校验入口（任务见 §4；UTF-8 BOM 必需，PS 5.1 兼容）
   docs/  docs/UI_SPEC.md  PROJECT_MAP.md  README.md
   docs/ui/mockup.html       可交互 UI mock（P0.5 设计产物：不进 embed、不进 exe）
   docs/ui/fixtures/         mock 用的假数据（由 tools/genfix 生成，含 alpha 印章 PNG）
@@ -85,6 +86,24 @@ go vet ./... ; go test ./...
 # 发布：strip 版本
 go build -tags webview -trimpath -ldflags "-s -w" -o dist/autostamp-webview-stripped.exe .
 ```
+
+**一键脚本 `build.ps1`（推荐；PowerShell 5.1+，文件必须是 UTF-8 **带 BOM**，否则 5.1 按 GBK 解析）**：
+
+```powershell
+powershell -NoProfile -File build.ps1                 # clean+vet+test+genfix+3 个 exe+verify+sizes
+powershell -NoProfile -File build.ps1 -Task verify     # 只跑 UI 契约/冒烟校验
+powershell -NoProfile -File build.ps1 -Task genfix,fixtures   # 只刷新 docs/ui/fixtures 素材
+powershell -NoProfile -File build.ps1 -Task webview -Run      # 编窗口版并直接启动
+powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 + 重跑校验（Ctrl+C 退出）
+```
+
+- 任一任务失败 -> 退出码 1（汇总行「失败 N / 跳过 M」）；根目录还没有 `go.mod`/`*.go` 时
+  Go 任务打 `[skip]` 不算失败（P0 之前不会假绿，也不会报错）。
+- 版本用 Go 自动 VCS 注入（`debug.ReadBuildInfo` 的 `vcs.revision`），脚本用 `go version -m`
+  顺带打印 commit 短号；**不得**手写 `-X main.xxx` 形式 ldflags。
+- `-Watch` 观察 `*.go|mod|sum|mjs|js|html|css|ps1`（跳过 `.git`/`dist`/`tmp`），改动后自动跑
+  `vet -> test -> genfix -> console -> webview -> verify`；`-Once` 表示只跑一轮（CI 冒烟用）。
+- 上面手敲的 `go build` 命令仍有效，两者等价：脚本只是把本节命令固化 + 加校验/体积输出。
 
 - 首次运行在 `%APPDATA%\AutoStamp\` 生成 `settings.json`（印章默认值、切分默认值、
   导出默认 DPI/质量）+ `seals/`（印章预设）；临时会话资产在
@@ -210,3 +229,4 @@ go build -tags webview -trimpath -ldflags "-s -w" -o dist/autostamp-webview-stri
 |新增路由|本文件 §6|`internal/api/register.go`、`web/static/app-api.js`|
 |窗口/端口/浏览器回退|本文件 §5|`host_webview_windows.go`、`internal/app/`|
 |改 UI 契约 / 参数词表|`docs/UI_SPEC.md` + 本文件 §6 + `IMPLEMENTATION_PLAN.md` P0.5|`docs/ui/mockup.html`、`web/static/app-panel.js`、`web/static/app-overlay.js`、`internal/api/{pdf,seal,export}.go`|
+|改编译/测试流程|本文件 §4|`build.ps1`（任务分派 `Start-Dispatch`）、`tools/verify/*`|
