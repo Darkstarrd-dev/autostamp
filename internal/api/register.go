@@ -44,6 +44,10 @@ func NewMux(d Deps) *http.ServeMux {
 	mux.HandleFunc("POST /api/fs/pick", handlePick(d.Assets, d.Log))
 	mux.Handle("POST /api/pdf/open", http.MaxBytesHandler(handleOpen(d.Settings, d.Assets, d.Log), maxPDFBody))
 	mux.HandleFunc("GET /api/pdf/raw", handleRaw(d.Assets))
+	// P2: the seal image channel. The upload cap is its own (20 MiB), not the
+	// PDF body cap, so a stray seal upload cannot spool a document-sized body.
+	mux.Handle("POST /api/pdf/seal/prepare", http.MaxBytesHandler(handleSealPrepare(d.Assets, d.Log), maxSealBody))
+	mux.HandleFunc("GET /api/pdf/seal/raw", handleSealRaw(d.Assets))
 	// Routes no later stage has implemented still match the static pattern, so
 	// they reply 405 (empty body) or 404 (static handler). The front-end
 	// reports those as http_405 / http_404 with the status text instead of a

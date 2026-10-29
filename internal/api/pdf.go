@@ -260,28 +260,63 @@ func handleOpen(settings *config.Store, store *tmpstore.Store, log *slog.Logger)
 // If-Range and the weak ETag derived from the asset's mtime.
 func handleRaw(store *tmpstore.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		owner, err := webx.SessionOf(r)
-		if err != nil {
-			webx.Fail(w, http.StatusBadRequest, "bad_session", err.Error())
-			return
-		}
-		f, asset, err := store.Open(r.URL.Query().Get("id"), owner)
-		if err != nil {
-			// An asset belonging to another window answers as if it did not
-			// exist: the other window's existence is not this window's business.
-			if errors.Is(err, tmpstore.ErrNotFound) || errors.Is(err, tmpstore.ErrOwner) {
-				webx.Fail(w, http.StatusNotFound, "not_found", "assetId 不存在或已过期")
-				return
-			}
-			webx.Fail(w, http.StatusInternalServerError, "internal_error", err.Error())
-			return
-		}
-		defer f.Close()
-		w.Header().Set("Content-Type", "application/pdf")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Accept-Ranges", "bytes")
-		http.ServeContent(w, r, asset.ID, asset.Created, f)
+		serveAssetRaw(w, r, store, tmpstore.KindSource)
 	}
+}
+
+// handleSealRaw answers GET /api/pdf/seal/raw (AGENTS §6): the prepared stamp
+// PNG, served with the same Range/ETag behaviour so the preview can cache it.
+func handleSealRaw(store *tmpstore.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		serveAssetRaw(w, r, store, tmpstore.KindSeal)
+	}
+}
+
+// serveAssetRaw streams one asset to the session that owns it. The kind check
+// keeps the two byte channels apart: a seal id fetched through the PDF route
+// (or the other way round) is a client bug, not a miss, and answering 400 says
+// so instead of handing back a body the caller cannot use.
+func serveAssetRaw(w http.ResponseWriter, r *http.Request, store *tmpstore.Store, wantKind tmpstore.Kind) {
+	owner, err := webx.SessionOf(r)
+	if err != nil {
+		webx.Fail(w, http.StatusBadRequest, "bad_session", err.Error())
+		return
+	}
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		webx.Fail(w, http.StatusBadRequest, "bad_id", "需要 id 参数")
+		return
+	}
+	f, asset, err := store.Open(id, owner)
+	if err != nil {
+		// An asset belonging to another window answers as if it did not
+		// exist: the other window's existence is not this window's business.
+		if errors.Is(err, tmpstore.ErrNotFound) || errors.Is(err, tmpstore.ErrOwner) {
+			webx.Fail(w, http.StatusNotFound, "not_found", "assetId 不存在或已过期")
+			return
+		}
+		webx.Fail(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	defer f.Close()
+	if asset.Kind != wantKind {
+		webx.Fail(w, http.StatusBadRequest, "kind_denied",
+			"该 id 不是 "+string(wantKind)+" 资产（用对应的 raw 路由）")
+		return
+	}
+	w.Header().Set("Content-Type", contentTypeFor(asset.Kind))
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Accept-Ranges", "bytes")
+	http.ServeContent(w, r, asset.ID, asset.Created, f)
+}
+
+// contentTypeFor maps the asset kind to the media type the browser needs to
+// draw it: pdf.js consumes the PDF, drawImage consumes the seal PNG.
+func contentTypeFor(kind tmpstore.Kind) string {
+	if kind == tmpstore.KindSeal || kind == tmpstore.KindPage {
+		return "image/png"
+	}
+	return "application/pdf"
 }
 
 // inspectAsset opens the document with and without a password so "encrypted"

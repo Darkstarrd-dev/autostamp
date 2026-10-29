@@ -2,6 +2,24 @@
 
 > `docs/FACTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+
+## 2026-10-29 — P2 印章通道：探针目录事实纠正 + §1.3/§1.4 重跑
+
+- §5 探针目录那条改成「已入库」：仓库里 `tools/verify/csp.mjs`、`probe.mjs` 都在
+  （早前会话记的「已删除」是未提交状态下的记忆错误，本次实测纠正）。§7.1 的
+  CSP 未验证项随之闭合：`web/embed.go` 的 CSP 已带 `'unsafe-inline'` + `data:`，
+  并有 `web/embed_test.go` 断言。
+- §1.3 加重跑记录（`tools/verify/pixel-matrix.mjs --only=matrix`，应用的页面内跑，
+  底 `#d9e6ff` 叠实心 `#c8181c`）：`multiply`×1.0 → (170,22,28) 与旧记录一致；
+  canvas `globalAlpha=0.6` → (189,105,119)，绿通道比 PDF `/ca 0.6` 那条少 1/255。
+  **推论用于 P4**：「预览 == 落盘再渲染」的回读断言只能取 ≤1 容差，不能要求逐字节等。
+- §1.4 加第二条：污染数值跟绘制路径走（旧 (54,33,25) 出自已删除探针的 `drawImage`
+  路径；本次实心 `fillRect`+`multiply` 路径重跑得 (100,66,75)，复位后回 (170,22,28)）。
+  回归用例断言的是机制，不是具体数值。
+- §1.2 补：模式名有效性必须靠读回 `globalCompositeOperation` 验（非法名 canvas
+  静默保留旧 gco，等于没混合）；`lighten`/`saturation` 与这块底组合时按数学就
+  不该改变像素 —— 「叠图必须变」不能当 16 模式的通用断言，`difference` 才行。
+
 ## 2026-10-29 — P1 实测：新增 §1.7，§5.1 补探针，§6 消一项
 
 - 新增 §1.7（P1 查看链路，`tools/verify/preview-smoke.mjs`）：pdf.js 必须用 `httpHeaders`
