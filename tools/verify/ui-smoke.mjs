@@ -12,18 +12,12 @@
 // Usage: node tools/verify/ui-smoke.mjs [--keep-profile]
 // Exit: 0 = pass.
 
-import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { openChrome } from "./cdp.mjs";
 
 const root = resolve(join(fileURLToPath(import.meta.url)), "..", "..", "..");
-const CHROME = [
-  "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  "C:/Program Files/Chromium/Chrome/Application/chrome.exe",
-];
-const chromePath = CHROME.find((p) => existsSync(p)) || null;
 
 const PORT = Number(process.env.UI_SMOKE_PORT || 9333);
 const mockUrl = pathToFileURL(join(root, "docs", "ui", "mockup.html")).href;
@@ -31,128 +25,25 @@ const mockUrl = pathToFileURL(join(root, "docs", "ui", "mockup.html")).href;
 const fails = [];
 const bad = (msg) => fails.push(msg);
 
-let ws;
-let seq = 0;
-const send = (method, params = {}) =>
-  new Promise((ok, no) => {
-    const id = ++seq;
-    ws.send(JSON.stringify({ id, method, params }));
-    const wait = (ev) => {
-      const m = JSON.parse(ev.data);
-      if (m.id !== id) return;
-      ws.removeEventListener("message", wait);
-      if (m.error) no(new Error(`${method}: ${JSON.stringify(m.error)}`));
-      else ok(m.result);
-    };
-    ws.addEventListener("message", wait);
-  });
+let cdp = null;
+let consoleLines = [];
+let netFailures = [];
+const send = (m, p) => cdp.send(m, p);
+const evaluate = (e, a) => cdp.evaluate(e, a);
 
-const evaluate = async (expression, awaitPromise = false) => {
-  const r = await send("Runtime.evaluate", {
-    expression,
-    awaitPromise,
-    returnByValue: true,
-    includeCommandLineAPI: false,
-  });
-  if (r.exceptionDetails) throw new Error("page eval: " + JSON.stringify(r.exceptionDetails.exception));
-  return r.result.value;
-};
-
-const consoleLines = [];
-const netFailures = [];
-let chromeProc = null;
-let profile = null;
-
-async function waitForDebugger(maxMs = 15000) {
-  const t0 = Date.now();
-  while (Date.now() - t0 < maxMs) {
-    try {
-      const res = await fetch(`http://127.0.0.1:${PORT}/json/list`);
-      const list = await res.json();
-      const page = list.find((t) => t.type === "page");
-      if (page && page.webSocketDebuggerUrl) return page.webSocketDebuggerUrl;
-    } catch {}
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error("chrome devtools endpoint never came up");
-}
-const pageDiag = async () => {
-  const r = await send("Runtime.evaluate", {
-    expression: "document.readyState + '|' + location.href.slice(-28) + '|' + (window.__autoStampMock ? 'mock' : 'nomock')",
-    returnByValue: true,
-  });
-  return r.result && r.result.value;
-};
 async function boot() {
-  if (!chromePath) throw new Error("Chrome not found (needed for ui-smoke)");
-  profile = mkdtempSync(join(tmpdir(), "autostamp-ui-smoke-"));
-  chromeProc = spawn(
-    chromePath,
-    [
-      "--headless=new",
-      "--disable-gpu",
-      "--no-sandbox",
-      `--remote-debugging-port=${PORT}`,
-      `--user-data-dir=${profile}`,
-      "--window-size=1440,900",
-      "about:blank",
-    ],
-    { stdio: "ignore" }
-  );
-  const url = await waitForDebugger();
-  await new Promise((ok, no) => {
-    ws = new WebSocket(url);
-    ws.addEventListener("open", ok);
-    ws.addEventListener("error", () => no(new Error("cdp connect failed")));
+  cdp = await openChrome({
+    port: PORT,
+    url: mockUrl,
+    waitFor: "!!(window.__autoStampMock && window.__autoStampMock.STATES)",
+    diag: "document.readyState + '|' + location.href.slice(-28) + '|' + (window.__autoStampMock ? 'mock' : 'nomock')",
   });
-  ws.addEventListener("message", (ev) => {
-    const m = JSON.parse(ev.data);
-    if (m.id === undefined) return void handleEvent(m);
-  });
-  const handleEvent = (m) => {
-    if (m.method === "Runtime.consoleAPICalled") {
-      const e = m.params;
-      if (e.type === "error" || e.type === "assert") {
-        consoleLines.push("console." + e.type + ": " + (e.args || []).map((a) => a.value ?? a.description ?? a.type).join(" "));
-      }
-    }
-    if (m.method === "Log.entryAdded") {
-      const e = m.params.entry;
-      if (e.level === "error") consoleLines.push("log.error: " + e.text + " " + (e.url || ""));
-    }
-    if (m.method === "Network.loadingFailed") netFailures.push(m.params.errorText + " " + (m.params.url || ""));
-    if (m.method === "Network.responseReceived") {
-      const r = m.params.response;
-      if (r.status >= 400) netFailures.push(r.status + " " + r.url);
-    }
-  };
-  await send("Network.enable");
-  await send("Log.enable");
-  await send("Runtime.enable");
-  await send("Page.enable");
-  await send("Page.navigate", { url: mockUrl });
-  // wait for the mock to boot
-  const t0 = Date.now();
-  let lastErr = "";
-  for (;;) {
-    try {
-      const r = await send("Runtime.evaluate", {
-        expression: "!!(window.__autoStampMock && window.__autoStampMock.STATES)",
-        returnByValue: true,
-      });
-      if (r.result && r.result.value === true) break;
-      lastErr = "value=" + JSON.stringify(r.result && r.result.value) + " page=" + JSON.stringify(await pageDiag());
-    } catch (e) {
-      lastErr = String(e && e.message);
-    }
-    if (Date.now() - t0 > 15000) throw new Error("mock did not boot: " + lastErr);
-    await new Promise((r) => setTimeout(r, 250));
-  }
+  consoleLines = cdp.errors;
+  netFailures = cdp.failures;
 }
 
-async function viewport(w, h) {
-  await send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 1, mobile: false });
-  await evaluate("window.__autoStampMock.qa('#preview-stage canvas').forEach(function(c){}); void 0");
+function viewport(w, h) {
+  return cdp.setViewport(w, h);
 }
 
 function cmp(name, got, want) {
@@ -531,22 +422,7 @@ async function main() {
 }
 
 async function cleanup() {
-  try {
-    if (ws && ws.readyState === 1) await send("Browser.close").catch(() => {});
-  } catch {}
-  if (ws) try { ws.close(); } catch {}
-  if (chromeProc) chromeProc.kill();
-  if (profile && process.argv.includes("--keep-profile")) console.log("profile kept:", profile);
-  else if (profile) {
-    for (let i = 0; i < 5; i++) {
-      try {
-        rmSync(profile, { recursive: true, force: true });
-        break;
-      } catch {
-        await new Promise((r) => setTimeout(r, 400));
-      }
-    }
-  }
+  if (cdp) await cdp.close(process.argv.includes("--keep-profile"));
 }
 
 let code = 0;

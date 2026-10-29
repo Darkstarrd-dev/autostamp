@@ -59,19 +59,21 @@ AutoStamp/
   host_console.go              //go:build !windows 或无 webview tag：仅控制台 + 打开浏览器
   web/embed.go                 //go:embed all:static
   web/static/
-    index.html app-*.js style.css
-    vendor/pdfjs/build/{pdf.min.mjs,pdf.worker.min.mjs}
-    vendor/pdfjs/{cmaps,wasm,image_decoders,standard_fonts}/   见 FACTS §3 体积
+    index.html  app-shell.js  app-api.js  app-i18n.js  style.css  favicon.svg
+    vendor/pdfjs/build/{pdf.min.mjs,pdf.worker.min.mjs}      (P1 起)
+    vendor/pdfjs/{cmaps,wasm,image_decoders,standard_fonts}/ 见 FACTS §3 体积 (P1 起)
   internal/
-    config/       types.go defaults.go persistence.go     settings.json 读写
+    config/       types.go defaults.go patch.go sanitize.go store.go   settings.json 读写
     tmpstore/     store.go                               会话资产(TTL/配额/owner)
-    pdfcore/      engine.go read.go split.go sealimg.go blend.go raster.go validate.go
+    fsx/          atomic.go path.go                      原子写 + 路径校验
+    pdfcore/      engine.go read.go split.go sealimg.go blend.go raster.go validate.go  (P2-P5)
     api/          register.go pdf.go seal.go export.go settings.go
-    app/          server.go browser.go port.go
+    app/          server.go middleware.go net.go browser.go version.go  中间链/端口/版本
+    webx/         json.go                                envelope + DecodeJSON(未知键拒绝)
     console/      logger.go
-  tools/verify/               headless Chromium 数值验证脚本（node，无依赖）
-  tools/genfix/main.go        生成 mock fixtures 的 stdlib 探针（P0.5）
-  build.ps1               自动编译/校验入口（任务见 §4；UTF-8 BOM 必需，PS 5.1 兼容）
+  tools/verify/               headless 数值验证脚本 + cdp.mjs + comprobe（见 FACTS §5.1）
+  tools/genfix/               生成 mock fixtures 的 stdlib 探针（P0.5）
+  build.ps1                   自动编译/校验入口（任务见 §4；UTF-8 BOM 必需，PS 5.1 兼容）
   docs/  docs/UI_SPEC.md  PROJECT_MAP.md  README.md
   docs/ui/mockup.html       可交互 UI mock（P0.5 设计产物：不进 embed、不进 exe）
   docs/ui/fixtures/         mock 用的假数据（由 tools/genfix 生成，含 alpha 印章 PNG）
@@ -172,8 +174,26 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
 |`POST /api/pdf/apply`|矢量路径落盘：`{assetId, sealId, blend, opacity, scale, pos, offset, rotation, pages, crossPage}` → 新 `assetId`|
 |`POST /api/pdf/export`|光栅路径：`{assetId, dpi, quality, mode}` → 新 `assetId`（页位图由前端回传）|
 |`POST /api/pdf/save`|`{assetId, targetPath|pathGrantId, replaceOriginal}` → 原子写盘|
-|`GET/POST /api/settings`|读写 `settings.json`（指针字段按需合并）|
+|`GET /api/settings` / `PATCH /api/settings`|读全量设置；`PATCH` 走 `{"patch":{...}}` 信封（嵌套指针字段按需合并）|
 |`GET /api/seal/preset` 等|印章预设 list/save/delete|
+
+契约细则（P0 已实现，改动必须同步本节 + `UI_SPEC §4` + `web/static/app-api.js`）：
+
+- 统一信封（`internal/webx/json.go`，**扁平**字段）：成功
+  `{"ok":true,"data":{…}}`；失败 `{"ok":false,"code":"…","error":"…"}`。
+  已注册错误码：`bad_body`(400) `bad_host`(421) `bad_origin`(403) `internal_error`(500)。
+  新增码必须同时登记进本节 + `UI_SPEC §4` + 前端 i18n 文案表。
+- 请求体：`/api/settings` 的 body 是 `{"patch":{…}}`；未知字段一律 400
+  （`webx.DecodeJSON` 用 `DisallowUnknownFields`），空体也算 400；
+  越界值不报错而是 clamp 并在响应的 `warning` 字段里说明。
+- 尚未接线的路由**不加** `/api/` 兜底 handler（那会吞掉 `ServeMux` 的免费 405）：
+  未注册 verb 的 `/api/...` 命中 `GET /` → **405 纯文本**（不是信封），
+  前端按 `http_<status>` 上报（FACTS §1.5）。
+- `Host` 必须等于本机监听地址（`127.0.0.1:port` / `localhost:port`），否则 421
+  `bad_host`（防 DNS-rebinding）。`Origin` 校验在 `strict` 开关后面（P7 打开），
+  不匹配 → 403 `bad_origin`。见 `internal/app/middleware.go:hostGuard`。
+- gzip 中间件只压白名单扩展（`.html .js .mjs .css .json .txt .map .svg`），
+  cmaps/wasm/PDF/PNG 一类已压缩或二进制资产**不重压缩**；响应带 `Vary: Accept-Encoding`。
 
 ## 7. 编码规范
 
@@ -183,8 +203,12 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
 - 日志用 `internal/console`（`log/slog` 封装），不直接用 `log` 标准库（`main.go` 启动失败回退 `log.Fatalf` 可以）。
 - 前端：无全局变量污染，模块用 IIFE + `window.__autoStamp*` 命名空间；字符串一律 `escapeHtml`；
   i18n 双语文本集中在 `web/static/app-i18n.js`（en+cn），不得散落在 JSX/HTML。
-- 测试：`internal/pdfcore` 必须有单测（切分几何、条带切片、blend 注入、raster writer 字节结构）；
-  前端契约测试用 `web/*.test.js`（node，无框架），照 TinyRouter 惯例。
+- 测试：**Go 测试为唯一编译期测试通道**（`go test ./...`，无 npm/node 测试框架）。
+  静态契约（CSP 指令、静态资产服务/遍历拒绝、内联脚本禁止）由 `web/embed_test.go` 断言；
+  运行时行为（状态机、i18n 覆盖、`data-field` 快照、`/api` 往返、密度/实例交互）由
+  `tools/verify/shell-smoke.mjs`（真二进制 + CDP）与 `ui-smoke.mjs`（mock）断言；
+  `data-field` ↔ 字段表三方一致性由 `ui-contract.mjs` 断言。
+  `internal/pdfcore` 必须有单测（切分几何、条带切片、blend 注入、raster writer 字节结构）。
 
 ## 8. 验证要求（每阶段必须执行，不接受主观截图）
 
@@ -198,6 +222,14 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
   6. UI 契约三方校验（P0.5 起常驻）：`node tools/verify/ui-smoke.mjs`（0 error、
      无横向溢出、每个控件有 en/cn i18n key）+ `node tools/verify/ui-contract.mjs`
      （`docs/ui/mockup.html` 的 `data-field` ↔ `UI_SPEC` 字段表 ↔ 本文 §6 请求字段）。
+  7. 壳契约（P0 起常驻）：`node tools/verify/shell-smoke.mjs` — 真二进制 + headless
+     Chromium（`tools/verify/cdp.mjs`，无 npm 依赖），沙箱化 `%APPDATA%`/`%LOCALAPPDATA%`；
+     断言 console 0 error、无 404、12 状态机、深链、en/cn i18n 覆盖、密度切换、
+     实例增删选中复制、`/api` 往返与 `{"patch":…}` 合并。
+  8. 窗口通道：`node tools/verify/webview-launch.mjs`（真窗口 + 页内 `/api` 请求）与
+     `go run ./tools/verify/comprobe`（COM 返回值实测，FACTS §1.6）。
+  9. 以上全部由 `build.ps1` 串成一条命令（`-Task verify` / `go vet` / `go test`），
+     任一失败退出码 1。
 - `go test ./...` 全绿；`go vet ./...` 无输出。
 - UI 阶段用真实窗口（WebView2）+ headless 各跑一次，console 必须 0 error。
 - **UI 语义门槛：**任何 UI 语义/字段改动必须能在 `UI_SPEC` 决策表找到用户确认记录

@@ -2,6 +2,26 @@
 
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-10-29 — P0 落地后更正契约与规范（与代码核对）
+
+- §3 目录树按实际代码对齐：`internal/{webx,fsx}`、`internal/app/{net,version,middleware,browser,server}.go`、
+  `web/static/app-{shell,api,i18n}.js`、`tools/verify/{cdp,gen-i18n,shell-smoke,webview-launch,comprobe}`；
+  并显式标出 **`web/static/vendor/pdfjs/` 只有 P1 才进**、**`internal/pdfcore` 只有 P2-P5 才创建**。
+- 新增 §6「契约细则」。初稿是凭设想写的，与代码核对后全部更正：信封是**扁平**
+  `{ok,data,code,error}`（不是嵌套 `error{code,message,details}`）；已注册错误码只有
+  `bad_body`(400)/`bad_host`(421)/`bad_origin`(403)/`internal_error`(500)；
+  **不存在** `webx.NotImplemented` 占位（未接线路由不注册，保留 `ServeMux` 的
+  405 纯文本 / 404，见 FACTS §1.5）；**不存在**「中间件把 405 包成 JSON」；
+  「拒绝 `Sec-WebSocket-Protocol`」没有实现；`Origin` 校验在 `strict` 开关后面
+  （P7 打开），`Host` 校验恒开。
+- §7 测试条更正：原写「前端契约测试用 `web/*.test.js`（node，无框架）」与实际不符 —
+  实际只有 Go 测试（`go test ./...`）+ `tools/verify/*.mjs` 运行时断言；
+  引用过的 `web/static_test.go` 并不存在，已改为真实文件 `web/embed_test.go`。
+- §8 增第 7-9 项：`shell-smoke`（真二进制 + CDP，沙箱化 `%APPDATA%`/`%LOCALAPPDATA%`）、
+  `webview-launch` + `comprobe`（窗口通道实测，FACTS §1.6）、以及「全部由 `build.ps1`
+  串成一条命令，任一失败退出码 1」。
+- §6 路由表：`/api/settings` 行改为 `GET` + `POST`（body 是 `{"patch":{…}}`）——
+  代码里没有 PATCH 路由。
 
 ## 2026-10-29 — 澄清「编译产物双击后闪退」+ 补 `-Run` 开关
 

@@ -1,6 +1,8 @@
 # docs/FACTS.md — 实测事实（依赖与浏览器）
 
-> 最后核对：2026-10-28（本机 Windows + Go 1.26.5 + headless Chromium 151）。
+> 最后核对：2026-10-29（本机 Windows + Go 1.26.5 + Chrome 151 + WebView2 Runtime）。
+> §1.5/§1.6/§4.1/§5.1 本轮新增并重跑；§1.1-§1.4、§2、§3、§4 的数值来自 2026-10-19/28
+> 的一次性探针（已删除，不可就地重跑，见 §5.2），P1-P5 会把它们重写进仓库探针。
 > 本文只记录**已执行验证**得到的事实；决策引用本文编号，不得凭记忆改写。
 > 未验证项一律标 `UNVERIFIED`。复现方式见 §5。
 
@@ -48,7 +50,38 @@
 - `ctx.filter` 是**上下文状态**：一次 `filter='brightness(1.5) saturate(0.2)'` 未复位，
   下一层 `multiply` 绘制结果变为 (54, 33, 25)（应为 (0,0,0)）。
   → 每层叠加必须 `save()/restore()` 或显式 `ctx.filter='none'`。
-- `getImageData` 前须确认已 `restore()`，否则采样到的是滤镜后的中间态。
+
+- `getImageData` 前须确认已 `restore()`,否则采样到的是滤镜后的中间态。
+
+### 1.5 CSP、静态响应头与 favicon(实测 2026-10-29,`tools/verify/shell-smoke.mjs`)
+
+- `style-src 'self'` 会**阻止 CSSOM 写样式**:`el.style.setProperty(...)` 触发
+  Chromium 报 `Applying inline style violates ... 'style-src 'self''`,面板宽度/预览
+  transform 一类的动态样式全部失效。→ CSP 必须含 `style-src 'self' 'unsafe-inline'`
+  (脚本面仍是 `script-src 'self'`,内联 `<script>` 依旧不可能;`web/embed_test.go`
+  断言该指令)。
+- Chromium 会自动请求 `/favicon.ico`(无 `<link rel="icon">` 时 404 → console 报错误)。
+  本项目提供 `web/static/favicon.svg` + `<link rel="icon">`,该 404 消失。
+- 未注册 verb 的 `/api/...` 路径会命中静态 pattern(`GET /`)→ ServeMux 直接回
+  **405 + 纯文本 body**(不是我们的 envelope)。前端必须按 `http_<status>` 上报,
+  不能报 `bad_json`(`web/static/app-api.js` 已区分;`shell-smoke` 断言 toast 含状态)。
+
+### 1.6 WebView2 / COM(实测 2026-10-29,`tools/verify/comprobe`)
+
+- `windows.CoInitializeEx(0, COINIT_APARTMENTTHREADED=0x2)` 在本机(Go 1.26.5 +
+  `golang.org/x/sys/windows`)在**任意顺序**(锁线程前后)都返回
+  `errno=0x1`,其 `Error()` 文案是**误导性**的 `Incorrect function.`。
+  该 0x1 其实是 `S_FALSE`(=1,「COM 已被初始化」),被 `LazyProc` 当错误抛出;
+  `S_OK=0` 才是成功。
+- 因此 `host_webview_windows.go` 把 `errno(1)`(S_FALSE)与 `RPC_E_CHANGED_MODE`
+  (`0x80010106`)都视为可容忍 —— 照 TinyRouter `host_webview_window.go:120-132` 的
+  顺序 `LockOSThread` → `CoInitializeEx` → `defer CoUninitialize`(LIFO 次序不可改)。
+- 实测 `-tags webview` 构建窗口正常:`tools/verify/webview-launch.mjs` 打印
+  `msg="webview window opened"` 且页面在窗口内完成 `/api/health`、`/api/settings`
+  请求(2026-10-29,`autostamp v0.0.0-…+dirty`)。
+- 进程被 kill 后 WebView2 仍会**短暂锁定** profile 目录（`WEBVIEW2_USER_DATA_FOLDER`）：
+  `rmSync(..., {maxRetries})` 在 12 次 × 250 ms 内仍可能 `EPERM`。因此
+  `webview-launch.mjs` 的清理只重试后打一条 soft 警告（目录在 `%TEMP%` 下，不视为失败）。
 
 ## 2. 后端库：`github.com/pdfcpu/pdfcpu v0.16.3`（2026-10-19，Apache-2.0，纯 Go）
 
@@ -144,24 +177,56 @@
 - 同一 writer 亦输出过含 `SMask` + `ExtGState /BM /Multiply /ca 0.6` 的 2 页骑缝章 PDF，
   渲染采样见 §1.3。
 
-## 5. 复现方式（探针已删除，需重写）
+### 4.1 骨架构建体积(实测 2026-10-29)
 
-- 本文事实来自一次性探针 `C:/tmp/pdfprobe/`（`inpdf` 生成输入 PDF；
-  `stampprobe`/`jpprobe` 纯 stdlib 写 PDF；`pcprobe`/`pc2` 走 pdfcpu 的
-  `ImageWatermark`+`AddWatermarks`+`Validate`+`Cut`+`Merge`）。
-  **该目录已在清理步骤删除**（现已不存在），因此 §1–§4 的数值目前是
-  「已观测、不可就地重跑」的状态。
-- 浏览器采样方式：omp 托管 headless Chromium（`browser.open` → `tab.run` →
-  `page.evaluate`），`pdfjs-dist` 从 jsdelivr 动态 `import()`，PDF 以 base64 在内存喂入，
-  采样用 `ctx.getImageData(...).data[i..]`。
-- 正式实现时（P0/P1）把这些探针**重写进仓库** `tools/verify/` + `internal/pdfcore` 单测，
-  重写后本文各节须逐项重跑并标 `重跑日期`；未重跑前不得把任何结论当作可直接依赖的新事实。
+|构建|命令|strip 后|
+|---|---|---|
+|控制台构建|`go build -trimpath -ldflags "-s -w" .`|**6,912,512 B**(≈6.6 MB)|
+|WebView2 构建|`go build -tags webview -trimpath -ldflags "-s -w" .`|**7,345,152 B**(≈7.0 MB)|
+|未 strip(两种构建同法)|去掉 `-s -w`|9,782,784 B / 10,464,256 B|
 
-## 6. 未验证（UNVERIFIED）
+- P0 阶段 `web/static` 只有壳(100 KB,无 PDF 资产),所以上面就是「Go + 壳 + WebView2
+  绑定」的下界;P1 塞进 pdf.js 最小集(§3:core+worker+cmaps ≈ 2.8 MB)后,
+  预计控制台构建 ≈ 8.4 MB、WebView2 构建 ≈ 9.9 MB。
+- 复现:`powershell -NoProfile -File build.ps1`(带/不带 `-Tag webview`,带版本戳 +
+  `winres` 图标资源)。
 
-- `UNVERIFIED`：真实中文 CID 字体的 PDF 文本抽取质量（依赖 `/ToUnicode`；cmaps 只解决渲染）。
-- `UNVERIFIED`：AES-256 加密 PDF 的读取+落盘链路。
-- `UNVERIFIED`：更窄包（只用 `pkg/pdfcpu` 子集）的体积下界。
-- `UNVERIFIED`：未安装 WebView2 Runtime 的机器的回退行为（预期：自动降级为系统浏览器）。
-- `UNVERIFIED`：2 拼 1 扫描页的**自动**版面判定（启发式：MediaBox 纵横比 > 0.7 且横排即判 2 拼）
+### 4.2 版本戳与身份(实测 2026-10-29)
+
+- `GET /api/health` 返回 `{status,name:"autostamp",version,commit,go,os,arch}`;
+  version 来自 `debug.ReadBuildInfo()` 的 VCS 戳(`v0.0.0-<ts>-<hash>[+dirty]`),
+  前端据此确认端口上确实是本 App(`app-shell.js` 名称不匹配时告警)。
+- 实测本机输出:`autostamp v0.0.0-20261029…+dirty go1.26.5 windows/amd64 (commit …dirty)`。
+
+## 5. 复现方式
+
+### 5.1 已在仓库内的探针(2026-10-29 起可就地重跑)
+
+|命令|覆盖的本文编号|说明|
+|---|---|---|
+|`node tools/verify/ui-smoke.mjs`|§1.2 §1.3 §1.4|mock 的数值化 UI 校验(混合模式像素矩阵、`ctx.filter` 泄漏断言、切分几何、骑缝条带)|
+|`node tools/verify/shell-smoke.mjs`|§1.5 §4.2|真实二进制 + headless Chromium:壳契约/CSP/`/api` 往返/i18n/状态机/深链|
+|`node tools/verify/ui-contract.mjs`|UI 契约|`docs/ui/mockup.html` ↔ `UI_SPEC` ↔ `AGENTS §6` 三方字段一致|
+|`node tools/verify/webview-launch.mjs`|§1.6|WebView2 构建真窗口启动(打印 `webview window opened` + 页内 `/api` 请求)|
+|`go run ./tools/verify/comprobe [-window]`|§1.6|COM `CoInitializeEx` 返回值实测(三种顺序)+ 真窗口泵消息|
+|`go run ./tools/genfix`|mock 资产|重生成 `docs/ui/fixtures/{page,seal}.png`|
+
+### 5.2 尚未搬进仓库的历史探针
+
+- §1.1-§1.4、§2、§3、§4 的原始数值来自一次性探针 `C:/tmp/pdfprobe/`(已删除,
+  现不可就地重跑)。P1-P5 会把 PDF 相关断言重写进 `internal/pdfcore` 单测与
+  `tools/verify/`(P2 像素矩阵、P3 切分几何、P4 回读一致性、P5 体积表),
+  重跑后逐节标注重跑日期。
+- 浏览器采样方式(历史):omp 托管 headless Chromium + jsdelivr 动态 `import()` +
+  base6 内存喂入 PDF + `ctx.getImageData` 采样;现行做法改为
+  `tools/verify/cdp.mjs`(直连本机 Chrome 的 CDP,无 npm 依赖)。
+
+## 6. 未验证(UNVERIFIED)
+
+- `UNVERIFIED`:真实中文 CID 字体的 PDF 文本抽取质量(依赖 `/ToUnicode`;cmaps 只解决渲染)。
+- `UNVERIFIED`:AES-256 加密 PDF 的读取+落盘链路。
+- `UNVERIFIED`:更窄包(只用 `pkg/pdfcpu` 子集)的体积下界。
+- `UNVERIFIED`:未安装 WebView2 Runtime 的机器的回退行为(窗口本身已在带 Runtime 的
+  本机实测通过,见 §1.6)。
+- `UNVERIFIED`:2 拼 1 扫描页的**自动**版面判定(启发式:MediaBox 纵横比 > 0.7 且横排即判 2 拼)
   —— P3 需带样本实测。

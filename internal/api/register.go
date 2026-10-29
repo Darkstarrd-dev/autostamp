@@ -1,0 +1,106 @@
+// Package api wires the /api routes (AGENTS §6) onto a ServeMux.
+//
+// P0 registers only the two routes that exist for sure: health and settings.
+// Every later stage adds its own route in its own file (pdf.go, seal.go,
+// export.go) instead of growing this one function.
+package api
+
+import (
+	"log/slog"
+	"net/http"
+
+	"autostamp/internal/app"
+	"autostamp/internal/config"
+	"autostamp/internal/webx"
+	"autostamp/web"
+)
+
+// Deps is what a handler needs; it is built once in main.
+type Deps struct {
+	Version  app.BuildInfo
+	Log      *slog.Logger
+	Settings *config.Store
+}
+
+// NewMux builds the P0/P1/P4 route set. Method patterns come from Go 1.22
+// ServeMux, so a wrong verb returns 405 for free.
+func NewMux(d Deps) *http.ServeMux {
+	mux := http.NewServeMux()
+
+	// Static shell first: "/" is the app page, everything else is a vendor or
+	// app-*.js asset served from the embedded FS.
+	web.RegisterStatic(mux, web.Static(), d.Log)
+
+	mux.HandleFunc("GET /api/health", handleHealth(d.Version))
+	mux.HandleFunc("GET /api/settings", handleSettingsGet(d.Settings))
+	mux.HandleFunc("POST /api/settings", handleSettingsPost(d.Settings))
+	// Routes that no later stage has implemented still match the static pattern,
+	// so they reply 405 (empty body) or 404 (static handler). The front-end
+	// reports those as http_405 / http_404 with the status text instead of a
+	// bogus parse error; the verb itself is the contract (AGENTS §6).
+	//
+	// A /api/ subtree handler here would swallow the free 405 from ServeMux, so
+	// this stays as it is: the JSON envelope comes from the handlers, and
+	// anything else is the router's own reply.
+	return mux
+}
+
+// healthPayload is the /api/health body. name lets the front-end confirm it is
+// talking to AutoStamp and not to another loopback app on the same port.
+type healthPayload struct {
+	Status  string `json:"status"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Commit  string `json:"commit"`
+	Go      string `json:"go"`
+	OS      string `json:"os"`
+	Arch    string `json:"arch"`
+}
+
+func handleHealth(v app.BuildInfo) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		webx.OK(w, healthPayload{
+			Status: "ok", Name: "autostamp",
+			Version: v.Version, Commit: v.Commit, Go: v.GoVersion, OS: v.GOOS, Arch: v.Arch,
+		})
+	}
+}
+
+func handleSettingsGet(s *config.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		webx.OK(w, settingsPayload{s.Snapshot(), ""})
+	}
+}
+
+// settingsPOSTBody is the PATCH-style body (pointer fields merge, AGENTS §6).
+type settingsPOSTBody struct {
+	Patch config.Patch `json:"patch"`
+}
+
+// settingsPayload wraps the document plus the clamp warning: a PATCH with an
+// out-of-range value is corrected, not rejected, so the app keeps running and
+// the UI can still tell the user what was fixed.
+type settingsPayload struct {
+	Settings config.Settings `json:"settings"`
+	Warning  string          `json:"warning,omitempty"`
+}
+
+func handleSettingsPost(s *config.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body settingsPOSTBody
+		if err := webx.DecodeJSON(r, &body, 1<<20); err != nil {
+			webx.Fail(w, http.StatusBadRequest, "bad_body", "请求体不是合法的 settings 补丁: "+err.Error())
+			return
+		}
+		saved, clampErr := s.Apply(&body.Patch)
+		warning := ""
+		if clampErr != nil {
+			warning = clampErr.Error()
+		}
+		if warning != "" {
+			webx.OK(w, settingsPayload{saved, warning})
+			return
+		}
+		webx.OK(w, settingsPayload{saved, ""})
+	}
+}

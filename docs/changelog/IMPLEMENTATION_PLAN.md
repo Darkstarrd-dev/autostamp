@@ -2,6 +2,18 @@
 
 > `docs/IMPLEMENTATION_PLAN.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-10-29 — P0 完成：勾状态 + 回填实测
+
+- 阶段标题 `P0` → `[x]`；验收块下回填实测：Go 测试 46 个（`web` 4 / `api` 8 / `app` 10 /
+  `config` 12 / `fsx` 5 / `tmpstore` 7 / `console` 3）；`shell-smoke` OK（真二进制 +
+  headless，ids=79 / 字段=44 / 状态=12 / 非预期 console error 0）；`webview-launch` OK
+  （真窗口 + 页内 `/api`）；strip 体积 6,912,512 B（控制台）/ 7,345,152 B（WebView2）。
+- §10 状态跟踪 P0 行回填同一批数字；`internal/pdfcore` 明确仍未创建（P2-P5）。
+- P0.5 验收下补「实测」行（`ui-contract` mock 39 / spec 44 / i18n 190 / 15 状态 /
+  75 契约 id / **11** 路由；`ui-smoke` 170 键、0 error）；§10 的 P0.5 行同一并把
+  原写错的「10 路由」改成 11（`ui-contract` 实际输出）。
+- 头部「最后核对」改为「P0 + P0.5 完成；当前阶段 = P1」。
+
 ## 2026-10-29 — P0.5 完成并勾状态
 
 - 阶段标题 `P0.5` 改为 `[x]`；§10 状态跟踪回填实测数据：用户确认 **2 轮**（2026-10-29），

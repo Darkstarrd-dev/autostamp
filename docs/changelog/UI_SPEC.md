@@ -2,6 +2,17 @@
 
 > `docs/UI_SPEC.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-10-29 — 增 §7.1「真实壳的驱动接口」
+
+- 登记 `window.__autoStampShell` 的驱动面（`STATES`/`setState`/`verifyState`/`setParams`/
+  `fields`/`ids`/`i18nPairs`/`probe`/`applyLang`/`applyTheme`/`setDensity`/`setModal`/
+  `clearToast`/`addInstance`/`selectInstance`/`deleteSelected`/`duplicateSelected`）+
+  `probe` 关键字清单 + 深链 `/#<state>` + 三条校验命令（`shell-smoke`、`webview-launch`、
+  `comprobe`）。
+- 原因：P0 壳的运行时断言不能再依赖 `docs/ui/mockup.html`（假数据），必须直接驱动
+  真实嵌入页面；`tools/verify/shell-smoke.mjs` 用的就是这套钩子。
+- §7 的 mock 深链行一度被本节插入覆盖，已恢复（mock 与壳两套钩子并存）。
+
 ## 2026-10-29 — P0.5 用户确认第 1、2 轮回填（第 1 轮有语义变更）
 
 - §8 决策表：D2–D4、L1、CP1 记为**已确认**（2026-10-29，ask 第 1 轮），D1、I1、S1、E1

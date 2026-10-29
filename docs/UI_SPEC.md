@@ -387,7 +387,24 @@ app-main  app-root  apply-anchor  apply-blend  asset-hooks  btn-export  btn-open
 `setParams({api.x: v,…})`、`probe(name)`、`applyLang(lang)`、`applyTheme(t)`、`setDensity(d)`（`two-col` / `single-col` / `collapsed`）、
 `i18n()`（DOM 快照）、`fields()`、`ids()`、`q()/qa()`、`setModal()/clearToast()`。
 `probe` 关键字：`state` `overflow` `images` `instances` `split` `strip` `pixel-blend` `estimate`。
+
 深链：`mockup.html#crosspage`（`hashchange` 会重走状态机）。
+
+### 7.1 真实壳的驱动接口（`web/static/app-shell.js`，`tools/verify/shell-smoke.mjs` 用）
+
+`window.__autoStampShell`：`STATES`、`setState(name)`、`verifyState(name)`、
+`setParams({api.x: v,…})`（写控件并派发 `input`/`change`，因此走真实 persist 路径）、
+`fields()`（全部 `data-field` 控件快照；display-only `span` 不计）、`ids()`、
+`i18nPairs()`（每个 `data-i18n` 的 en+cn 原值）、`probe(name)`、
+`applyLang(lang)`、`applyTheme(t)`、`setDensity(d)`、`setModal(id)`、`clearToast()`、
+`addInstance(name)`、`selectInstance(id)`、`deleteSelected()`、`duplicateSelected()`、
+`q()/qa()`、`t(key)`。
+`probe` 关键字：`state` `overflow` `density` `instances` `instanceCount` `selected`
+`modal` `toast` `lang` `theme` `version` `labels`。
+深链：`http://127.0.0.1:<port>/#crosspage`（`hashchange` 重走状态机；清空 hash 回文档态）。
+校验命令：`node tools/verify/shell-smoke.mjs`（真二进制 + headless Chromium，
+沙箱化 `%APPDATA%`/`%LOCALAPPDATA%`）、`node tools/verify/webview-launch.mjs`
+（WebView2 真窗口）、`go run ./tools/verify/comprobe`（COM 实测，FACTS §1.6）。
 
 ## 8. 决策表（用户确认记录）
 

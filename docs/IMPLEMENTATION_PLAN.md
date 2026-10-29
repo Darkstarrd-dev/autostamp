@@ -1,6 +1,6 @@
 # AutoStamp — 实施计划（IMPLEMENTATION PLAN）
 
-> 最后核对：2026-10-29（P0.5 完成：UI 契约冻结，2 轮用户确认；`docs/UI_SPEC.md` 决策表已回填）。
+> 最后核对：2026-10-29（P0 骨架 + P0.5 UI 契约冻结完成；当前阶段 = P1 PDF 查看）。
 > 依赖/浏览器事实引用 `docs/FACTS.md` 编号，禁止凭记忆改写。约束见 `AGENTS.md`。
 
 ## 0. 新对话恢复执行协议（执行入口）
@@ -67,7 +67,7 @@ flowchart LR
 
 状态：`[ ]` 未开始 · `[~]` 进行中 · `[x]` 完成（并回填实测数据）
 
-### P0 — 工程骨架 `[ ]`
+### P0 — 工程骨架 `[x]`
 
 目的：窗口能打开、服务能跑、配置能存、地图有落地。
 
@@ -85,6 +85,19 @@ flowchart LR
 验收：`go build -tags webview ./... && go vet ./... && go test ./...` 全绿；
 headless 打开 `http://127.0.0.1:<port>` 显示外壳、console 0 error；
 settings 写盘两次不损坏（单测：中断写 → 文件完整或回滚）。
+
+实测（2026-10-29）：
+
+- `go vet ./...` + `go test ./...` 全绿（Go 测试 46 个：`web` 4 / `api` 8 / `app` 10 /
+  `config` 12 / `fsx` 5 / `tmpstore` 7 / `console` 3）。
+- `node tools/verify/shell-smoke.mjs`：**真二进制 + headless Chromium**，沙箱化
+  `%APPDATA%`/`%LOCALAPPDATA%`，console 0 error、无 404，外壳契约 id=79 / 字段=44 /
+  状态=12；`/api/health` 返回版本三元组，`POST /api/settings` 的 `{"patch":…}` 合并
+  只改送来的字段（越界值 clamp + `warning`）。
+- `node tools/verify/webview-launch.mjs`：`-tags webview` 真窗口打开并页内完成
+  `/api/health`+`/api/settings`；COM `CoInitializeEx` 实测返回 `S_FALSE`（FACTS §1.6）。
+- 体积：控制台 strip 6,912,512 B；WebView2 strip 7,345,152 B（FACTS §4.1）。
+- 落地文件见 `PROJECT_MAP.md`；`internal/pdfcore` 未创建（P2-P5）。
 
 ### P0.5 — UI 契约冻结：与用户交互确定 UI `[x]`
 
@@ -141,6 +154,10 @@ settings 写盘两次不损坏（单测：中断写 → 文件完整或回滚）
 - `UI_SPEC` 决策表 D1–D4 与预览形态、布局密度各有用户确认记录（日期 + 所选选项 + 原文摘要）。
 - `docs/IMPLEMENTATION_PLAN.md` §9 对应行改为「已在 P0.5 确认」并指向 `UI_SPEC` 行号。
 
+实测（2026-10-29）：`ui-contract` → mock fields=39 / spec fields=44 / i18n=190 /
+states=15 / ids=75 / routes=11（OK）；`ui-smoke` → states=15 i18nKeys=170
+consoleErrors=0（OK）。决策表：D1-D4、L1、CP1、I1、S1 全部有用户确认记录
+（2026-10-29，ask 第 1/2 轮，`UI_SPEC §8`）。§9 的 D2/D3/D4 行已改为「已在 P0.5 确认」。
 ### P1 — PDF 查看（需求 1）`[ ]`
 
 目的：打开本地 PDF，页浏览、缩略图、文本层；打通「本地文件」通道。
@@ -318,8 +335,8 @@ P0.5 追加必问项（不属上表）：布局密度、骑缝章预览形态、
 
 |阶段|状态|实测数据（回填）|
 |---|---|---|
-|P0 骨架|`[ ]`||
-|P0.5 UI 契约冻结|`[x]`|用户确认轮次：2 轮（2026-10-29）。`ui-contract` OK（mock 39 字段 / spec 44 字段 / i18n 190 键 / 15 状态 / 75 契约 id / 10 路由三方一致）；`ui-smoke` OK（15 状态、console 0 error、无资源失败、1280x720 与 1440x900 无横向溢出、29 项断言含 D2 三档与弹窗/toast 可见性、快捷键、密度三档）|
+|P0 骨架|`[x]`|2026-10-29：`go vet`/`go test` 全绿（46 个 Go 测试）；`shell-smoke` OK（真二进制 + headless，ids=79 字段=44 状态=12，非预期 console error 0，`/api` 往返与 `{"patch":…}` 合并断言）；`webview-launch` OK（真窗口 + 页内 `/api`）；strip 体积 6,912,512 B（控制台）/ 7,345,152 B（WebView2）→ FACTS §4.1|
+|P0.5 UI 契约冻结|`[x]`|用户确认轮次：2 轮（2026-10-29）。`ui-contract` OK（mock 39 字段 / spec 44 字段 / i18n 190 键 / 15 状态 / 75 契约 id / 11 路由三方一致）；`ui-smoke` OK（15 状态、console 0 error、无资源失败、1280x720 与 1440x900 无横向溢出、29 项断言含 D2 三档与弹窗/toast 可见性、快捷键、密度三档）|
 |P1 查看|`[ ]`||
 |P2 叠加预览|`[ ]`||
 |P3 切分+骑缝|`[ ]`||
