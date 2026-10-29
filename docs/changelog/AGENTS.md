@@ -2,6 +2,18 @@
 
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-10-29 — P1 之后：§3 目录树 / §6 fs.pick 形态 / §8 新增第 9 条
+
+- §3 目录树按 P1 实际代码对齐：`web/static` 增 `app-preview.js`/`app-textlayer.js`/
+  `app-pager.js`；vendor 补 `iccs/` 与 `web/pdf_viewer.css`（文本层 CSS，裁剪状态记在
+  vendor `README.md`）；`fsx/pick*.go`、`webx/session.go`、`api/pdf.go`、`pdfcore/read.go`
+  进树，`pdfcore` 其余文件仍标「P2-P5 才创建」。
+- §6 `POST /api/fs/pick` 行改成实测形态：`{filter,multi,startDir}` 或 `{"filePath":…}`
+  直开授权、取消回 `{cancelled:true, picks:[]}`、无选择器平台 501 `pick_unsupported`。
+- §8 验证要求加第 9 条 `preview-smoke.mjs`（现场生成四类样本 + 真 UI 打开 + 画布像素 /
+  `getTextContent` 条数 / `.textLayer` 宽度 == 画布 CSS 宽 / 分页 chip 数 / vendor 0 失败），
+  「全部串进 `build.ps1`」重新编号为第 10 条。
+
 ## 2026-10-29 — P0 落地后更正契约与规范（与代码核对）
 
 - §3 目录树按实际代码对齐：`internal/{webx,fsx}`、`internal/app/{net,version,middleware,browser,server}.go`、

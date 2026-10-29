@@ -5,10 +5,30 @@ import (
 	"embed"
 	"io/fs"
 	"log/slog"
+	"mime"
 	"net/http"
 	"path"
 	"strings"
 )
+
+// init registers content types Go is wrong or silent about. Chromium enforces
+// a JavaScript MIME type for module scripts and module workers, and pdf.js
+// ships only ESM (.mjs) — see FACTS §1.1. Without this the worker arrives as
+// text/plain and import() rejects it.
+//
+// .bcmap (cmaps) and .ttf (standard_fonts) are fetched as arrayBuffer/blob, so
+// their declared type only has to be truthful.
+func init() {
+	for ext, typ := range map[string]string{
+		".mjs":   "text/javascript",
+		".bcmap": "application/octet-stream",
+		".ttf":   "font/ttf",
+	} {
+		if err := mime.AddExtensionType(ext, typ); err != nil {
+			panic("web: bad MIME registration for " + ext + ": " + err.Error())
+		}
+	}
+}
 
 //go:embed all:static
 var static embed.FS
@@ -55,7 +75,7 @@ func RegisterStatic(mux *http.ServeMux, site fs.FS, log *slog.Logger) {
 		//
 		// style-src needs 'unsafe-inline' because the shell drives layout with
 		// CSSOM style writes (panel width, preview transform); Chromium blocks
-		// those without it (measured 2026-10-29, FACTS §1.6). The XSS surface
+		// those without it (measured 2026-10-29, FACTS §1.5). The XSS surface
 		// that matters — script-src — stays 'self' only.
 		w.Header().Set("Content-Security-Policy",
 			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; "+

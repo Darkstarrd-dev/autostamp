@@ -59,17 +59,18 @@ AutoStamp/
   host_console.go              //go:build !windows 或无 webview tag：仅控制台 + 打开浏览器
   web/embed.go                 //go:embed all:static
   web/static/
-    index.html  app-shell.js  app-api.js  app-i18n.js  style.css  favicon.svg
+    index.html  app-shell.js  app-api.js  app-preview.js  app-textlayer.js  app-pager.js  app-i18n.js  style.css  favicon.svg
     vendor/pdfjs/build/{pdf.min.mjs,pdf.worker.min.mjs}      (P1 起)
-    vendor/pdfjs/{cmaps,wasm,image_decoders,standard_fonts}/ 见 FACTS §3 体积 (P1 起)
+    vendor/pdfjs/{cmaps,wasm,image_decoders,standard_fonts,iccs}/  见 FACTS §3 体积 (P1 起)
+    vendor/pdfjs/web/pdf_viewer.css                          (P1 起：文本层 CSS，README 记录裁剪)
   internal/
     config/       types.go defaults.go patch.go sanitize.go store.go   settings.json 读写
     tmpstore/     store.go                               会话资产(TTL/配额/owner)
-    fsx/          atomic.go path.go                      原子写 + 路径校验
-    pdfcore/      engine.go read.go split.go sealimg.go blend.go raster.go validate.go  (P2-P5)
-    api/          register.go pdf.go seal.go export.go settings.go
+    fsx/          atomic.go path.go pick*.go             原子写 + 路径校验 + 原生选择器(P1)
+    pdfcore/      read.go (P1)  engine/split/sealimg/blend/raster/validate (P2-P5)
+    api/          register.go  pdf.go (P1: fs/pick, pdf/open, pdf/raw)  settings.go  seal.go/export.go (P4/P5)
     app/          server.go middleware.go net.go browser.go version.go  中间链/端口/版本
-    webx/         json.go                                envelope + DecodeJSON(未知键拒绝)
+    webx/         json.go session.go                     envelope + DecodeJSON + 会话令牌(X-AutoStamp-Session)
     console/      logger.go
   tools/verify/               headless 数值验证脚本 + cdp.mjs + comprobe（见 FACTS §5.1）
   tools/genfix/               生成 mock fixtures 的 stdlib 探针（P0.5）
@@ -166,7 +167,7 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
 |路由|用途|
 |---|---|
 |`GET /api/health`|健康检查 + 版本号|
-|`POST /api/fs/pick`|原生文件/目录选择器，返回 `pathGrantId`（owner 绑定，TTL）|
+|`POST /api/fs/pick`|原生文件选择器（`{filter,multi,startDir}`）或 `{"filePath":…}` 直开授权，返回 `pathGrantId`（owner 绑定，TTL）；取消回 `{cancelled:true, picks:[]}`，无选择器的平台回 501 `pick_unsupported`|
 |`POST /api/pdf/open`|按 `pathGrantId` 或 multipart 上传打开 PDF → `assetId` + 页元数据（页数、每页 pt 尺寸、rotation、是否含文字）|
 |`GET /api/pdf/raw?id=`|原始 PDF 字节（支持 Range/ETag），供 pdf.js 直接取|
 |`POST /api/pdf/split`|`{auto|rows/cols|cutFractions}` → 新 `assetId` + 切分后页信息|
@@ -227,8 +228,13 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
      断言 console 0 error、无 404、12 状态机、深链、en/cn i18n 覆盖、密度切换、
      实例增删选中复制、`/api` 往返与 `{"patch":…}` 合并。
   8. 窗口通道：`node tools/verify/webview-launch.mjs`（真窗口 + 页内 `/api` 请求）与
-     `go run ./tools/verify/comprobe`（COM 返回值实测，FACTS §1.6）。
-  9. 以上全部由 `build.ps1` 串成一条命令（`-Task verify` / `go vet` / `go test`），
+       `go run ./tools/verify/comprobe`（COM 返回值实测，FACTS §1.6）。
+  9. P1 查看链路（P1 起常驻）：`node tools/verify/preview-smoke.mjs` — 用 CDP
+     `Page.printToPDF` 现场生成四类样本（英文多页文字 / 中文 CID / 混合型 / 图片型无文字），
+     真 exe + 真 UI（`#empty-path` + `#empty-open`）跑一遍：断言画布有真实像素、
+     `getTextContent` 条数（图片型必须为 0）、`.textLayer` span 计数与层框宽度 == 画布 CSS 宽、
+     翻页与分页条 chip 数、缩放后 backing store 尺寸变化、vendor 资源 0 失败（FACTS §1.7）。
+  10. 以上全部由 `build.ps1` 串成一条命令（`-Task verify` / `go vet` / `go test`），
      任一失败退出码 1。
 - `go test ./...` 全绿；`go vet ./...` 无输出。
 - UI 阶段用真实窗口（WebView2）+ headless 各跑一次，console 必须 0 error。

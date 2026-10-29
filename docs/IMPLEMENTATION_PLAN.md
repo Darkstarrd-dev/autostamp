@@ -1,6 +1,6 @@
 # AutoStamp — 实施计划（IMPLEMENTATION PLAN）
 
-> 最后核对：2026-10-29（P0 骨架 + P0.5 UI 契约冻结完成；当前阶段 = P1 PDF 查看）。
+> 最后核对：2026-10-29（P0 骨架 + P0.5 UI 契约冻结 + P1 PDF 查看完成；当前阶段 = P2 印章叠加预览）。
 > 依赖/浏览器事实引用 `docs/FACTS.md` 编号，禁止凭记忆改写。约束见 `AGENTS.md`。
 
 ## 0. 新对话恢复执行协议（执行入口）
@@ -158,17 +158,19 @@ settings 写盘两次不损坏（单测：中断写 → 文件完整或回滚）
 states=15 / ids=75 / routes=11（OK）；`ui-smoke` → states=15 i18nKeys=170
 consoleErrors=0（OK）。决策表：D1-D4、L1、CP1、I1、S1 全部有用户确认记录
 （2026-10-29，ask 第 1/2 轮，`UI_SPEC §8`）。§9 的 D2/D3/D4 行已改为「已在 P0.5 确认」。
-### P1 — PDF 查看（需求 1）`[ ]`
+### P1 — PDF 查看（需求 1）`[x]`（2026-10-29 实测通过，数据见本节末）
 
 目的：打开本地 PDF，页浏览、缩略图、文本层；打通「本地文件」通道。
 
-交付：`web/static/vendor/pdfjs/{build,cmaps,wasm,standard_fonts,image_decoders}`（提交 +
-`LICENSE`/`README`/`SHA256.txt`）；`web/static/app-preview.js`（pdf.js 初始化、
-`cMapUrl`/`standardFontDataUrl`/`wasmUrl` 指向 vendor 路径、页渲染 + 缩放 + 翻页）；
-`app-thumbs.js`（缩略图，降采样 worker）；`app-textlayer.js`；
-`internal/api/pdf.go`：`POST /api/fs/pick`（native picker）、`POST /api/pdf/open`、
-`GET /api/pdf/raw`（Range/ETag）；`internal/pdfcore/read.go`（页数、每页 pt 尺寸、
-rotation、是否含文字标记——由 pdf.js 抽取，服务端只做结构信息）。
+交付（实际落地名）：`web/static/vendor/pdfjs/*`（提交 + `LICENSE`/`README`/`SHA256.txt`）；
+`web/static/app-preview.js`（pdf.js 懒 `import()`、`cMapUrl`/`standardFontDataUrl`/`wasmUrl`、
+单页渲染 + fit/zoom + 翻页 + `sample()` 像素探针）；`web/static/app-textlayer.js`；
+`web/static/app-pager.js`（分页 chip + **chip 内缩略图**，`UI_SPEC §8` V2；不是早期的
+`app-thumbs.js` 独立侧栏方案）；`internal/api/pdf.go`：`POST /api/fs/pick`（含 `filePath`
+直开授权）、`POST /api/pdf/open`、`GET /api/pdf/raw`（Range/ETag）；
+`internal/webx/session.go`（会话令牌即 capability）；`internal/fsx/pick*.go`
+（PowerShell `Forms+FileDialog`，非 Windows 回 501）；`internal/pdfcore/read.go`
+（pdfcpu 结构信息：页数 / 每页 pt 尺寸 / rotation / `hasFonts`——文本抽取仍由 pdf.js 做）。
 
 资产获取（本机 2026-10-28 实测可行：`npm pack` 得 `pdfjs-dist-6.4.299.tgz`
 8,539,589 B；node v24.18.0 / npm 11.16.0）：
@@ -195,9 +197,27 @@ P1 先 vendor **全量**（≈5.98 MB，FACTS §3）以保证扫描型样本的 
 关键实现：pdf.js 仅 ESM，用 `import()` 动态加载（FACTS §1.1）；
 `MaxBytesHandler` 上限 256 MiB；Range 直读避免整文件进内存。
 
-验收：三类样本（纯文字 A4、单页扫描 300dpi、混合型含图片+文字）渲染成功；
-`getTextContent` 文本条数断言；中文 CID 样本渲染不断字（并把结果回填 FACTS §6）；
+验收：四类样本（英文多页文字、中文 CID 文字、混合型、图片型无文字）渲染成功；
+`getTextContent` 文本条数断言；中文样本渲染不断字（结果已回填 FACTS §1.7/§6）；
 headless 无 console error、无 404 资产。
+
+P1 实测（2026-10-29，`powershell -File build.ps1 -Task all` → 失败 0）：
+
+- 样本由 CDP `Page.printToPDF` 现场生成（不落仓库）：英文 5 页 54,763 B / 中文 4 页
+  186,950 B / 混合型 23,935 B / 图片型 3 页 46,043 B；真 exe + 真 UI（空态
+  `#empty-path` + `#empty-open` 通道）跑通，断言脚本 `tools/verify/preview-smoke.mjs`。
+- fit：1440×900 下 A4（595.3×841.9 pt）fit=1.671；切 single-col 后 2.309；
+  ResizeObserver 在容器宽变化后重算 ✓（缩放态下只刷新 fit 注记，不重画）。
+- 文本层：英文 spans 3 / 中文 spans 24 / 混合 spans 1 / 图片型 0；层框宽与画布
+  CSS 宽一致（drift 0，`OutputScale.pixelRatio`=1.25，FACTS §1.7）。
+- 主画布像素：英文 ink 6,408 / 中文 9,574 / 混合 107,443 / 图片 322,655。
+- 分页 chip 数 == 页数（5/4/1/3）；chip 内缩略图 alpha 全覆盖（dpr 1 时 40×56，
+  文字页字形在该尺寸下亚像素 → ink≈0，见 FACTS §1.7）。
+- 会话边界：`/api/pdf/raw` 不带 `X-AutoStamp-Session` → 400；带令牌 → 200 +
+  `application/pdf`；`Range: bytes=0-63` → 206 / 64 B（pdf.js 用 `httpHeaders` 带令牌）。
+- `go vet`/`go test ./...` 全绿；`webview-launch.mjs` 真窗口 + 页内 `/api` ✓；
+  console 0 error、0 失败请求。
+- vendor：`SHA256.txt` 206 项（README 改动后需重生成），`TestVendorChecksums` 复核 ✓。
 
 ### P2 — 印章叠加与调参预览（需求 2、4 的预览面）`[ ]`
 
@@ -337,7 +357,7 @@ P0.5 追加必问项（不属上表）：布局密度、骑缝章预览形态、
 |---|---|---|
 |P0 骨架|`[x]`|2026-10-29：`go vet`/`go test` 全绿（46 个 Go 测试）；`shell-smoke` OK（真二进制 + headless，ids=79 字段=44 状态=12，非预期 console error 0，`/api` 往返与 `{"patch":…}` 合并断言）；`webview-launch` OK（真窗口 + 页内 `/api`）；strip 体积 6,912,512 B（控制台）/ 7,345,152 B（WebView2）→ FACTS §4.1|
 |P0.5 UI 契约冻结|`[x]`|用户确认轮次：2 轮（2026-10-29）。`ui-contract` OK（mock 39 字段 / spec 44 字段 / i18n 190 键 / 15 状态 / 75 契约 id / 11 路由三方一致）；`ui-smoke` OK（15 状态、console 0 error、无资源失败、1280x720 与 1440x900 无横向溢出、29 项断言含 D2 三档与弹窗/toast 可见性、快捷键、密度三档）|
-|P1 查看|`[ ]`||
+|P1 查看|`[x]`|2026-10-29：`preview-smoke` OK（真 exe + headless，四类样本：英文 5 页 54,763 B / 中文 CID 4 页 186,950 B / 混合 23,935 B / 图片 3 页 46,043 B；主画布 ink 6,408 / 9,574 / 107,443 / 322,655；文本层 spans 3 / 24 / 1 / 0，drift 0；分页 chip 数 = 页数，chip 内缩略图 alpha 全覆盖；`/api/pdf/raw` 无令牌 400、带令牌 200、Range 206；console 0 error、失败请求 0）；fit 1.671 → 2.309；`build.ps1 -Task all` 失败 0（五脚本含 `webview-launch` 真窗口）；vendor `SHA256.txt` 206 项 → FACTS §1.7|
 |P2 叠加预览|`[ ]`||
 |P3 切分+骑缝|`[ ]`||
 |P4 矢量落盘+BM|`[ ]`||

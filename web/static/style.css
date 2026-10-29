@@ -153,6 +153,19 @@ input[type="text"] { width: 100%; }
 .chip.warn { color: var(--warning); }
 .chip.err { color: var(--error); border-color: var(--error); }
 
+/* P1: the pager chips are buttons now (click = jump), and a drag over the
+   preview has to be visible or the drop target would be invisible. */
+button.chip { cursor: pointer; color: inherit; }
+#preview[data-drag="on"] #empty-state { border-color: var(--accent); background: var(--surface-2); }
+
+/* P1 pager: one chip per page, number + downscaled thumbnail inside it. The
+   rail is a horizontal strip, so the thumb keeps a fixed height and follows the
+   page aspect (app-pager.js sets the canvas width from the viewport). */
+#page-pager button.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px 2px 3px; }
+#page-pager .pg-no { font: var(--mono); }
+#page-pager canvas.pg-thumb { display: block; height: 56px; background: #fff; border: 1px solid var(--border); border-radius: 2px; }
+#page-pager span.chip { font: var(--mono); }
+
 /* panel */
 #right-sidebar { grid-area: panel; border-left: 1px solid var(--border); background: var(--surface); overflow-y: auto; min-width: 0; }
 #panel { display: flex; flex-direction: column; }

@@ -83,6 +83,32 @@
   `rmSync(..., {maxRetries})` 在 12 次 × 250 ms 内仍可能 `EPERM`。因此
   `webview-launch.mjs` 的清理只重试后打一条 soft 警告（目录在 `%TEMP%` 下，不视为失败）。
 
+### 1.7 P1 查看链路（实测 2026-10-29，`tools/verify/preview-smoke.mjs`）
+
+- **pdf.js 取字节要自己带会话令牌**：`getDocument` 用 `httpHeaders` 送
+  `X-AutoStamp-Session`；不带则 `/api/pdf/raw` 回 **400 `bad_session`**。该 header 同时
+  出现在首个请求与后续 Range 请求上（第 2 页能渲染即为证）。
+- **销毁句柄是 loading task，不是 `PDFDocumentProxy`**：6.4.299 的 `PDFDocumentProxy`
+  **没有** `destroy()`；直接调用抛 `TypeError`，会让二次打开 / 口令重试整条链路崩。
+  正确做法：保留 `getDocument()` 返回的 task，用 `task.destroy()`。
+- **同一个 `PageProxy` 同时只能有一个 render**：分页 chip 的缩略图与主画布共用同一
+  `PageProxy`，并发渲染会被 pdf.js 取消（实测缩略图 alpha 未满、ink=0）。因此缩略图
+  **串行**渲染，且主渲染 `renderTask.promise` 未落定前不排队（`app-pager.js`）。
+- **文本层对齐要用 `OutputScale.pixelRatio`**：canvas backing = viewport ×
+  `OutputScale(pixelRatio=1)`（本机 dpr 1.25 → backing 490×694，CSS 392×555）；文本层须按
+  该 scale 构建，实测层框宽 == 画布 CSS 宽（drift 0）。
+- **fit 必须按容器宽算，且容器可能没有布局**：`html[data-state="empty"] #preview-stage`
+  是 `display:none`，此时宽度 0 → 旧代码用 240 px 下限会算出错误 fit（0.403）。现规则：
+  宽度测不到就不画（`state.pendingFit`），容器一有宽度由 `ResizeObserver` 重画；
+  密度切换实测 fit **1.671 → 2.309**（1440×900，A4 = 595.3×841.9 pt）。
+- **缩略图可见但不可读**：chip 内缩略图 56 CSS px 高（dpr 1 时 backing 40×56），A4 文字页
+  在此尺寸下字形是亚像素 → 实测 ink=0（图片型样本 ink≈815）。因此该断言只能测
+  「渲染跑完」（alpha 全覆盖），**不能**测「有字形」。
+- **中文 CID 样本**（CDP `Page.printToPDF` 生成的中文 HTML）：渲染与 `getTextContent`
+  正常（spans 24，marker 可抽），§6 的该 UNVERIFIED 项消项。
+- 样本体积（现场生成，不落仓库）：英文 5 页 54,763 B / 中文 4 页 186,950 B /
+  混合型 23,935 B / 图片型 3 页 46,043 B。
+
 ## 2. 后端库：`github.com/pdfcpu/pdfcpu v0.16.3`（2026-10-19，Apache-2.0，纯 Go）
 
 `go.mod` 依赖：`spf13/cobra`、`google/jsonschema-go`、`hhrutter/tiff`、
@@ -210,6 +236,7 @@
 |`node tools/verify/webview-launch.mjs`|§1.6|WebView2 构建真窗口启动(打印 `webview window opened` + 页内 `/api` 请求)|
 |`go run ./tools/verify/comprobe [-window]`|§1.6|COM `CoInitializeEx` 返回值实测(三种顺序)+ 真窗口泵消息|
 |`go run ./tools/genfix`|mock 资产|重生成 `docs/ui/fixtures/{page,seal}.png`|
+|`node tools/verify/preview-smoke.mjs`|§1.1 §1.7|真 exe + headless：四类样本渲染、中文 CID 文本层、分页 chip/缩略图、`/api/pdf/raw` 会话边界 + Range|
 
 ### 5.2 尚未搬进仓库的历史探针
 
@@ -223,7 +250,7 @@
 
 ## 6. 未验证(UNVERIFIED)
 
-- `UNVERIFIED`:真实中文 CID 字体的 PDF 文本抽取质量(依赖 `/ToUnicode`;cmaps 只解决渲染)。
+（已消项：真实中文 CID 文本抽取在 §1.7 实测通过，2026-10-29。）
 - `UNVERIFIED`:AES-256 加密 PDF 的读取+落盘链路。
 - `UNVERIFIED`:更窄包(只用 `pkg/pdfcpu` 子集)的体积下界。
 - `UNVERIFIED`:未安装 WebView2 Runtime 的机器的回退行为(窗口本身已在带 Runtime 的

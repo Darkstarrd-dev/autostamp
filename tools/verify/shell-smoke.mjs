@@ -216,8 +216,11 @@ async function main() {
   }
   await evaluate("window.__autoStampShell.setState('opened')");
   await evaluate("window.__autoStampShell.setState('stamp-selected')");
-  const handles = await pageErr("document.querySelectorAll('.instance .sel-box .handle').length");
-  if (handles < 5) bad(`selection handles = ${handles}, want 5`);
+  // P1: the stage carries no fake document. app-preview.js renders the first
+  // page-frame (canvas + .textLayer) only after POST /api/pdf/open returns a
+  // real asset, so an empty stage is the contract, not a missing feature.
+  const frames = await pageErr("document.querySelectorAll('#preview-stage .page-frame').length");
+  if (frames !== 0) bad(`the shell rendered ${frames} page-frame(s) with no document open`);
   const cross = await pageErr("window.__autoStampShell.setModal('save-modal')");
   if (cross !== "save-modal") bad("setModal failed: " + cross);
   await evaluate("window.__autoStampShell.setModal(null)");

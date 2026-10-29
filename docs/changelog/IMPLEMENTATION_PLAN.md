@@ -2,6 +2,21 @@
 
 > `docs/IMPLEMENTATION_PLAN.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-10-29 — P1 完成：勾状态 + 回填实测数据
+
+- §10 的 P1 行勾 `[x]` + 回填实测摘要（四类样本 / fit 1.671→2.309 / 文本层 spans
+  3·24·1·0 / `raw` 会话边界 400·200·206 / `build.ps1 -Task all` 失败 0），
+  P1 小节标题同时标 `[x]`。
+- P1 交付清单更正为**实际落地名**：`app-preview.js`（懒 `import()` + `sample()` 探针）、
+  `app-textlayer.js`、`app-pager.js`（分页 chip + **chip 内缩略图**，取代早期计划的
+  `app-thumbs.js` 独立侧栏，见 `UI_SPEC §8` V2）、`internal/api/pdf.go`、
+  `internal/webx/session.go`、`internal/fsx/pick*.go`、`internal/pdfcore/read.go`。
+- 验收要求从「三类样本」扩成四类（英文多页文字 / 中文 CID / 混合型 / 图片型无文字），
+  并在 P1 小节新增「P1 实测」块：样本由 CDP `Page.printToPDF` 现场生成（54,763 /
+  186,950 / 23,935 / 46,043 B，不落仓库）、真 UI 通道（`#empty-path` + `#empty-open`）、
+  会话令牌 + Range 的具体返回值、vendor `SHA256.txt` 206 项（README 改动后要重生成清单）。
+- 顶部「最后核对」改为「P0 + P0.5 + P1 完成；当前阶段 = P2」。
+
 ## 2026-10-29 — P0 完成：勾状态 + 回填实测
 
 - 阶段标题 `P0` → `[x]`；验收块下回填实测：Go 测试 46 个（`web` 4 / `api` 8 / `app` 10 /

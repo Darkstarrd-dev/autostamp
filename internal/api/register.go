@@ -11,6 +11,7 @@ import (
 
 	"autostamp/internal/app"
 	"autostamp/internal/config"
+	"autostamp/internal/tmpstore"
 	"autostamp/internal/webx"
 	"autostamp/web"
 )
@@ -20,6 +21,7 @@ type Deps struct {
 	Version  app.BuildInfo
 	Log      *slog.Logger
 	Settings *config.Store
+	Assets   *tmpstore.Store
 }
 
 // NewMux builds the P0/P1/P4 route set. Method patterns come from Go 1.22
@@ -34,8 +36,16 @@ func NewMux(d Deps) *http.ServeMux {
 	mux.HandleFunc("GET /api/health", handleHealth(d.Version))
 	mux.HandleFunc("GET /api/settings", handleSettingsGet(d.Settings))
 	mux.HandleFunc("POST /api/settings", handleSettingsPost(d.Settings))
-	// Routes that no later stage has implemented still match the static pattern,
-	// so they reply 405 (empty body) or 404 (static handler). The front-end
+
+	// P1: the local-file channel. The upload route is wrapped in
+	// MaxBytesHandler (AGENTS §5.11) so a 300 MB PDF cannot be spooled; the
+	// 413 that comes back is plain router text, and the front-end reports it as
+	// http_413 rather than trying to parse a body.
+	mux.HandleFunc("POST /api/fs/pick", handlePick(d.Assets, d.Log))
+	mux.Handle("POST /api/pdf/open", http.MaxBytesHandler(handleOpen(d.Settings, d.Assets, d.Log), maxPDFBody))
+	mux.HandleFunc("GET /api/pdf/raw", handleRaw(d.Assets))
+	// Routes no later stage has implemented still match the static pattern, so
+	// they reply 405 (empty body) or 404 (static handler). The front-end
 	// reports those as http_405 / http_404 with the status text instead of a
 	// bogus parse error; the verb itself is the contract (AGENTS §6).
 	//

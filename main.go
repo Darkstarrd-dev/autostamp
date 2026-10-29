@@ -53,7 +53,7 @@ func main() {
 	}
 	defer store.Close()
 
-	mux := api.NewMux(api.Deps{Version: build, Log: log, Settings: settings})
+	mux := api.NewMux(api.Deps{Version: build, Log: log, Settings: settings, Assets: store})
 	srv := app.NewServer(ln, mux, log, port, settings.Snapshot().Security.StrictOrigin)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

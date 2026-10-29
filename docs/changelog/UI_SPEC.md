@@ -2,6 +2,23 @@
 
 > `docs/UI_SPEC.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-10-29 — P1 落地：预览区绑定 / 契约 id 说明 / §7 钩子 / V1-V3 决策
+
+- §3 预览绑定表补三行：预览区（`.page-frame` → `canvas.page-canvas` + `.textLayer`，
+  字节走 `GET /api/pdf/raw?id=`）、分页条（`#page-pager` 内 `button.chip[data-page]`
+  含 `canvas.pg-thumb`）、标尺与像素读数（只读派生，不请求）。
+- §6 之后加说明：`#preview-stage` 的页框与 `#page-pager` 的 chip 全部 JS 生成，
+  **不占契约 id**（靠 `class` + `data-page`）；`#asset-hooks` / `pathGrantId` 的 chip
+  只显示句柄值本身，本地化文案进 `title`/`aria-label`（动态文本与 §4 的 `applyLang()`
+  「元素文本 = en 值」规则冲突）。
+- §5 的 `Ctrl+滚轮` 行标出归属：P1 = 视图缩放，P2 起光标在选中实例上时 = `apply.scale`。
+- §7 登记真实壳的驱动面：`__autoStampPreview`（`open`/`setPassword`/`reload`/`close`/`goTo`/
+  `zoomBy`/`zoomTo`/`fit`/`pageCount`/`pageMeta`/`sample(x,y,w,h)` 按 PDF 点取样 /
+  `probe` 11 个关键字）、`__autoStampTextLayer`、`__autoStampPager`，三个跨模块事件
+  `autostamp:lang` / `autostamp:open` / `autostamp:page`；校验命令补 `preview-smoke.mjs`。
+- §8 决策表新增 **V1 单页视图**、**V2 chip + chip 内缩略图**、**V3 滚轮归属**，
+  均为 2026-10-29 ask 第 3 轮确认；因此删掉旧句「P0.5 共 2 轮收敛，未使用第 3 轮」。
+
 ## 2026-10-29 — 增 §7.1「真实壳的驱动接口」
 
 - 登记 `window.__autoStampShell` 的驱动面（`STATES`/`setState`/`verifyState`/`setParams`/

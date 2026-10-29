@@ -151,7 +151,10 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 | 口令弹窗 · PDF 口令 | `api.open.pw` | password | `/api/pdf/open` |
 | 顶栏 · 语言/主题/密度 | `ui.lang` / `ui.theme` / `ui.density` | segmented | 无（前端） |
 | 空态 · 路径输入 | `api.fs.pick.filePath` | text | `/api/fs/pick` |
-| 资源钩子 · assetId | `decision.assetIds`（5 个 display chip） | 只读 | 响应侧 |
+| 资源钩子 · assetId | `decision.assetIds`（5 个 display chip，只显示句柄值，文案走 `title`） | 只读 | 响应侧 |
+| 预览区 · 页框 / 画布 / 文本层 | （无字段：渲染态，页尺寸来自 `pdf.open` 响应） | `#preview-stage` 内 JS 生成 `.page-frame` → `canvas.page-canvas` + `.textLayer` | `GET /api/pdf/raw?id=`（pdf.js 逐页取字节） |
+| 分页条 · 计数 + 每页 chip（chip 内含缩略图） | （无字段；形态见 §8 V2） | `#page-pager` 内 JS 生成 `span.chip[data-role=pager-count]` + `button.chip[data-page]`（`.pg-no` + `canvas.pg-thumb`） | 无（前端） |
+| 标尺 / 像素读数 | （只读派生） | `#preview-ruler`、`#pixel-readout` | 由 `pdf.open` 的页 pt 尺寸 + 当前视图 scale 计算，不请求 |
 
 滑杆 + 数值必须**双向绑定**（同一 `data-field` 复用两次，mock 已实现 `bindPair`）；
 隐藏 `type=file` input 只作选择器触发器，不占字段。
@@ -367,7 +370,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |←↑↓→（Shift=10pt）|1pt 步进|pos|
 |+ / −|scale ±0.01|scale|
 |1..9 / PgUp/PgDn|跳页|current|
-|Ctrl+滚轮|按中心缩放|scale|
+|Ctrl+滚轮|按中心缩放（P1 = 预览视图缩放；P2 起光标在选中实例上时 = `apply.scale`，见 §8 V3）|scale / 视图|
 |Esc / ?|关闭弹窗、清除 toast / 快捷键表|—|
 
 ## 6. 契约 DOM id
@@ -380,6 +383,11 @@ app-main  app-root  apply-anchor  apply-blend  asset-hooks  btn-export  btn-open
 ```
 
 `#file-input` 是隐藏的 `<input type=file>` 选择器触发器，不占字段（§2 里没有 `data-field`）。
+
+`#preview-stage` 的页框与 `#page-pager` 的分页 chip 全部由 JS 生成（不占契约 id，靠
+`class` + `data-page`）；`#asset-hooks` 与 `pathGrantId` 的 chip 只显示句柄值本身，
+本地化文案放 `title` / `aria-label`（这两处文本是动态的，带 `data-i18n` 会和 `applyLang()`
+「元素自身文本 = en 值」的规则打架，见 §4）。
 
 ## 7. mock 驱动接口（verify 用）
 
@@ -401,10 +409,23 @@ app-main  app-root  apply-anchor  apply-blend  asset-hooks  btn-export  btn-open
 `q()/qa()`、`t(key)`。
 `probe` 关键字：`state` `overflow` `density` `instances` `instanceCount` `selected`
 `modal` `toast` `lang` `theme` `version` `labels`。
+
+`window.__autoStampPreview`（`app-preview.js`）：`open(info)`、`setPassword(pw)`、`reload(pw)`、
+`close()`、`goTo(n)`、`next()`、`prev()`、`zoomBy(step)`、`zoomTo(v)`、`fit()`、`pageCount()`、
+`pageMeta(n)`、`sample(x,y,w,h)`（`x,y,w,h` 为 PDF 点，返回 RGBA + 换算后的像素矩形）、
+`probe(name)`：`page` `pageCount` `asset` `zoom` `fitZoom` `dpr` `canvas` `textLayer` `reduced`。
+`window.__autoStampTextLayer`（`app-textlayer.js`）：`attach({pdfjs,pageObj,viewport,frame,dpr})`、
+`count(pageObj)`。`window.__autoStampPager`（`app-pager.js`）：`build()`、`refresh()`。
+
+跨模块事件（`app-shell.js` 派发，`app-pager.js` / `app-preview.js` 监听）：
+`autostamp:lang`（语言切换后重绘动态读数）、`autostamp:open`（新文档打开，重建分页条）、
+`autostamp:page`（翻页，更新分页条 pressed 态与计数）。
 深链：`http://127.0.0.1:<port>/#crosspage`（`hashchange` 重走状态机；清空 hash 回文档态）。
 校验命令：`node tools/verify/shell-smoke.mjs`（真二进制 + headless Chromium，
-沙箱化 `%APPDATA%`/`%LOCALAPPDATA%`）、`node tools/verify/webview-launch.mjs`
-（WebView2 真窗口）、`go run ./tools/verify/comprobe`（COM 实测，FACTS §1.6）。
+沙箱化 `%APPDATA%`/`%LOCALAPPDATA%`）、`node tools/verify/preview-smoke.mjs`
+（P1 查看链路：现场生成样本 + 真 UI 打开 + 像素/文本层/翻页断言，FACTS §1.7）、
+`node tools/verify/webview-launch.mjs`（WebView2 真窗口）、
+`go run ./tools/verify/comprobe`（COM 实测，FACTS §1.6）。
 
 ## 8. 决策表（用户确认记录）
 
@@ -421,10 +442,13 @@ app-main  app-root  apply-anchor  apply-blend  asset-hooks  btn-export  btn-open
 |E1|导出体积预估展示|导出段内联 + 换算说明（推荐）/ 悬停 tooltip / 不显示|已确认：导出段内联（`#estimate-total` / `#estimate-per-page` + `export.estimate.note` 换算说明，随 dpi/quality/mode 实时改）|2026-10-29|ask 第 2 轮 e1-estimate|
 |B1|批处理并发|3（§9 默认，不阻塞）|未评审默认|2026-10-28|§9|
 |D5|非 Windows 原生窗口|回退浏览器（不阻塞 P0.5）|未评审默认|2026-10-28|§9|
+|V1|P1 预览区显示形态|单页视图 + 分页条（推荐）/ 连续多页滚动（mock 里两页并排）|已确认：单页视图（一次渲染一页；翻页走分页条、`1..9`、`PgUp/PgDn`）|2026-10-29|ask 第 3 轮 view|
+|V2|P1 分页条形态|仅 chip 分页条（P0.5 冻结形态）/ chip + chip 内缩略图（无新增 id）/ 独立缩略图侧栏（需新增契约 id）|已确认：chip + chip 内缩略图，都在 `#page-pager` 内（`button.chip[data-page]` 里的 `canvas.pg-thumb`，`IntersectionObserver` 懒渲染）|2026-10-29|ask 第 3 轮 pager|
+|V3|Ctrl+滚轮归属|P1 = 预览视图缩放，P2 起交给 `apply.scale`（推荐）/ 只留给印章 / 另立按键|已确认：P1 滚轮缩放视图；P2 起「光标在选中实例上」时滚轮 = `apply.scale`，页背景仍为视图缩放|2026-10-29|ask 第 3 轮 wheel|
 
 D2–D4、L1、CP1 已在 P0.5 第 1 轮确认（2026-10-29）；D1、I1、S1、E1 在第 2 轮确认（同日）。
+V1–V3 是 P1 开工前的形态问题，用第 3 轮确认（同日），因为它们改的是预览区/分页条的可见形态而非字段词表。
 B1/D5 属 `IMPLEMENTATION_PLAN` §9 的「不阻塞 P0.5」，按 §9 默认实现并在此登记。
-P0.5 共 2 轮收敛，未使用第 3 轮。
 
 ## 9. 与 AGENTS §6 的字段映射
 

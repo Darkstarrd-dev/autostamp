@@ -2,6 +2,20 @@
 
 > `docs/FACTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-10-29 — P1 实测：新增 §1.7，§5.1 补探针，§6 消一项
+
+- 新增 §1.7（P1 查看链路，`tools/verify/preview-smoke.mjs`）：pdf.js 必须用 `httpHeaders`
+  带 `X-AutoStamp-Session`（缺则 `/api/pdf/raw` 回 400 `bad_session`）；`PDFDocumentProxy`
+  **没有** `destroy()`，销毁句柄是 `getDocument` 返回的 task；同一 `PageProxy` 同时只允许
+  一个 render（并发会被取消 → 缩略图只能串行）；文本层要按 `OutputScale.pixelRatio`
+  构建才有 drift 0；`display:none` 的容器宽度为 0，不能据此算 fit（旧代码用 240 px 下限
+  算出 0.403）；56 px 高的 chip 缩略图里文字是亚像素（ink=0），断言只能测 alpha 覆盖；
+  中文 CID 样本渲染/抽取正常（spans 24）；四类样本体积。
+- §5.1 增加 `preview-smoke.mjs` 行（覆盖 §1.1 §1.7）；§6 的「真实中文 CID 文本抽取质量」
+  改为消项说明。
+- §1.6 补一句：进程被 kill 后 WebView2 仍短暂锁定 profile 目录，`rmSync(maxRetries)`
+  12×250 ms 仍可能 `EPERM` → `webview-launch.mjs` 只打 soft 警告。
+
 ## 2026-10-29 — P0 实测：CSP/静态、COM 次序、体积、探针清单
 
 - 新增 §1.5：`style-src` 必须带 `'unsafe-inline'`（否则 CSSOM 写样式被 Chromium 拦掉，

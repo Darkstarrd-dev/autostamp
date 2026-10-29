@@ -16,6 +16,7 @@
     data-route          which route the assetId chip reflects
     data-state          <html data-state> = UI_SPEC 1 state machine
 -->
+<link rel="stylesheet" href="vendor/pdfjs/web/pdf_viewer.css">
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 </head>
@@ -72,7 +73,7 @@
           <option value="pdf" data-i18n="fs.pick.filter.pdf" data-i18n-cn="仅 PDF">PDF only</option>
           <option value="all" data-i18n="fs.pick.filter.all" data-i18n-cn="所有文件">All files</option>
         </select>
-        <span class="chip" data-field="api.fs.pick.pathGrantId" data-field-role="display" data-i18n="api.fs.pick.pathGrantId.ctl" data-i18n-cn="授权句柄">pathGrantId: -</span>
+        <span class="chip" data-field="api.fs.pick.pathGrantId" data-field-role="display">-</span>
       </div>
       <div class="row">
         <span class="opt-label" data-i18n="api.fs.pick.filePath.hint" data-i18n-cn="选择器返回 pathGrantId（owner 绑定 + TTL）">picker grants a bounded pathGrantId</span>
@@ -80,20 +81,10 @@
       </div>
     </div>
 
-    <div id="preview-stage" data-split="off">
-      <div class="page-frame" data-page="1">
-        <canvas class="page-canvas" width="744" height="1052"></canvas>
-        <div class="instance" data-instance="1" data-selected="true">
-          <div class="sel-box" style="left:196px;top:603px;width:150px;height:150px">
-            <span class="handle" data-handle="nw"></span>
-            <span class="handle" data-handle="ne"></span>
-            <span class="handle" data-handle="sw"></span>
-            <span class="handle" data-handle="se"></span>
-            <span class="handle" data-handle="rot" title="rotation">&#8943;</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- The stage is empty by design: app-preview.js renders one page-frame
+         (canvas + .textLayer) per opened page, and P2 adds the instance overlay
+         inside it. A static placeholder here would be a fake document. -->
+    <div id="preview-stage" data-split="off"></div>
 
     <div id="preview-ruler" data-i18n="ruler.hint" data-i18n-cn="页面尺寸（pt）；标尺原点在左上">- x - pt</div>
     <div id="pixel-readout" data-i18n="ruler.hint" data-i18n-cn="页面尺寸（pt）；标尺原点在左上">page size in pt; origin at top-left</div>
@@ -105,11 +96,11 @@
     <form id="panel" autocomplete="off">
 
       <div id="asset-hooks" data-contract>
-        <span class="chip" data-route="open" data-field="decision.assetIds" data-i18n="asset.hint" data-i18n-cn="打开资产">assetId: -</span>
-        <span class="chip" data-route="split" data-field="decision.assetIds" data-i18n="asset.hint" data-i18n-cn="切分资产">assetId: -</span>
-        <span class="chip" data-route="apply" data-field="decision.assetIds" data-i18n="asset.hint" data-i18n-cn="叠加资产">assetId: -</span>
-        <span class="chip" data-route="export" data-field="decision.assetIds" data-i18n="asset.hint" data-i18n-cn="导出资产">assetId: -</span>
-        <span class="chip" data-route="save" data-field="decision.assetIds" data-i18n="asset.hint" data-i18n-cn="存盘资产">assetId: -</span>
+        <span class="chip" data-route="open" data-field="decision.assetIds">-</span>
+        <span class="chip" data-route="split" data-field="decision.assetIds">-</span>
+        <span class="chip" data-route="apply" data-field="decision.assetIds">-</span>
+        <span class="chip" data-route="export" data-field="decision.assetIds">-</span>
+        <span class="chip" data-route="save" data-field="decision.assetIds">-</span>
       </div>
 
       <details class="section" id="panel-seal" open>
@@ -444,7 +435,7 @@
     <div class="hintline" id="save-source" data-i18n="top.file.hint" data-i18n-cn="未打开文件">no file open</div>
     <div class="row">
       <button type="button" id="save-pick" class="btn" data-i18n="save.pick.btn" data-i18n-cn="系统文件选择器">System file picker</button>
-      <span class="chip" data-field="api.fs.pick.pathGrantId" data-field-role="display" data-i18n="api.fs.pick.pathGrantId.ctl" data-i18n-cn="授权句柄">pathGrantId: -</span>
+      <span class="chip" data-field="api.fs.pick.pathGrantId" data-field-role="display">-</span>
     </div>
     <div class="field">
       <div class="flabel"><span data-i18n="api.save.targetPath.ctl" data-i18n-cn="目标路径">save.targetPath</span><span class="tag">save.targetPath</span></div>
@@ -495,6 +486,9 @@
 
 <script src="app-i18n.js" defer></script>
 <script src="app-api.js" defer></script>
+<script src="app-textlayer.js" defer></script>
+<script src="app-preview.js" defer></script>
+<script src="app-pager.js" defer></script>
 <script src="app-shell.js" defer></script>
 </body>
 </html>

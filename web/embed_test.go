@@ -1,6 +1,8 @@
 package web
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"io/fs"
@@ -16,6 +18,14 @@ func TestEmbeddedShellFiles(t *testing.T) {
 	site := Static()
 	for _, name := range []string{
 		"index.html", "style.css", "app-i18n.js", "app-api.js", "app-shell.js",
+		"favicon.svg",
+		// The pdf.js entry points: if these disappear the preview is dead,
+		// and a 404 in the browser is harder to trace than this failure.
+		"vendor/pdfjs/build/pdf.min.mjs", "vendor/pdfjs/build/pdf.worker.min.mjs",
+		"vendor/pdfjs/cmaps/UniGB-UTF8-H.bcmap",
+		"vendor/pdfjs/standard_fonts/LiberationSans-Regular.ttf",
+		"vendor/pdfjs/wasm/jbig2.wasm",
+		"vendor/pdfjs/LICENSE", "vendor/pdfjs/SHA256.txt", "vendor/pdfjs/README.md",
 	} {
 		if _, err := fs.Stat(site, name); err != nil {
 			t.Errorf("embedded site must contain %s: %v", name, err)
@@ -120,15 +130,83 @@ func TestStaticRejectsUnknownAndTraversal(t *testing.T) {
 	}
 }
 
-func TestStaticServesScriptsAsJavaScript(t *testing.T) {
+func TestStaticServesAssetsWithTruthfulTypes(t *testing.T) {
 	mux := http.NewServeMux()
 	RegisterStatic(mux, Static(), console.New(io.Discard, false))
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://127.0.0.1/app-shell.js", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app-shell.js = %d", rec.Code)
+	// Every entry here is a real embedded path: the point is that the vendored
+	// pdf.js assets are served with the types the browser actually demands
+	// (module scripts/workers need a JavaScript MIME type, FACTS §1.1).
+	for _, tc := range []struct {
+		path, want string
+	}{
+		{"/app-shell.js", "text/javascript"},
+		{"/vendor/pdfjs/build/pdf.min.mjs", "text/javascript"},
+		{"/vendor/pdfjs/build/pdf.worker.min.mjs", "text/javascript"},
+		{"/vendor/pdfjs/image_decoders/pdf.image_decoders.min.mjs", "text/javascript"},
+		{"/vendor/pdfjs/wasm/jbig2.wasm", "application/wasm"},
+		{"/vendor/pdfjs/cmaps/UniGB-UTF8-H.bcmap", "application/octet-stream"},
+		{"/vendor/pdfjs/standard_fonts/LiberationSans-Regular.ttf", "font/ttf"},
+		{"/favicon.svg", "image/svg+xml"},
+	} {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://127.0.0.1"+tc.path, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d, want 200 (asset missing from the embed?)", tc.path, rec.Code)
+		}
+		ct := rec.Header().Get("Content-Type")
+		base, _, _ := strings.Cut(ct, ";")
+		base = strings.TrimSpace(base)
+		// JavaScript is the family the browser enforces (module scripts/workers
+		// must be a JS MIME type); Go's stdlib answers application/javascript
+		// for .js, so compare by family there and exactly elsewhere.
+		if strings.Contains(tc.want, "javascript") {
+			if !strings.Contains(base, "javascript") {
+				t.Errorf("GET %s Content-Type = %q, want a javascript type", tc.path, ct)
+			}
+			continue
+		}
+		if base != tc.want {
+			t.Errorf("GET %s Content-Type = %q, want %s", tc.path, ct, tc.want)
+		}
 	}
-	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "javascript") {
-		t.Errorf("Content-Type = %q, want a javascript type", ct)
+}
+
+// TestVendorChecksums verifies the vendored pdf.js tree against its own
+// SHA256 manifest: a byte that changed in the working tree (or a file that
+// silently disappeared from the embed) fails here instead of showing up as a
+// broken render later.
+func TestVendorChecksums(t *testing.T) {
+	site := Static()
+	raw, err := fs.ReadFile(site, "vendor/pdfjs/SHA256.txt")
+	if err != nil {
+		t.Fatalf("read vendor/pdfjs/SHA256.txt: %v", err)
+	}
+	lines := strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n")
+	checked := 0
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) != 2 || len(fields[0]) != 64 {
+			t.Errorf("bad manifest line: %q", line)
+			continue
+		}
+		want, name := strings.ToLower(fields[0]), strings.TrimPrefix(fields[1], "./")
+		b, err := fs.ReadFile(site, "vendor/pdfjs/"+name)
+		if err != nil {
+			t.Errorf("manifest lists %s but the embed does not have it: %v", name, err)
+			continue
+		}
+		sum := sha256.Sum256(b)
+		if got := hex.EncodeToString(sum[:]); got != want {
+			t.Errorf("%s: sha256 %s, manifest says %s", name, got, want)
+			continue
+		}
+		checked++
+	}
+	if checked < 50 {
+		t.Errorf("only %d vendor files checked, want the full manifest (204 files)", checked)
 	}
 }

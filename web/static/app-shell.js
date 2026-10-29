@@ -76,6 +76,10 @@
     selected: null,
     modal: null,
     file: null, // {path, assetId} once P1 opens a PDF
+    assets: { open: "", split: "", apply: "", export: "", save: "" }, // assetId per route (UI_SPEC §2 asset hooks)
+    pending: null, // the open that asked for a password, so Retry can replay it
+    lastGrant: "", // last pathGrantId the picker returned (readout chip)
+    saveGrant: null, // pathGrantId for the save dialog's target (P4 writes it)
   };
 
   const escapeHtml = (s) =>
@@ -117,6 +121,12 @@
     qa("#lang-seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.value === state.lang)));
     renderInstances();
     persist("ui", { lang: state.lang });
+    // The readouts whose text is dynamic (the file chip, the assetId chips) are
+    // rebuilt after the generic i18n pass, so the numbers survive a language
+    // switch instead of being overwritten by the label alone.
+    renderFileChip();
+    renderAssetHooks();
+    doc.dispatchEvent(new CustomEvent("autostamp:lang", { detail: { lang: state.lang } }));
     return state.lang;
   }
 
@@ -438,9 +448,11 @@
       else clearToast();
       return;
     }
+    // Ctrl+O is the native picker, not the upload input: the picker is the
+    // primary way in on a desktop app (UI_SPEC §5, AGENTS §6 fs.pick).
     if ((e.ctrlKey || e.metaKey) && (e.key === "o" || e.key === "O")) {
       e.preventDefault();
-      q("#file-input").click();
+      pickAndOpen();
       return;
     }
     if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
@@ -466,6 +478,24 @@
     }
     if (e.key === "+" || e.key === "=") { bumpScale(1); return; }
     if (e.key === "-" || e.key === "_") { bumpScale(-1); return; }
+
+    // UI_SPEC §5: 1..9 jump to a page, PgUp/PgDn step. A bare 0 means page 10.
+    if (/^[0-9]$/.test(e.key)) {
+      const p = window.__autoStampPreview;
+      if (!p) return;
+      e.preventDefault();
+      const n = e.key === "0" ? 10 : Number(e.key);
+      p.goTo(n);
+      return;
+    }
+    if (e.key === "PageUp" || e.key === "PageDown") {
+      const p = window.__autoStampPreview;
+      if (!p) return;
+      e.preventDefault();
+      if (e.key === "PageUp") p.prev();
+      else p.next();
+      return;
+    }
     if (e.key.startsWith("Arrow") && state.selected !== null) {
       e.preventDefault();
       nudge(e.key, e.shiftKey);
@@ -571,11 +601,56 @@
       setState("save-confirm");
     });
     q("#confirm-ok").addEventListener("click", () => submitSave(true));
-    q("#btn-open").addEventListener("click", () => q("#file-input").click());
-    q("#empty-pick").addEventListener("click", () => q("#file-input").click());
+    // --- P1 open channel: picker / upload / path box / drag and drop (AGENTS §6) ---
+    q("#btn-open").addEventListener("click", () => pickAndOpen());
+    q("#empty-pick").addEventListener("click", () => pickAndOpen());
+    q("#btn-upload").addEventListener("click", () => q("#file-input").click());
+    q("#empty-upload").addEventListener("click", () => q("#file-input").click());
+    q("#empty-open").addEventListener("click", () => openByPath());
+    q("#empty-path").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        openByPath();
+      }
+    });
+    q("#file-input").addEventListener("change", (e) => {
+      handleFiles(e.target.files);
+      // Reset so picking the same file again after a failed open still fires.
+      e.target.value = "";
+    });
+    const stage = q("#preview");
+    stage.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      stage.dataset.drag = "on";
+    });
+    stage.addEventListener("dragleave", () => {
+      stage.dataset.drag = "off";
+    });
+    stage.addEventListener("drop", (e) => {
+      e.preventDefault();
+      stage.dataset.drag = "off";
+      handleFiles(e.dataTransfer ? e.dataTransfer.files : null);
+    });
+    // Ctrl+wheel zooms the view; P2 hands the wheel to apply.scale once an
+    // instance owns it (UI_SPEC §5). passive:false keeps preventDefault valid.
+    stage.addEventListener(
+      "wheel",
+      (e) => {
+        if (!(e.ctrlKey || e.metaKey) || !window.__autoStampPreview) return;
+        e.preventDefault();
+        window.__autoStampPreview.zoomBy(e.deltaY < 0 ? 0.1 : -0.1);
+      },
+      { passive: false },
+    );
     q("#shortcuts-close").addEventListener("click", () => setModal(null));
     q("#btn-shortcuts").addEventListener("click", () => { renderShortcuts(); setModal("shortcuts-modal"); });
-    q("#pw-cancel").addEventListener("click", () => { setModal(null); setState("opened"); });
+    q("#pw-cancel").addEventListener("click", () => {
+      setModal(null);
+      state.pending = null;
+      setState(state.file ? "opened" : "empty");
+    });
+    q("#pw-retry").addEventListener("click", () => retryOpen());
+    q("#save-pick").addEventListener("click", () => pickSaveTarget());
     q("#modal-layer .scrim").addEventListener("click", () => setModal(null));
     doc.addEventListener("keydown", onKey);
   }
@@ -604,6 +679,209 @@
     } catch (e) {
       toast("error", `${e.code}: ${e.message}`);
     }
+  }
+
+
+  // ---------- open: the local-file channel (P1, AGENTS §6) ----------
+  //
+  // Three ways in: the native picker (#btn-open / #empty-pick), the hidden
+  // <input type=file> (#btn-upload, plus drag/drop), and the typed path box
+  // (#empty-path + #empty-open). Every one of them lands in adopt(), which is
+  // the only place that changes the document state.
+
+  // pickAndOpen asks the server to show the native dialog. A cancel is normal
+  // (no toast), an unsupported platform gets a toast plus focus on the path box.
+  async function pickAndOpen() {
+    const filter = readField("api.fs.pick.filter") || "pdf";
+    const multi = Boolean(readField("api.fs.pick.multi"));
+    let res;
+    try {
+      res = await api.pick({ filter, multi });
+    } catch (e) {
+      toast("error", `${e.code}: ${e.message}`);
+      if (e.code === "pick_unsupported") q("#empty-path").focus();
+      return;
+    }
+    state.lastGrant = res && res.picks && res.picks[0] ? res.picks[0].pathGrantId : "";
+    renderAssetHooks();
+    if (!res || res.cancelled || !res.picks || !res.picks.length) return;
+    if (res.picks.length > 1) {
+      // The extra grants are real (owner-bound, TTL): P6's batch flow consumes
+      // them. P1 opens the first one and keeps the rest in the console.
+      console.info("extra picks (batch flow is P6):", res.picks.slice(1).map((p) => p.path));
+    }
+    await openGrant(res.picks[0], "");
+  }
+
+  // openByPath is the typed-path channel: POST /api/fs/pick with filePath
+  // grants an existing file without a dialog (UI_SPEC §2 api.fs.pick.filePath).
+  async function openByPath() {
+    const path = (readField("api.fs.pick.filePath") || "").trim();
+    if (!path) {
+      q("#empty-path").focus();
+      return;
+    }
+    let res;
+    try {
+      res = await api.pick({ filePath: path, filter: "pdf" });
+    } catch (e) {
+      toast("error", `${e.code}: ${e.message}`);
+      return;
+    }
+    if (!res || !res.picks || !res.picks.length) return;
+    state.lastGrant = res.picks[0].pathGrantId;
+    renderAssetHooks();
+    await openGrant(res.picks[0], "");
+  }
+
+  async function openGrant(pick, pw) {
+    state.pending = { kind: "grant", pick };
+    try {
+      const info = await api.openGrant(pick.pathGrantId, { pw, name: pick.path });
+      state.pending = null;
+      return await adopt(info);
+    } catch (e) {
+      return openFailed(e);
+    }
+  }
+
+  // handleFiles is the drag/drop + upload channel (multipart, no grant needed).
+  async function handleFiles(files) {
+    const list = Array.from(files || []);
+    if (!list.length) return;
+    if (list.length > 1) console.info("extra dropped files (batch flow is P6):", list.map((f) => f.name));
+    const file = list[0];
+    state.pending = { kind: "file", file };
+    try {
+      const info = await api.uploadPDF(file, "");
+      state.pending = null;
+      return await adopt(info);
+    } catch (e) {
+      return openFailed(e);
+    }
+  }
+
+  // openFailed maps the contract codes onto the states the UI can show. A
+  // missing password is the documented flow: the modal asks for one string that
+  // the server then tries as UserPW *and* OwnerPW (internal/pdfcore/read.go).
+  function openFailed(e) {
+    if (e.code === "password_required" || e.code === "password_invalid") {
+      setModal("password-modal");
+      setState("password-error");
+      toast(e.code === "password_required" ? "warn" : "error", `${e.code}: ${e.message}`);
+      return;
+    }
+    toast("error", `${e.code}: ${e.message}`);
+    setState(state.file ? "opened" : "empty");
+  }
+
+  // retryOpen replays the open that failed, now with the typed password. The
+  // string goes to the server (structure) and to pdf.js (pages), so both read
+  // the same document.
+  async function retryOpen() {
+    if (!state.pending) {
+      setModal(null);
+      setState(state.file ? "opened" : "empty");
+      return;
+    }
+    const pw = readField("api.open.pw") || "";
+    const { kind, pick, file } = state.pending;
+    let info;
+    try {
+      info = kind === "grant"
+        ? await api.openGrant(pick.pathGrantId, { pw, name: pick.path })
+        : await api.uploadPDF(file, pw);
+    } catch (e) {
+      openFailed(e);
+      return;
+    }
+    state.pending = null;
+    setModal(null);
+    await adopt(info, pw);
+  }
+
+  // pickSaveTarget fills the save dialog's target path from the native picker.
+  // P4 writes through the returned grant; the text box stays editable so a
+  // typed path is equally valid.
+  async function pickSaveTarget() {
+    let res;
+    try {
+      res = await api.pick({ filter: "all", multi: false });
+    } catch (e) {
+      toast("error", `${e.code}: ${e.message}`);
+      return;
+    }
+    if (!res || res.cancelled || !res.picks || !res.picks.length) return;
+    const pick = res.picks[0];
+    state.saveGrant = pick.pathGrantId;
+    state.lastGrant = pick.pathGrantId;
+    writeField("api.save.targetPath", pick.path);
+    renderAssetHooks();
+  }
+
+  // adopt is the one document-change funnel: metadata from the server, pixels
+  // from pdf.js, and the state machine in one place.
+  async function adopt(info, pw) {
+    state.file = { assetId: info.assetId, name: info.name, size: info.size };
+    state.assets.open = info.assetId;
+    // A new document invalidates every derived asset id that is still on the
+    // screen; leaving stale ids would let Save point at a dead session file.
+    state.assets.split = "";
+    state.assets.apply = "";
+    state.assets.export = "";
+    state.assets.save = "";
+    renderFileChip();
+    renderAssetHooks();
+    // The state flips *before* the first paint on purpose: #preview-stage is
+    // display:none in the empty state (style.css), so pdf.js would otherwise
+    // compute its fit-zoom against a zero-size container and the page would
+    // land at the wrong scale. The document is already open at this point (the
+    // server answered), so entering "opened" here is truthful; a render failure
+    // surfaces as a toast with an empty stage.
+    setState("opened");
+    const p = window.__autoStampPreview;
+    if (p) {
+      if (p.setPassword) p.setPassword(pw || "");
+      await p.open(info);
+    }
+    doc.dispatchEvent(new CustomEvent("autostamp:open", { detail: info }));
+    if (info.pages && info.pages.length && !info.pages.some((pg) => pg.hasFonts)) {
+      // UI_SPEC 4: a document whose pages are only images has nothing to
+      // extract; say so instead of letting the search box look broken.
+      toast("warn", t("warn.noText.hint"));
+    }
+    return info;
+  }
+
+  function renderFileChip() {
+    const el = q("#top-file");
+    if (!el) return;
+    if (!state.file) return; // applyLang owns the empty label
+    el.textContent = `${state.file.name} · ${formatBytes(state.file.size)}`;
+  }
+
+  // formatBytes keeps the units language-neutral (KB/MB are not i18n strings).
+  function formatBytes(n) {
+    if (!n && n !== 0) return "-";
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  // renderAssetHooks paints the internal readouts: the assetId each route
+  // produced, plus the last pathGrantId the picker returned. The visible text is
+  // the handle itself (ids are not translatable strings); the localized label
+  // goes into the title, which is why applyLang() calls this after its own pass.
+  function renderAssetHooks() {
+    qa("#asset-hooks [data-route]").forEach((el) => {
+      const id = state.assets[el.dataset.route] || "";
+      el.textContent = id || "-";
+      el.title = `${t("asset.hint")} (${el.dataset.route})${id ? ": " + id : ""}`;
+    });
+    qa("[data-field='api.fs.pick.pathGrantId']").forEach((el) => {
+      el.textContent = state.lastGrant || "-";
+      el.title = `${t("api.fs.pick.pathGrantId.ctl")}: ${state.lastGrant || "-"}`;
+    });
   }
 
   // ---------- deep link (UI_SPEC 7) ----------

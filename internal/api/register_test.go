@@ -10,25 +10,40 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"autostamp/internal/app"
 	"autostamp/internal/config"
 	"autostamp/internal/console"
+	"autostamp/internal/tmpstore"
 	"autostamp/internal/webx"
 )
 
-func newTestMux(t *testing.T) (*http.ServeMux, *config.Store) {
+// newTestMux builds the real route set with both stores in temp directories,
+// so every test exercises the same wiring main installs.
+func newTestMux(t *testing.T) (*http.ServeMux, *config.Store, *tmpstore.Store) {
 	t.Helper()
-	store, err := config.Load(filepath.Join(t.TempDir(), "settings.json"))
+	dir := t.TempDir()
+	settings, err := config.Load(filepath.Join(dir, "settings.json"))
 	if err != nil {
 		t.Fatalf("settings load: %v", err)
 	}
+	assets, err := tmpstore.New(filepath.Join(dir, "session"), tmpstore.Limits{
+		TTL:      time.Hour,
+		MaxFile:  1 << 20,
+		MaxTotal: 4 << 20,
+	}, console.New(io.Discard, false))
+	if err != nil {
+		t.Fatalf("tmpstore: %v", err)
+	}
+	t.Cleanup(func() { _ = assets.Close() })
 	mux := NewMux(Deps{
 		Version:  app.BuildInfo{Version: "9.9.9", Commit: "dead123", GoVersion: "go1.26.5", GOOS: "windows", Arch: "amd64"},
 		Log:      console.New(io.Discard, false),
-		Settings: store,
+		Settings: settings,
+		Assets:   assets,
 	})
-	return mux, store
+	return mux, settings, assets
 }
 
 func decodeEnvelope(t *testing.T, rec *httptest.ResponseRecorder) webx.Envelope {
@@ -41,7 +56,7 @@ func decodeEnvelope(t *testing.T, rec *httptest.ResponseRecorder) webx.Envelope 
 }
 
 func TestHealthReportsTheBuildTriple(t *testing.T) {
-	mux, _ := newTestMux(t)
+	mux, _, _ := newTestMux(t)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/health", nil))
 	if rec.Code != http.StatusOK {
@@ -74,7 +89,7 @@ func TestHealthReportsTheBuildTriple(t *testing.T) {
 }
 
 func TestHealthOnlyAnswersGET(t *testing.T) {
-	mux, _ := newTestMux(t)
+	mux, _, _ := newTestMux(t)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/health", nil))
 	if rec.Code != http.StatusMethodNotAllowed {
@@ -83,7 +98,7 @@ func TestHealthOnlyAnswersGET(t *testing.T) {
 }
 
 func TestSettingsGetReturnsDefaults(t *testing.T) {
-	mux, _ := newTestMux(t)
+	mux, _, _ := newTestMux(t)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/settings", nil))
 	if rec.Code != http.StatusOK {
@@ -109,7 +124,7 @@ func TestSettingsGetReturnsDefaults(t *testing.T) {
 // TestSettingsPatchMergesOnlyWhatItSends is the pointer-field contract in
 // AGENTS §6: {"apply":{"opacity":0.42}} may not disturb any other group.
 func TestSettingsPatchMergesOnlyWhatItSends(t *testing.T) {
-	mux, store := newTestMux(t)
+	mux, store, _ := newTestMux(t)
 	before := store.Snapshot()
 
 	body := `{"patch":{"apply":{"opacity":0.42,"blend":"screen"}}}`
@@ -142,7 +157,7 @@ func TestSettingsPatchMergesOnlyWhatItSends(t *testing.T) {
 }
 
 func TestSettingsPatchClampsAndWarns(t *testing.T) {
-	mux, store := newTestMux(t)
+	mux, store, _ := newTestMux(t)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/settings", strings.NewReader(`{"patch":{"export":{"customDpi":9000}}}`))
 	mux.ServeHTTP(rec, req)
@@ -184,7 +199,7 @@ func TestSettingsPatchClampsAndWarns(t *testing.T) {
 }
 
 func TestSettingsRejectsBadBodies(t *testing.T) {
-	mux, _ := newTestMux(t)
+	mux, _, _ := newTestMux(t)
 	for _, tc := range []struct {
 		name string
 		body string
@@ -243,7 +258,7 @@ func TestSettingsWriteIsAtomic(t *testing.T) {
 // does not implement, 404 from the static handler. The client turns those into
 // http_405 / http_404 (app-api.js), and the shell shows them verbatim.
 func TestUnimplementedRouteKeepsRouterReply(t *testing.T) {
-	mux, _ := newTestMux(t)
+	mux, _, _ := newTestMux(t)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/pdf/save", strings.NewReader(`{"assetId":"a"}`)))
 	if rec.Code != http.StatusMethodNotAllowed {
