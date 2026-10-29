@@ -103,6 +103,14 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
   顺带打印 commit 短号；**不得**手写 `-X main.xxx` 形式 ldflags。
 - `-Watch` 观察 `*.go|mod|sum|mjs|js|html|css|ps1`（跳过 `.git`/`dist`/`tmp`），改动后自动跑
   `vet -> test -> genfix -> console -> webview -> verify`；`-Once` 表示只跑一轮（CI 冒烟用）。
+
+- `dist\genfix.exe` 是**命令行**素材生成器（无 GUI，打印 3 行即退出）。在资源管理器里双击它会出现
+  「cmd 窗口一闪即退」，那是正常收尾，不是崩溃。它自己从 exe 所在目录向上定位仓库根
+  （判定 `AGENTS.md` + `docs/`），因此不会把 PNG 写进 `dist\`；定位失败则报错退出。
+  `build.ps1 -Task fixtures` 会显式把目标目录作为参数传给它。
+- `-Task` 支持逗号列表（`-Task genfix,fixtures`）；未知任务名报错并以退出码 1 结束（列出可选任务）。
+- `-Run` 是开关（等价于在任务列表末尾追加 `run`）；`dist` 里没有 `autostamp*.exe` 时只打提示，
+  说明 P0 未开工、当前只有 `genfix.exe` 这类 CLI 产物。
 - 上面手敲的 `go build` 命令仍有效，两者等价：脚本只是把本节命令固化 + 加校验/体积输出。
 
 - 首次运行在 `%APPDATA%\AutoStamp\` 生成 `settings.json`（印章默认值、切分默认值、

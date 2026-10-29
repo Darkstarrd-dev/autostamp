@@ -17,9 +17,9 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('all', 'clean', 'vet', 'test', 'genfix', 'fixtures', 'console', 'webview', 'stripped', 'verify', 'sizes', 'run', 'watch', 'help')]
     [string[]] $Task = @('all'),
     [switch] $Watch,
+    [switch] $Run,
     [switch] $Once,
     [string] $GoFlags = '',
     [ValidateSet('windows', 'linux', 'darwin')]
@@ -93,7 +93,8 @@ function Start-Fixtures {
     $exe = Join-Path $dist 'genfix.exe'
     if (-not (Test-Path $exe)) { Start-Genfix }
     if (-not (Test-Path $exe)) { Write-SkipMsg 'genfix.exe 不可用'; return }
-    $code = Invoke-Native -file $exe -argv @()
+    $fixturesDir = Join-Path $root 'docs\ui\fixtures'
+    $code = Invoke-Native -file $exe -argv @($fixturesDir)
     if ($code -ne 0) { Write-Bad 'genfix 运行失败'; return }
     Write-Ok 'page.png / seal.png 已刷新'
 }
@@ -151,8 +152,17 @@ function Start-Sizes {
 
 function Start-Run {
     Write-Head 'run'
-    $exe = @('autostamp-webview.exe', 'autostamp.exe') | ForEach-Object { Join-Path $dist $_ } | Where-Object { Test-Path $_ } | Select-Object -First 1
-    if (-not $exe) { Write-SkipMsg '尚未构建 exe（先跑 build console/webview）'; return }
+    $appExes = @('autostamp-webview.exe', 'autostamp.exe') | ForEach-Object { Join-Path $dist $_ } | Where-Object { Test-Path $_ }
+    if (-not $appExes) {
+        Write-SkipMsg 'dist 内没有 autostamp*.exe（P0 未开工，窗口/控制台版还不存在）'
+        if (Test-Path (Join-Path $dist 'genfix.exe')) {
+            Write-Host '   提示: dist\genfix.exe 是命令行素材生成器（打印 3 行即退出）；' -ForegroundColor DarkGray
+            Write-Host '         在资源管理器里双击它会看到 cmd 窗口一闪即退，这是正常行为，不是崩溃。' -ForegroundColor DarkGray
+            Write-Host '         要跑应用：等 P0 落地后 build.ps1 -Task webview -Run' -ForegroundColor DarkGray
+        }
+        return
+    }
+    $exe = $appExes | Select-Object -First 1
     Write-Host ('   启动 ' + (Split-Path $exe -Leaf)) -ForegroundColor DarkGreen
     & $exe
 }
@@ -253,7 +263,13 @@ function Show-Usage {
 '@ -ForegroundColor DarkGray
 }
 
-if ($Watch) { Start-Dispatch 'watch' } else { foreach ($k in $Task) { Start-Dispatch $k } }
+$known = @('all', 'clean', 'vet', 'test', 'genfix', 'fixtures', 'console', 'webview', 'stripped', 'verify', 'sizes', 'run', 'watch', 'help')
+$tasks = @($Task | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+$bad = @($tasks | Where-Object { $known -notcontains $_ })
+if ($bad.Count -gt 0) { Write-Bad ('未知任务: ' + ($bad -join ' ') + '；可选: ' + ($known -join ' ')); exit 1 }
+if ($tasks.Count -eq 0) { $tasks = @('all') }
+if ($Run) { $tasks += 'run' }
+if ($Watch) { Start-Dispatch 'watch' } else { foreach ($k in $tasks) { Start-Dispatch $k } }
 
 Write-Host ''
 Write-Host ('汇总: 失败 ' + $script:fail + ' / 跳过 ' + $script:skipCount) -ForegroundColor $(if ($script:fail -gt 0) { 'Red' } else { 'DarkGreen' })

@@ -33,6 +33,50 @@ const (
 	sealPtDefault = 120 // nominal printed seal size in pt (mock scale = 120/595)
 )
 
+// isRepo 判定 dir 是否为 AutoStamp 仓库根（AGENTS.md + docs/ 同时存在）。
+func isRepo(dir string) bool {
+	fi, err := os.Stat(filepath.Join(dir, "AGENTS.md"))
+	if err != nil || fi.IsDir() {
+		return false
+	}
+	d, err := os.Stat(filepath.Join(dir, "docs"))
+	return err == nil && d.IsDir()
+}
+
+// fixtureDir 解析素材输出目录：位置参数优先，否则从可执行文件所在目录向上找仓库根
+// （双击 dist\genfix.exe 时 cwd = dist\，不能把素材写进 dist\），最后回退到 cwd。
+func fixtureDir(explicit string) (string, error) {
+	if explicit != "" {
+		abs, err := filepath.Abs(explicit)
+		if err != nil {
+			return "", err
+		}
+		return abs, nil
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		exe = "."
+	}
+	for dir := filepath.Dir(exe); ; {
+		if isRepo(dir) {
+			return filepath.Join(dir, "docs", "ui", "fixtures"), nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	if isRepo(".") {
+		abs, err := filepath.Abs("docs")
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(abs, "ui", "fixtures"), nil
+	}
+	return "", fmt.Errorf("找不到 AutoStamp 仓库根（需 AGENTS.md 与 docs/）；请在仓库根运行: powershell -NoProfile -File build.ps1 -Task fixtures")
+}
+
 func main() {
 	var scale int
 	flag.IntVar(&scale, "scale", 3, "supersample factor 1..4 (edge quality)")
@@ -40,9 +84,9 @@ func main() {
 	if scale < 1 || scale > 4 {
 		log.Fatalf("-scale must be 1..4")
 	}
-	dir := flag.Arg(0)
-	if dir == "" {
-		dir = filepath.Join("docs", "ui", "fixtures")
+	dir, err := fixtureDir(flag.Arg(0))
+	if err != nil {
+		log.Fatalf("%v", err)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		log.Fatalf("mkdir %s: %v", dir, err)
