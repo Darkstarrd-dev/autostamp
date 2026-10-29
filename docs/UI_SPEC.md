@@ -1,0 +1,426 @@
+# AutoStamp — UI_SPEC（P0.5 UI 契约）
+
+> 最后核对：2026-10-29（P0.5 冻结：§2 字段表 / §6 契约 id / §8 决策表 2 轮确认已落定）。本文是 **UI 语义唯一权威**：字段名/取值域/控件绑定/DOM id/状态机
+> 在此冻结；P0 起 `web/static/index.html` 必须照 §1 骨架与 §7 id 搭建，P1–P5 只换数据源。
+> 与 `AGENTS.md` §6 路由字段冲突时：先改本文 + §6（同一提交），再改代码。
+> 三方一致性由 `node tools/verify/ui-contract.mjs` 常驻校验；mock 行为 `node tools/verify/ui-smoke.mjs`。
+> **§8 决策表** 记录用户确认（选项文本 + 日期 + ask 原文摘要）；未确认项标 `待 P0.5 确认`，
+> 不得引用为已定，也不得虚构确认。
+
+## 1. 组件层级与状态机
+
+层级：`asset（PDF 会话资产）→ 页选择 → 印章实例（instance）→ 骑缝章（crossPage）→ 导出/保存`。
+实例是叠加单位：一个实例可作用于多页（`apply.pages`）；骑缝章把实例切成逐页条带（`crossPage=true`）。
+
+状态（`<html data-state>`，与 mock `__autoStampMock.STATES` 一致）：
+
+```ui-states
+empty            无文件空态（拖拽 / 选择 / 路径输入）
+open-error       打开失败（非 PDF 或文件损坏）
+opened           已打开 PDF，未选中实例交互
+stamp-selected   实例被选中（选择框 + 手柄可见）
+stamp-dragging   画布拖拽移动中（pos 实时更新）
+stamp-resizing   句柄缩放中（scale 实时更新）
+split-preview    切分预览（2 拼结果页 + 切点）
+crosspage        骑缝章模式（逐页条带 + 起始位置 + 装订边）
+export           导出面板（dpi/quality/mode + 体积预估）
+save-confirm     保存对话框（targetPath / replaceOriginal）
+replace-confirm  替换原文件的二次确认
+password-error   加密 PDF 需口令
+save-error       写盘失败（权限 / 占用，可改存新文件）
+warn-no-text     无文字层警告（扫描件；不假装成功）
+warn-large-page  超大页面降采样警告（MaxImagePixels 收紧）
+```
+
+转移（关键路径）：`empty → opened`（失败 → `open-error` / `password-error`）；
+`opened ⇄ split-preview`（切分产生新 asset，原文只读）；`opened → crosspage`
+（`crossPage=true` 且切分生效，实例模式变 crosspage）；`opened/stamp-* →
+stamp-dragging/stamp-resizing → stamp-selected`（pointerup）；`stamp-selected →
+save-confirm → replace-confirm`（`replaceOriginal=true`）→ 成功 toast 或 `save-error`；
+`opened → warn-no-text / warn-large-page`（渲染与文字抽取的降级提示）。
+
+不变量（AGENTS §3）：预览像素 == 落盘后再次渲染像素；PDF 原文只读，所有修改落到新 asset；
+写盘只在显式保存时发生。
+
+## 2. 参数词表（冻结）
+
+`field=` 是契约名，mock 的 `data-field` 与之逐字相同（含 `api.` / `ui.` 前缀）；
+`api=` 必须镜像去掉 `api.` 后的字段名，其首段前缀在 §6 路由词表里映射到 `/api/...`；
+`ctl=no` 表示只作响应/内部状态显示（`data-field-role="display"`）。
+单位：`pt` = PDF 点（1pt=1/72in）；前端一律以 **左上原点** 换算，落盘转 pdfcpu 的左下原点。
+`nullable` = 是否允许 `null`/空串。默认值即 mock 初值，也是 settings.json 默认。
+
+```ui-fields
+field=ui.lang api=- type=segmented range=en|cn default=en nullable=no ctl=yes i18nkey=ui.lang.ctl decision=-
+field=ui.theme api=- type=segmented range=light|dark default=light nullable=no ctl=yes i18nkey=ui.theme.ctl decision=-
+field=ui.density api=- type=segmented range=two-col|single-col|collapsed default=two-col nullable=no ctl=yes i18nkey=ui.density.ctl decision=L1
+field=decision.assetIds api=- type=display range=5个 assetId chip default=- nullable=yes ctl=yes i18nkey=asset.hint decision=-
+field=api.fs.pick.filePath api=fs.pick.filePath type=text range=绝对路径 default=- nullable=no ctl=yes i18nkey=api.fs.pick.filePath.ctl decision=-
+field=api.fs.pick.multi api=fs.pick.multi type=toggle range=bool default=true nullable=no ctl=yes i18nkey=api.fs.pick.multi.ctl decision=-
+field=api.fs.pick.filter api=fs.pick.filter type=select range=pdf|all default=pdf nullable=no ctl=yes i18nkey=api.fs.pick.filter.ctl decision=-
+field=api.fs.pick.pathGrantId api=fs.pick.pathGrantId type=text range=grantId default=- nullable=yes ctl=yes i18nkey=api.fs.pick.pathGrantId.ctl decision=- unit=grantId
+field=api.open.assetId api=open.assetId type=text range=assetId default=- nullable=yes ctl=no i18nkey=api.open.assetId.ctl decision=-
+field=api.split.assetId api=split.assetId type=text range=assetId default=- nullable=yes ctl=no i18nkey=api.split.assetId.ctl decision=-
+field=api.apply.assetId api=apply.assetId type=text range=assetId default=- nullable=yes ctl=no i18nkey=api.apply.assetId.ctl decision=-
+field=api.export.assetId api=export.assetId type=text range=assetId default=- nullable=yes ctl=no i18nkey=api.export.assetId.ctl decision=-
+field=api.save.assetId api=save.assetId type=text range=assetId default=- nullable=yes ctl=no i18nkey=api.save.assetId.ctl decision=-
+field=api.seal.prepare.despill api=seal.prepare.despill type=toggle range=bool default=true nullable=no ctl=yes i18nkey=api.seal.prepare.despill.ctl decision=D4
+field=api.seal.prepare.alphaTrim api=seal.prepare.alphaTrim type=toggle range=bool default=true nullable=no ctl=yes i18nkey=api.seal.prepare.alphaTrim.ctl decision=-
+field=api.seal.prepare.resampleDpi api=seal.prepare.resampleDpi type=number range=72..600 default=300 nullable=no ctl=yes i18nkey=api.seal.prepare.resampleDpi.ctl decision=-
+field=api.seal.preset.presetName api=seal.preset.presetName type=text range=string default=- nullable=no ctl=yes i18nkey=api.seal.preset.presetName.ctl decision=I1
+field=api.apply.blend api=apply.blend type=select-grouped range=16blend词表 default=multiply nullable=no ctl=yes i18nkey=api.apply.blend.ctl decision=-
+field=api.apply.opacity api=apply.opacity type=slider+number range=0..1 default=0.6 nullable=no ctl=yes i18nkey=api.apply.opacity.ctl decision=-
+field=api.apply.brightness api=apply.brightness type=slider+number range=0..2 default=1 nullable=no ctl=yes i18nkey=api.apply.brightness.ctl decision=-
+field=api.apply.saturate api=apply.saturate type=slider+number range=0..3 default=1 nullable=no ctl=yes i18nkey=api.apply.saturate.ctl decision=-
+field=api.apply.scale api=apply.scale type=slider+number range=0.05..0.9 default=0.202 nullable=no ctl=yes i18nkey=api.apply.scale.ctl decision=- unit=相对页宽分数
+field=api.apply.pos api=apply.pos type=text range=x,y default=130,480 nullable=no ctl=yes i18nkey=api.apply.pos.ctl decision=- unit=pt
+field=api.apply.anchor api=apply.anchor type=segmented range=tl|tr|center|bl|br default=center nullable=no ctl=yes i18nkey=api.apply.anchor.ctl decision=-
+field=api.apply.offset api=apply.offset type=text range=dx,dy default=0,0 nullable=no ctl=yes i18nkey=api.apply.offset.ctl decision=- unit=pt
+field=api.apply.rotation api=apply.rotation type=slider+number range=-180..180 default=0 nullable=no ctl=yes i18nkey=api.apply.rotation.ctl decision=- unit=deg
+field=api.apply.pages api=apply.pages type=text range=pages词表 default=1-2,5 nullable=no ctl=yes i18nkey=api.apply.pages.ctl decision=-
+field=api.split.auto api=split.auto type=toggle range=bool default=true nullable=no ctl=yes i18nkey=api.split.auto.ctl decision=D3
+field=ui.split.mode api=- type=segmented range=off|v2|h2|grid default=v2 nullable=no ctl=yes i18nkey=ui.split.mode.ctl decision=D3
+field=api.split.rows api=split.rows type=number range=1..6 default=1 nullable=no ctl=yes i18nkey=api.split.rows.ctl decision=-
+field=api.split.cols api=split.cols type=number range=1..6 default=2 nullable=no ctl=yes i18nkey=api.split.cols.ctl decision=-
+field=api.split.cutFractions api=split.cutFractions type=text range=0..1逗号列表 default=0.5 nullable=no ctl=yes i18nkey=api.split.cutFractions.ctl decision=-
+field=api.split.pages api=split.pages type=text range=pages词表 default=all nullable=no ctl=yes i18nkey=api.split.pages.ctl decision=-
+field=api.export.mode api=export.mode type=segmented range=vector|raster default=vector nullable=no ctl=yes i18nkey=api.export.mode.ctl decision=D1
+field=api.export.dpi api=export.dpi type=segmented range=72|150|300|custom default=150 nullable=no ctl=yes i18nkey=api.export.dpi.ctl decision=D1 unit=dpi
+field=api.export.customDpi api=export.customDpi type=number range=96..600 default=150 nullable=no ctl=yes i18nkey=api.export.customDpi.ctl decision=- unit=dpi
+field=api.export.quality api=export.quality type=slider+number range=40..95 default=75 nullable=no ctl=yes i18nkey=api.export.quality.ctl decision=-
+field=api.export.pages api=export.pages type=text range=pages词表 default=all nullable=no ctl=yes i18nkey=api.export.pages.ctl decision=-
+field=api.apply.crossPage api=apply.crossPage type=toggle range=bool default=false nullable=no ctl=yes i18nkey=api.apply.crossPage.ctl decision=D2
+field=ui.crosspage.binding api=- type=segmented range=right|alternate|none default=right nullable=no ctl=yes i18nkey=ui.crosspage.binding.ctl decision=D2
+field=api.apply.startOffset api=apply.startOffset type=slider+number range=0..200 default=0 nullable=no ctl=yes i18nkey=api.apply.startOffset.ctl decision=D2 unit=pt
+field=api.save.targetPath api=save.targetPath type=text range=绝对路径 default=- nullable=yes ctl=yes i18nkey=api.save.targetPath.ctl decision=-
+field=api.save.replaceOriginal api=save.replaceOriginal type=toggle range=bool default=false nullable=no ctl=yes i18nkey=api.save.replaceOriginal.ctl decision=S1
+field=api.open.pw api=open.pw type=password range=string default=- nullable=yes ctl=yes i18nkey=api.open.pw.ctl decision=-
+```
+
+`pages-词表`：`all | none | <页号>[-<页号>][,...]`（1 基，例 `1-2,5`）。
+`16blend词表`（PDF 表 136 / FACTS §1.2）：`normal screen lighten color-dodge hard-light multiply
+darken color-burn overlay soft-light difference exclusion hue saturation color luminosity`；
+控件必须是**分组** `<select>`（normal/增亮/增暗/对比/比较/分量 六组），不得 16 个平铺按钮。
+
+语义要点（实测见 FACTS，不得凭记忆改）：
+- `api.apply.opacity` → 落盘 `ExtGState /CA /ca`（pdfcpu `opacity:` 同义，FACTS §2.1）；
+  `api.apply.blend` → `blend.go` 注入 `/BM`（pdfcpu 不写 `/BM`，FACTS §2.2）。
+- `api.apply.brightness/saturate` 只在预览（`ctx.filter`），**落盘不写**；每层叠加前显式
+  `ctx.filter='none'`（FACTS §1.4 的污染坑）。
+- `api.apply.scale` 是相对页宽分数（换算显示 pt/mm）；`api.apply.pos` 与 `api.apply.anchor`
+  二选一（选锚点后 pos 归算）。
+- `api.apply.startOffset` 是骑缝条带沿装订边的起始偏移（pdfcpu `offset:0 -N`），与 `api.apply.offset` 独立。
+- `api.export.dpi/customDpi/quality` 仅 `mode=raster` 生效（页位图由前端回传，FACTS §2.4 无 rasterize）。
+- `api.open.pw`：UserPW/OwnerPW 都试；AES-256 链路 `UNVERIFIED`（FACTS §6）。
+- `ui.*` 字段不进请求（`api=-`）；`ui.split.vetoedPages` 是 `split` 的派生参数，切分时随请求带上。
+
+## 3. 控件 ↔ 字段绑定表
+
+| 面板/控件 | 字段 | 控件形态 | 落点 |
+|---|---|---|---|
+| 印章段 · 上传印章 PNG | `sealId`（响应侧） | button | `POST /api/pdf/seal/prepare` |
+| 印章段 · 去白底 | `api.seal.prepare.despill` | toggle + 撤销 | 同上 |
+| 印章段 · 存为预设 | `api.seal.preset.presetName` | text + button | `GET/POST /api/seal/preset` |
+| 实例段 · 列表 | instance（名称/模式/删除） | list + text | 内部状态 |
+| 叠加段 · 混合模式 | `api.apply.blend` | 分组 `<select>` | `/api/pdf/apply` |
+| 叠加段 · 透明度/明度/饱和度 | `api.apply.opacity/brightness/saturate` | 滑杆 + 数值（双向绑定） | 同上 / 仅预览 |
+| 位置段 · 印章宽度 | `api.apply.scale` | 滑杆 + 数值 + pt 换算 | 同上 |
+| 位置段 · 位置 | `api.apply.pos` | text(x,y) + 居中 | 同上 |
+| 位置段 · 页内锚点 | `api.apply.anchor` | segmented | 同上 |
+| 位置段 · 偏移 | `api.apply.offset` | text(dx,dy) | 同上 |
+| 位置段 · 旋转 | `api.apply.rotation` | 滑杆 + 数值 | 同上 |
+| 位置段 · 作用页 | `api.apply.pages` | text + All/Current | 同上 |
+| 切分段 · 自动判定 | `api.split.auto` | toggle | `/api/pdf/split` |
+| 切分段 · 已判定页 | `ui.split.vetoedPages` | 逐页 chip | 同上（veto 列表） |
+| 切分段 · 手动切分 | `ui.split.mode` | segmented off/v2/h2/grid | 同上 |
+| 切分段 · rows/cols | `api.split.rows` / `api.split.cols` | number | 同上 |
+| 切分段 · 切点 | `api.split.cutFractions` | text + 切分预览 | 同上 |
+| 切分段 · 切分页 | `api.split.pages` | text | 同上 |
+| 骑缝段 · 骑缝章 | `api.apply.crossPage` | toggle | `/api/pdf/apply` |
+| 骑缝段 · 装订边 | `ui.crosspage.binding` | segmented | 同上（几何见 §8 D2） |
+| 骑缝段 · 起始位置 | `api.apply.startOffset` | 滑杆 + 数值 | 同上 |
+| 骑缝段 · 逐页条带放大 | `ui.crosspage.stripPreview` | 每页 `<canvas>` | 预览（CP1） |
+| 导出段 · 导出方式 | `api.export.mode` | segmented | `/api/pdf/export` |
+| 导出段 · DPI | `api.export.dpi` + `customDpi` | segmented + number | 同上 |
+| 导出段 · JPEG 质量 | `api.export.quality` | 滑杆 + 数值 | 同上 |
+| 导出段 · 导出页 | `api.export.pages` | text + All | 同上 |
+| 导出段 · 体积预估 | （只读派生） | `#estimate` | 由 FACTS §4 表算，不请求 |
+| 保存弹窗 · 目标路径 | `api.save.targetPath` | text | `/api/pdf/save` |
+| 保存弹窗 · 系统选择器 | `api.fs.pick.filePath` + `pathGrantId` | button + display chip | `/api/fs/pick` |
+| 保存弹窗 · 替换原文件 | `api.save.replaceOriginal` | toggle + 二次确认 | 同上 |
+| 口令弹窗 · PDF 口令 | `api.open.pw` | password | `/api/pdf/open` |
+| 顶栏 · 语言/主题/密度 | `ui.lang` / `ui.theme` / `ui.density` | segmented | 无（前端） |
+| 空态 · 路径输入 | `api.fs.pick.filePath` | text | `/api/fs/pick` |
+| 资源钩子 · assetId | `decision.assetIds`（5 个 display chip） | 只读 | 响应侧 |
+
+滑杆 + 数值必须**双向绑定**（同一 `data-field` 复用两次，mock 已实现 `bindPair`）；
+隐藏 `type=file` input 只作选择器触发器，不占字段。
+
+## 4. i18n 清单（key | en | cn；共 174 行，全部由 mock + 状态文案生成）
+
+规则（AGENTS §7）：每个可见控件/文案必须有 `data-i18n` key，en/cn 两值非空；
+`data-i18n-cn`（及 `-placeholder`、`-title`）提供中文值，en 取元素自身文本或 `class="tag"` 的字段名。
+控制 key 约定 `<field 去掉 api. 前缀>.ctl` / `.hint`；JS 动态写入的 key（`dataset.i18n = …`、toast 文案）
+同样在下表登记。`ui-contract.mjs` 校验 mock 的每个 key 都在表中、表中每行的 en/cn 非空。
+
+|key|en|cn|
+|---|---|---|
+|api.apply.anchor.ctl|apply.anchor|页内锚点|
+|api.apply.anchor.hint|Nine-point anchor; pdfcpu anchor constant.|九宫格锚点；落盘用 pdfcpu 锚点常量，pos 会被覆盖。|
+|api.apply.blend.ctl|apply.blend|混合模式|
+|api.apply.blend.hint|16 blend modes (PDF Table 136) grouped; backend writes ExtGState /BM.|16 种 PDF 混合模式（PDF 表 136），分组选择器；落盘写 ExtGState /BM。|
+|api.apply.brightness.ctl|apply.brightness 0..2|明度|
+|api.apply.brightness.hint|Preview-only (canvas filter), not written to PDF.|仅预览（前端 ctx.filter brightness），落盘不写。|
+|api.apply.crossPage.ctl|apply.crossPage|骑缝章|
+|api.apply.crossPage.hint|One strip per page, strip i on page i; merged after per-page stamping.|切分后每页放一枚条带，第 i 页第 i 条；落盘后逐页合并（P3）。|
+|api.apply.offset.ctl|apply.offset|偏移（pt）|
+|api.apply.offset.hint|Offset from anchor, may be negative.|相对锚点的偏移，可负；与骑缝章 startOffset 互相独立。|
+|api.apply.opacity.ctl|apply.opacity 0..1|透明度|
+|api.apply.opacity.hint|0..1 writes ExtGState /CA and /ca.|0..1，落盘 ExtGState /ca /CA（pdfcpu opacity 同义）。|
+|api.apply.pages.ctl|apply.pages|作用页|
+|api.apply.pages.hint|Accepts all, none, single pages, ranges.|支持 all / none / 单页 / 区间，例如 1-2,5。|
+|api.apply.pos.ctl|apply.pos|位置（pt，左上原点）|
+|api.apply.pos.hint|Either pos or anchor; anchor recomputes pos.|与页内锚点二选一；选锚点后 pos 自动归算。|
+|api.apply.rotation.ctl|apply.rotation|旋转（度）|
+|api.apply.rotation.hint|Degrees around the seal centre.|-180 到 180；印章绕自身中心旋转。|
+|api.apply.saturate.ctl|apply.saturate 0..3|饱和度|
+|api.apply.saturate.hint|Preview-only (canvas filter), not written to PDF.|仅预览（前端 ctx.filter saturate），落盘不写。|
+|api.apply.scale.ctl|apply.scale|印章宽度（相对页宽）|
+|api.apply.scale.hint|scale is a fraction of page width; pt shown in brackets.|scale 为相对页宽分数；括号内为换算后的 pt（A4 = 595.3pt）。|
+|api.apply.startOffset.ctl|apply.startOffset|起始位置（pt）|
+|api.apply.startOffset.hint|Start offset along the binding edge (pdfcpu offset:0 -N).|沿装订边的起始偏移（pdfcpu offset:0 -N）；0 为页首。|
+|api.export.customDpi.ctl|export.customDpi|自定义 DPI|
+|api.export.customDpi.hint|96..600, raster + custom only.|96..600，仅 raster 且 dpi=custom 时读取。|
+|api.export.dpi.ctl|export.dpi|分辨率 DPI|
+|api.export.dpi.hint|Effective in raster mode; custom uses customDpi.|raster 模式生效；custom 时取 customDpi。|
+|api.export.mode.ctl|export.mode|导出方式（D1）|
+|api.export.mode.hint|vector keeps text/vectors (searchable); raster flattens each page to a bitmap.|vector 保留文字/矢量（默认可搜索）；raster 整页位图，抗篡改、便于扫描件。|
+|api.export.pages.ctl|export.pages|导出页|
+|api.export.pages.hint|Same vocabulary as apply.pages.|与 apply.pages 同一词表。|
+|api.export.quality.ctl|export.quality 40..95|JPEG 质量|
+|api.export.quality.hint|40..95, raster only.|40..95；仅 raster。落盘用 stdlib DCTDecode（FACTS §4）。|
+|api.open.pw.ctl|open.pw|PDF 口令|
+|api.fs.pick.filePath.ctl|C:\docs\contract.pdf|文件路径（空态输入框 / 保存弹窗目标路径）|
+|api.fs.pick.filePath.hint|Open the file by path; the picker grants a bounded pathGrantId.|按路径打开；选择器只授权一个有 TTL 的 pathGrantId。|
+|api.fs.pick.pathGrantId.ctl|pathGrantId: grant-x9z|授权句柄（只读显示）：选择器返回的 pathGrantId|
+|api.fs.pick.pathGrantId.hint|Owner-bound grant with TTL; upload falls back to multipart.|owner 绑定 + TTL；未授权时退化为 multipart 上传。|
+|api.fs.pick.multi.ctl|multi|多文件选择|
+|api.fs.pick.multi.hint|Allow selecting several PDFs (batch queue, P6).|允许多选 PDF（进入批处理队列，P6）。|
+|api.fs.pick.filter.ctl|PDF only / All files|仅 PDF / 所有文件|
+|api.fs.pick.filter.hint|Filter of the native picker; only .pdf is accepted by the app.|原生选择器过滤条件；应用只接受 .pdf。|
+|api.open.pw.hint|UserPW and OwnerPW are both tried; AES-256 read is UNVERIFIED (FACTS 6).|UserPW/OwnerPW 都试；AES-256 读取链路目前 UNVERIFIED（FACTS §6）。|
+|api.save.replaceOriginal.ctl|save.replaceOriginal|替换原文件|
+|api.save.targetPath.ctl|save.targetPath|目标路径|
+|api.save.targetPath.hint|Blank means same name + .stamp.pdf; atomic temp+rename.|留空则用同名 + .stamp.pdf；写盘走 temp+rename（原子写）。|
+|api.seal.prepare.alphaTrim.ctl|seal.prepare.alphaTrim|自动裁边|
+|api.seal.prepare.alphaTrim.hint|Trims the alpha bounding box, keeps the seal aspect ratio.|按 alpha 包围盒裁掉空白，保持印章本体比例。|
+|api.seal.prepare.despill.ctl|seal.prepare.despill|去白底|
+|api.seal.prepare.despill.hint|White-background keying applied live; reversible before save.|对白底扫描件即时去背；预览可撤销，预设保存时保留 alpha。|
+|api.seal.prepare.resampleDpi.ctl|seal.prepare.resampleDpi|印章重采样 DPI|
+|api.seal.prepare.resampleDpi.hint|Affects baked-in pixels only, not preview sharpness.|只影响落盘像素，不影响预览清晰度。|
+|api.seal.preset.presetName.ctl|seal.preset.presetName|存为预设|
+|api.seal.preset.presetName.hint|Presets keep image and parameter group together.|预设写入 %APPDATA%\AutoStamp\seals：图片与参数一起存。|
+|api.split.auto.ctl|split.auto|自动判定 2 拼|
+|api.split.auto.hint|Aspect-based heuristic; per-page veto list (decision D3).|按 MediaBox 纵横比判定；判定结果可被 vetoedPages 逐页否决（D3）。|
+|api.split.cols.ctl|split.cols|网格列数 cols|
+|api.split.cols.hint|cols >= 1.|cols >= 1。|
+|api.split.cutFractions.ctl|split.cutFractions|切点（相对分数）|
+|api.split.cutFractions.hint|Relative fractions 0..1, comma separated; pdfcpu rejects >= 1.|0..1 的相对分数，可多个（逗号分隔）；>1 或 >=1 会被拒绝（pdfcpu 实测）。|
+|api.split.pages.ctl|split.pages|切分页范围|
+|api.split.pages.hint|Same vocabulary as apply.pages.|与 apply.pages 同一词表。|
+|api.split.rows.ctl|split.rows|网格行数 rows|
+|api.split.rows.hint|rows >= 1.|rows >= 1；与 cols 一起决定等分网格。|
+|app.export.btn|Export|导出设置|
+|app.open.btn|Open PDF|打开 PDF|
+|app.save.btn|Save|保存|
+|app.shortcuts.btn|Shortcuts|快捷键|
+|app.title|AutoStamp|AutoStamp 印章|
+|app.upload.btn|Upload|上传文件|
+|asset.hint|asset ids|会话资产 ID（内部状态，只读）|
+|binding.alternate|Duplex: odd right / even left|双面：奇右偶左|
+|binding.none|No cross-page seal|无骑缝章|
+|binding.right|Single-sided: right edge|单面：右缘连续|
+|blend.group.compare|Compare|比较|
+|blend.group.component|Component|分量|
+|blend.group.contrast|Contrast|对比|
+|blend.group.darken|Darken|增暗|
+|blend.group.lighten|Lighten|增亮|
+|blend.group.normal|Normal|正常|
+|chip.2up|2-up|2 拼|
+|chip.veto|vetoed|已否决|
+|confirm.cancel|Save as new file|改存新文件|
+|confirm.hint|The original will be overwritten (atomic temp+rename). This cannot be undone.|将覆盖原文件（原子写：先写临时文件再改名）。此操作不可撤销。|
+|confirm.ok|Replace|确认替换|
+|confirm.title|Replace original file?|替换原文件？|
+|crosspage.binding.fixed|binding edge restored to right: a cross-page seal cannot stay on "no cross-page seal"|装订边已回到右缘：骑缝章不能停在「无骑缝章」|
+|crosspage.on|on|开|
+|del.hint|delete selected instance|删除选中的印章实例|
+|density.collapsed|Collapsed panel|面板可折叠|
+|density.singleCol|Single column|单栏上下|
+|density.twoCol|Preview + panel|左预览右面板|
+|dup.hint|duplicate instance|复制印章实例|
+|empty.hint|Drop a .pdf here, or pick a file / type a path. Text, image and mixed PDFs are supported.|把 .pdf 文件拖到这里，或选择文件 / 直接填写路径。支持文本型、图片型与混合型 PDF。|
+|empty.msg|No PDF open|还没有打开 PDF|
+|empty.open.btn|Open|打开|
+|empty.path.placeholder|C:\docs\contract.pdf|C:\docs\contract.pdf|
+|empty.pick.btn|Pick file|选择文件|
+|empty.upload.btn|Upload|上传文件|
+|err.corrupt.hint|Not a PDF or damaged header: cannot open|不是 PDF 或文件头损坏，无法打开|
+|err.encrypted.hint|PDF is encrypted: password required|PDF 已加密，需要口令|
+|err.fix.ext.hint|Remove .bin suffix|移除 .bin 后缀|
+|err.pwEmpty.hint|password is empty|口令为空|
+|err.savePermission.hint|Cannot write the file: locked by another process|无法写入文件：被另一进程占用|
+|esc.hint|close dialog / clear toast|关闭对话框 / 清除提示|
+|export.customDpi.placeholder|96..600|96..600|
+|export.dpi.custom|Custom|自定义|
+|export.estimate.hint|about 124 KB/page (150dpi q75, A4).|每页约 124 KB（150dpi q75，A4 单页）。|
+|export.estimate.label|Estimate|体积预估|
+|export.estimate.note|Estimate scales the FACTS 4 measured table by page area and count.|预估值由 FACTS §4 实测表按页面积与页数缩放；raster 才受 DPI/质量影响。|
+|fs.pick.filter.all|All files|所有文件|
+|fs.pick.filter.pdf|PDF only|仅 PDF|
+|fs.pick.multi.on|multi|多文件|
+|instances.add.btn|Add instance|新增实例|
+|instances.delete.btn|Delete|删除|
+|instances.duplicate.btn|Duplicate|复制|
+|instances.err.last|At least one stamp instance is required|至少需要保留一个印章实例|
+|instances.rename.placeholder|Instance name|实例名称|
+|lang.cn|中文|中文|
+|lang.en|EN|英文|
+|modal.cancel|Cancel|取消|
+|modal.close|Close|关闭|
+|nudge.hint|move 1pt (Shift: 10pt)|移动 1pt（Shift = 10pt）|
+|ok.saved|saved (atomic temp+rename, ValidateFile passed)|已保存（原子 temp+rename，ValidateFile 通过）|
+|open.hint|open a PDF|打开 PDF|
+|overlay.filter.note|ctx.filter is context state: reset to none per layer (FACTS §1.4).|注意：ctx.filter 是上下文状态，每层叠加前必须置 none（FACTS §1.4）。|
+|page.hint|jump to page|跳到某页|
+|pager.count|page 1/5|页 1/5|
+|pages.all.btn|All|全部|
+|pages.current.btn|Current|当前页|
+|panel.crosspage.title|Cross-page seal|骑缝章|
+|panel.export.title|Export|导出设置|
+|panel.instances.title|Instances|印章实例|
+|panel.overlay.title|Overlay|叠加参数|
+|panel.position.title|Position|位置与尺寸|
+|panel.seal.title|Stamp|印章|
+|panel.split.title|Split|切分（2 拼 → 单页）|
+|position.center.btn|Center|居中|
+|preset.ok|preset stored|预设已写入|
+|pw.open.btn|Password|输入口令|
+|pw.retry|Retry|重试打开|
+|pw.title|Password required|需要口令|
+|render.full.btn|Render at full size|按原尺寸渲染|
+|ruler.hint|page size in pt; origin at top-left|页面尺寸（pt）；标尺原点在左上|
+|save.confirm|Save|保存|
+|save.hint|save dialog|保存对话框|
+|save.open.btn|Save to file|保存到文件|
+|save.pick.btn|System file picker|系统文件选择器|
+|save.replace.hint|Replacing the original needs a second confirmation.|替换原文件需要再确认一次，且会丢弃原 PDF 的可选内容层。|
+|save.replace.on|on|开|
+|save.retryNew.btn|Save to a new file|改存新文件|
+|save.title|Save PDF|保存 PDF|
+|scale.hint|scale +-0.01|缩放 +-0.01|
+|seal.alphatrim.on|on|开|
+|seal.despill.on|on|开|
+|seal.despill.revert|revert|撤销|
+|seal.ok|sealId ready (alpha ring, SMask generated on save)|印章已就绪（带 alpha 环，落盘自动生成 SMask）|
+|seal.preset.placeholder|Company A - red seal|公司甲 · 红章|
+|seal.preset.save|Save preset|保存预设|
+|seal.upload.btn|Upload seal PNG|上传印章 PNG|
+|shortcuts.hint|shortcut list|快捷键列表|
+|shortcuts.title|Shortcuts|快捷键|
+|split.apply.btn|Split preview|切分预览|
+|split.auto.on|on|开|
+|split.err.badFraction.hint|cut fraction must be in (0,1) - pdfcpu rejects >= 1|切点必须落在 (0,1)；pdfcpu 会拒绝 >=1|
+|split.mode.grid|Grid|网格|
+|split.mode.h2|2-up TB|2 拼（上下）|
+|split.mode.off|No split|不切|
+|split.mode.v2|2-up LR|2 拼（左右）|
+|split.ok|split preview ready|切分预览就绪（剔除原页后替换页面列表）|
+|theme.dark|Dark|深色|
+|theme.light|Light|浅色|
+|top.file.hint|no file open|未打开文件|
+|ui.crosspage.binding.ctl|Binding edge (D2)|装订边（D2）|
+|ui.crosspage.binding.hint|Right edge, duplex odd-right/even-left, or no cross-page seal; picking none clears apply.crossPage.|右缘连续 / 双面奇右偶左 / 无骑缝章；选无骑缝章即清掉 apply.crossPage。|
+|ui.crosspage.stripPreview.ctl|Per-page strip zoom|逐页条带放大|
+|ui.crosspage.stripPreview.hint|Zoomed strip per page; the main canvas shows the same strip.|每页一枚条带的放大预览；主画布也叠加同一条带（CP1）。|
+|ui.split.mode.ctl|Manual split|手动切分|
+|ui.split.mode.hint|manual overrides auto; rows/cols and cutFractions go to the API.|manual 覆盖 auto；rows/cols 与 cutFractions 都进 /api/pdf/split。|
+|ui.split.vetoedPages.ctl|Auto-detected pages|已判定页|
+|ui.lang.ctl|EN / 中文|语言切换|
+|ui.lang.hint|Interface language; every label carries a key.|界面语言；每个标签都有 i18n key。|
+|ui.theme.ctl|Light / Dark|浅色 / 深色|
+|ui.theme.hint|Colour tokens (UI_SPEC 6) switch as one set.|配色令牌（UI_SPEC §6）一并切换。|
+|ui.density.ctl|Preview + panel / Single column / Collapsed panel|布局密度：左预览右面板 / 单栏 / 折叠|
+|ui.density.hint|Panel width mode; fits 1280x720 and 1440x900.|面板宽度模式（L1）；适配 1280x720 与 1440x900。|
+|ui.split.vetoedPages.hint|Click a page to veto its auto-split.|点击某页即否决其自动切分；否决页保持原样不切。|
+|warn.noText.hint|No extractable text layer: this file has only scanned images|无可抽取文字层：该文件只有扫描图像|
+|warn.render.hint|Page 3 has 33 MP: rendered at reduced scale|第 3 页 33 MP：已按缩略尺寸渲染|
+
+## 5. 快捷键（mock 已注册，P1/P2 起在真实 UI 里同样注册）
+
+|键|动作|字段|
+|---|---|---|
+|Ctrl+O / Ctrl+S|打开 / 保存弹窗|open.* / save.*|
+|Ctrl+D / Del|复制 / 删除当前实例|instance|
+|左键拖拽 / 拖句柄|移动 / 缩放|pos / scale|
+|旋转句柄拖拽|按中心旋转|rotation|
+|←↑↓→（Shift=10pt）|1pt 步进|pos|
+|+ / −|scale ±0.01|scale|
+|1..9 / PgUp/PgDn|跳页|current|
+|Ctrl+滚轮|按中心缩放|scale|
+|Esc / ?|关闭弹窗、清除 toast / 快捷键表|—|
+
+## 6. 契约 DOM id
+
+P0/P1 的 `index.html` 必须使用下表 id（`ui-ids` 块 = `ui-contract.mjs` 校验表）；
+新增 id 要先登记，mock 缺该 id 即报错。
+
+```ui-ids
+app-main  app-root  apply-anchor  apply-blend  asset-hooks  btn-export  btn-open  btn-save  btn-shortcuts  btn-upload  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  density-seg  empty-open  empty-path  empty-pick  empty-pick-filter  empty-pick-multi  empty-state  empty-upload  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-add  instance-delete  instance-duplicate  lang-seg  modal-layer  page-pager  panel  panel-actions  panel-crosspage  panel-export  panel-instances  panel-overlay  panel-position  panel-seal  panel-split  password-modal  pixel-readout  pos-center  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  right-sidebar  save-cancel  save-confirm  save-modal  file-input  error-toast  save-open  save-pick  save-source  scale-pt  seal-despill-revert  seal-instances  seal-preset-name  seal-preset-save  seal-upload  shortcuts-close  shortcuts-modal  shortcuts-table  split-apply  split-mode  split-veto  strip-previews  theme-seg  top-file  topbar
+```
+
+`#file-input` 是隐藏的 `<input type=file>` 选择器触发器，不占字段（§2 里没有 `data-field`）。
+
+## 7. mock 驱动接口（verify 用）
+
+`window.__autoStampMock`：`STATES`、`setState(name)`、`verifyState(name)`、
+`setParams({api.x: v,…})`、`probe(name)`、`applyLang(lang)`、`applyTheme(t)`、`setDensity(d)`（`two-col` / `single-col` / `collapsed`）、
+`i18n()`（DOM 快照）、`fields()`、`ids()`、`q()/qa()`、`setModal()/clearToast()`。
+`probe` 关键字：`state` `overflow` `images` `instances` `split` `strip` `pixel-blend` `estimate`。
+深链：`mockup.html#crosspage`（`hashchange` 会重走状态机）。
+
+## 8. 决策表（用户确认记录）
+
+|编号|问题|选项（推荐默认标注）|用户选择|日期|来源|
+|---|---|---|---|---|---|
+|D1|保存默认导出方式|vector（保留文字/可搜索）/ raster（整页位图）|已确认：vector（mock `export.mode=vector`，用户可切 raster）|2026-10-29|ask 第 2 轮 d1-mode|
+|D2|骑缝章装订边（三档）|right 单面右缘 / alternate 双面奇右偶左（左右属同一条分割）/ none 无骑缝章|已确认：三档可选（right / alternate / none）。原文「可选，1、单面仅右侧。2、双面奇偶分别左右，左右的是两个章分割。3、无骑缝章」；`left` 未列入，已移除|2026-10-29|ask 第 1 轮 d2-binding|
+|D3|自动切分触发|auto 判定 + 逐页 veto / 手动切点 / 一键否决|已确认：自动判定 + 逐页否决（`split.auto` 开，`#split-veto` 逐页勾选否决）|2026-10-29|ask 第 1 轮 d3-split|
+|D4|印章去白底|前端即时去背（可撤销）/ 仅预设时 / 不做|已确认：预览即时去背 + 可撤销（`seal.prepare.despill` 默认开，`revert` 按钮 + toast）|2026-10-29|ask 第 1 轮 d4-despill|
+|L1|布局密度|two-col / single-col / collapsed|已确认：two-col 默认（顶栏仍可切 single-col / collapsed）|2026-10-29|ask 第 1 轮 l1-density|
+|CP1|骑缝章预览形态|主画布 + 侧栏逐页条带 / 仅主画布 / 仅条带|已确认：逐页条带缩略图 + 主画布叠加（`#strip-previews` 与主画布同随 `apply.startOffset`）|2026-10-29|ask 第 1 轮 crosspreview|
+|I1|多印章实例形态|实例列表 + 新增/复制/重命名（推荐）/ 单实例覆盖式|已确认：列表 + 重命名（`#seal-instances` 行内改名 + normal/cross-page 徽章；新增/复制/删除按钮）|2026-10-29|ask 第 2 轮 i1-instances|
+|S1|保存/替换原文件确认|保存弹窗 + 二次确认（推荐）/ 无弹窗直接写 / 只替换时弹窗|已确认：保存弹窗（`#save-modal`：目标路径 + pathGrantId）+ 替换原文件时二次确认（`#confirm-modal`）|2026-10-29|ask 第 2 轮 s1-save|
+|E1|导出体积预估展示|导出段内联 + 换算说明（推荐）/ 悬停 tooltip / 不显示|已确认：导出段内联（`#estimate-total` / `#estimate-per-page` + `export.estimate.note` 换算说明，随 dpi/quality/mode 实时改）|2026-10-29|ask 第 2 轮 e1-estimate|
+|B1|批处理并发|3（§9 默认，不阻塞）|未评审默认|2026-10-28|§9|
+|D5|非 Windows 原生窗口|回退浏览器（不阻塞 P0.5）|未评审默认|2026-10-28|§9|
+
+D2–D4、L1、CP1 已在 P0.5 第 1 轮确认（2026-10-29）；D1、I1、S1、E1 在第 2 轮确认（同日）。
+B1/D5 属 `IMPLEMENTATION_PLAN` §9 的「不阻塞 P0.5」，按 §9 默认实现并在此登记。
+P0.5 共 2 轮收敛，未使用第 3 轮。
+
+## 9. 与 AGENTS §6 的字段映射
+
+`AGENTS.md` §6 请求词表：`fs.pick{pathGrantId, owner, TTL, multi, filter, filePath}`、
+`pdf.open{pathGrantId, multipart, assetId}`、`pdf.split{auto, rows, cols, cutFractions, pages, vetoedPages}`、
+`pdf.seal/prepare{despill, alphaTrim, resampleDpi}`、`pdf.apply{assetId, sealId, blend, opacity, scale, pos, offset, rotation, pages, crossPage, startOffset, anchor}`、
+`pdf.export{assetId, dpi, customDpi, quality, mode, pages}`、`pdf.save{assetId, targetPath, pathGrantId, replaceOriginal}`、
+`seal/preset{presetName}`。`offset` 与 `startOffset` 独立；`brightness/saturate` 仅预览不落盘。
+
+## 10. 变更纪律
+
+- mock 的 DOM 骨架即 P0/P1 外壳：容器/画布/面板 id 就是契约（§6/§7）。
+- 每个可调参数在 mock 里挂 `data-field`，接线只换渲染与请求代码。
+- 校验命令：`node tools/verify/ui-smoke.mjs`（headless：0 console error、无 404、
+  1280x720/1440x900 无横向溢出、i18n 覆盖）与 `node tools/verify/ui-contract.mjs`（三方一致）。
+- 任何 UI 语义/字段改动：先改本文 + AGENTS §6，再改 mock，最后改代码（§8 必须有确认记录）。
