@@ -2,6 +2,16 @@
 
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+
+## 2026-10-29 — P3 切分落地：§6 split 行改实测 / §11 补 i18n 行
+
+- §6 `POST /api/pdf/split` 行标「已实现」并写死词表：`{assetId, splitMode, rows, cols,
+  customCuts[], splitVeto}`（`splitVeto` 是指针，`false` 是真答案）→ 新 assetId（kind `split`）
+  + 与 open 同形状的页元数据；写明「原资产不动 = UI 的撤销切分」。
+- §11 补 i18n 行：`UI_SPEC §4` 是文案唯一来源，`app-i18n.js` 由
+  `node tools/verify/gen-i18n.mjs` 生成（勿手改）。
+- 加密文档走同一 `inspectAsset`：受保护 PDF 的切分回 `password_required`/`password_invalid`，
+  切分请求本身没有 `pw` 字段（词表已冻结），口令只能从 open 那次带过来 → 记为 P7 加固项。
 ## 2026-10-29 — P1 之后：§3 目录树 / §6 fs.pick 形态 / §8 新增第 9 条
 
 - §3 目录树按 P1 实际代码对齐：`web/static` 增 `app-preview.js`/`app-textlayer.js`/

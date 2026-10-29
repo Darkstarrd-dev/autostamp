@@ -48,6 +48,9 @@ func NewMux(d Deps) *http.ServeMux {
 	// PDF body cap, so a stray seal upload cannot spool a document-sized body.
 	mux.Handle("POST /api/pdf/seal/prepare", http.MaxBytesHandler(handleSealPrepare(d.Assets, d.Log), maxSealBody))
 	mux.HandleFunc("GET /api/pdf/seal/raw", handleSealRaw(d.Assets))
+	// P3: 自动切分. The body is a small JSON command (the split vocabulary), the
+	// bytes already live in the session store, so no upload cap is needed here.
+	mux.HandleFunc("POST /api/pdf/split", handleSplit(d.Assets, d.Log))
 	// Routes no later stage has implemented still match the static pattern, so
 	// they reply 405 (empty body) or 404 (static handler). The front-end
 	// reports those as http_405 / http_404 with the status text instead of a

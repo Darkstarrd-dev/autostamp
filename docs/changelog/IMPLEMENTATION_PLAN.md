@@ -2,6 +2,17 @@
 
 > `docs/IMPLEMENTATION_PLAN.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-10-29 — P2 状态纠正 + P3 切分后端绿
+
+- **纠正**：§10 的 P2 行先前写成「前端 overlay/探针已 10/10」是错的——仓库里没有
+  `web/static/app-overlay.js`，没有 `overlay-geometry.mjs`，`app-shell.js` 里没有
+  `data-tune/anchor`。P2 改回 `[ ]`，只记**后端半边**（seal/prepare、seal/raw、`doc`
+  字段、`sealimg.go`、`pixel-matrix.mjs` 重跑 §1.3/§1.4）。前端是 P2 的未完成部分。
+- P3 行回填：后端切分词表 + `POST /api/pdf/split` 已绿（A4→297.5x842、
+  `/Rotate 90`→421x595、原资产保留），永久断言在 `pdfcore/split_test.go` 与
+  `api/split_test.go`；骑缝章落盘 + bbox/拼回像素验收留到 P4。
+- P3 小节改成「已实测的半边 + 待办（与 P4 同批）」；自动启发式从 `UNVERIFIED` 改为实测
+  （`w>h` 且 `w/h>0.7` → 判 2 拼），真实扫描样本仍 `UNVERIFIED`。
 ## 2026-10-29 — P1 完成：勾状态 + 回填实测数据
 
 - §10 的 P1 行勾 `[x]` + 回填实测摘要（四类样本 / fit 1.671→2.309 / 文本层 spans

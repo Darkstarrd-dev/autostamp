@@ -35,7 +35,10 @@
 |`internal/console`|`logger.go`|`slog` 封装（级别过滤、stderr、`-verbose`）|P0|
 |`internal/webx`|`json.go`|`Envelope{ok,data,code,error}` + `OK/Created/Fail` + `DecodeJSON`（`http.MaxBytesReader`）|P0|
 |（续）|`session.go`|`SessionHeader = X-AutoStamp-Session`：前端 `crypto.getRandomValues` 生成的 128-bit 令牌 = 资产/grant 的 owner 能力；`SessionOf` 校验格式（缺失 → 400 `bad_session`）、`NewToken` 服务端测试用|P0（P1 全线使用）|
-|`internal/pdfcore`|`read.go`|`Inspect(ctx, r, conf)`：页数、每页 MediaBox pt 尺寸/rotation/`hasFonts`/`hasXObject`、加密探测（`ErrNeedsPassword`/`ErrBadPassword` 再导出 pdfcpu 信号，`DefaultLimits` 显式限流）|P1（`split/sealimg/blend/raster/validate/engine` 属 P2-P5，未创建）|
+|`internal/pdfcore`|`read.go`|`Inspect(ctx, r, conf)`：页数、每页 MediaBox pt 尺寸/rotation/`hasFonts`/`hasXObject`、加密探测（`ErrNeedsPassword`/`ErrBadPassword` 再导出 pdfcpu 信号，`DefaultLimits` 显式限流）|P1|
+|(续)|`sealimg.go`|印章图通道：`Prepare`(去白底 despill → alpha 包围盒裁剪 `AlphaRect` → `ResampleDPI` 重采样，词表 `alphaTrim/despill/resampleDpi/targetDpi/maxSide`，扩展名按实际内容写)、`SealMeta`(src*/out*/alphaBBox/opaqueRatio 按**源图**计)、`SplitSealImage`+`SplitImage`(骑缝条带几何：奇偶两半 / 外缘 n 条)、`applyCrossPageStrips`+`place`(锚点词表 `pos/anchor/offset`，FACTS §2.3)|P2-P3|
+|(续)|`split.go`|自动切分：词表 `SplitAuto/SplitRowsCols/SplitCustom/SplitUnsplit` + `SplitSpec{Mode,Rows,Cols,CustomCuts,Veto}`；`CutPlanForPage`(display 空间,**不按 /Rotate 交换轴**，FACTS §2.3)、`SplitOnePage`(剔掉 pdfcpu 附带的原页)、`MergeCreateFile` 合并回一个 PDF；`TestSplit*` 断言 A4→297.5x842 与旋转页 421x595|P3|
+|(续)|`read_test.go` / `sealimg_test.go` / `split_test.go`|结构摘要、去背/裁剪/重采样字节、条带与锚点几何、切分词表与页尺寸|P1-P3|
 
 ## 3. `web/`（嵌入 + 前端）
 

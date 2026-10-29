@@ -1,6 +1,6 @@
 # AutoStamp — 实施计划（IMPLEMENTATION PLAN）
 
-> 最后核对：2026-10-29（P0 骨架 + P0.5 UI 契约冻结 + P1 PDF 查看完成；当前阶段 = P2 印章叠加预览）。
+> 最后核对：2026-10-29（P0 + P0.5 + P1 + P2 完成；当前阶段 = P3 自动切分（后端已绿）+ 骑缝章落盘）。
 > 依赖/浏览器事实引用 `docs/FACTS.md` 编号，禁止凭记忆改写。约束见 `AGENTS.md`。
 
 ## 0. 新对话恢复执行协议（执行入口）
@@ -236,19 +236,27 @@ P1 实测（2026-10-29，`powershell -File build.ps1 -Task all` → 失败 0）�
 新增「filter 未复位」回归用例必须失败→修复→通过；
 16 种模式 × {1.0,0.6,0.3} 三档透明度无异常。
 
-### P3 — 自动切分 + 骑缝章（需求 3）`[ ]`
+### P3 — 自动切分 + 骑缝章（需求 3）`[ ]`（后端切分已绿；骑缝落盘在 P4）
 
-交付：`internal/pdfcore/split.go`（`api.CutFile` + `Trim`/`ExtractPages` 剔原页）、
-`sealimg.go`（条带切分 + 重采样）、`app-crosspage.js`（起始位置滑杆、每页预览条带、
-装订边选择）、`POST /api/pdf/split`。
+**已实测的半边（2026-10-29）**：`internal/pdfcore/split.go` 词表 `auto/rows-cols/custom/unsplit`
++ `splitVeto`（指针，`false` 是真答案），切点=相对分数，`outDir` 用 tmpstore 目录，
+`SplitOnePage` 剔掉 pdfcpu 附带的原页，`MergeCreateFile` 合并回一个 PDF；
+`POST /api/pdf/split` → 新 assetId（kind `split`）+ 与 open 相同形状的页元数据，
+**原资产不动**（UI 的「撤销切分」= 换回旧 assetId，不需要 undo 栈）。
+A4 `Vert:0.5` → 两块 297.5x842；`/Rotate 90` 的页切出 421x595（实测见 FACTS §2.3）。
+永久断言：`internal/pdfcore.TestSplit*` + `internal/api.TestSplitRoute*`（含 405→400 词表校验、
+owner 边界、原资产仍可读回）。
 
-关键实现（FACTS §2.3 坑）：切点用**相对分数**；`outDir` 预创建（tmpstore 目录）；
-输出含原页 → 剔除；骑缝章 = 第 i 页放第 i 条（`position:r` + `offset:0 -startOffset`），
-单面=右缘连续、双面=右/左交替（§9 决策 D2）。自动切分启发式：MediaBox 纵横比
-> 0.7 且横排 → 判 2 拼（`UNVERIFIED`，需样本实测回填 FACTS）。
+**待办（与 P4 同批）**：`app-crosspage.js` 的真实形态（每页条带预览、`startOffset` 滑杆、
+`bindingSide` 装订边选择、`splitVeto` 按钮接线）+ 骑缝章落盘（需 P4 的 apply 路由）。
 
-验收：A4→A5 尺寸断言（595×842 → 297.5×842）；两页印章 bbox 断言；
-预览合成后再落盘（P4 前用 stdlib writer 过渡）骑缝拼回像素与整枚印章一致（误差 ≤ 1 px）。
+关键实现（FACTS §2.3 坑）：切点用**相对分数**；`outDir` 预创建；输出含原页 → 剔除；
+骑缝章 = 第 i 页放第 i 条（`pos/anchor/offset` 锚点词表，见 `sealimg.go`），
+单面=右缘连续、双面=右/左交替（D2）。自动切分启发式**已实测**：`w>h` 且 `w/h>0.7` 判 2 拼
+（`TestSplitAutoCutsRotatedSpreadOnly`）；真实扫描样本的版面判定仍 `UNVERIFIED`（FACTS §6）。
+
+验收：~~A4→A5 尺寸断言~~ ✓（`internal/api.TestSplitRouteReportsCutPageSizes` +
+`internal/pdfcore.TestSplitRowsCols`）；两页印章 bbox 断言 + 骑缝拼回像素 ≤1px —— 依赖 P4 的 apply，尚未做。
 
 ### P4 — 矢量落盘 + 混合模式注入（需求 4 的落盘面）`[ ]`
 
@@ -358,8 +366,8 @@ P0.5 追加必问项（不属上表）：布局密度、骑缝章预览形态、
 |P0 骨架|`[x]`|2026-10-29：`go vet`/`go test` 全绿（46 个 Go 测试）；`shell-smoke` OK（真二进制 + headless，ids=79 字段=44 状态=12，非预期 console error 0，`/api` 往返与 `{"patch":…}` 合并断言）；`webview-launch` OK（真窗口 + 页内 `/api`）；strip 体积 6,912,512 B（控制台）/ 7,345,152 B（WebView2）→ FACTS §4.1|
 |P0.5 UI 契约冻结|`[x]`|用户确认轮次：2 轮（2026-10-29）。`ui-contract` OK（mock 39 字段 / spec 44 字段 / i18n 190 键 / 15 状态 / 75 契约 id / 11 路由三方一致）；`ui-smoke` OK（15 状态、console 0 error、无资源失败、1280x720 与 1440x900 无横向溢出、29 项断言含 D2 三档与弹窗/toast 可见性、快捷键、密度三档）|
 |P1 查看|`[x]`|2026-10-29：`preview-smoke` OK（真 exe + headless，四类样本：英文 5 页 54,763 B / 中文 CID 4 页 186,950 B / 混合 23,935 B / 图片 3 页 46,043 B；主画布 ink 6,408 / 9,574 / 107,443 / 322,655；文本层 spans 3 / 24 / 1 / 0，drift 0；分页 chip 数 = 页数，chip 内缩略图 alpha 全覆盖；`/api/pdf/raw` 无令牌 400、带令牌 200、Range 206；console 0 error、失败请求 0）；fit 1.671 → 2.309；`build.ps1 -Task all` 失败 0（五脚本含 `webview-launch` 真窗口）；vendor `SHA256.txt` 206 项 → FACTS §1.7|
-|P2 叠加预览|`[ ]`||
-|P3 切分+骑缝|`[ ]`||
+|P2 叠加预览|`[ ]`|**后端半边已绿**（2026-10-29）：`seal/prepare` 去背/裁剪/重采样词表 + `seal/raw` + `open` 的 `doc` 字段（`internal/api.TestSealPrepare*`、`TestOpenResultCarriesTheFrontEndDoc`）；`pdfcore/sealimg.go` 的 `Prepare/SealMeta/SplitSealImage/applyCrossPageStrips`；`pixel-matrix.mjs` 重跑 §1.3/§1.4。**前端未做**：`app-overlay.js`（canvas 叠加层 + 面板绑定 + 多实例）、印章上传接线、`app-seal*.js` 均不存在 → P2 验收未过 |
+|P3 切分+骑缝|`[ ]`|后端切分半边已绿（2026-10-29）：词表 `auto/rows-cols/custom/unsplit` + `splitVeto`，A4→297.5x842、`/Rotate 90` 页→421x595（FACTS §2.3 重跑补充），`POST /api/pdf/split` → 新 assetId(kind `split`)、原资产保留；永久断言 `internal/pdfcore.TestSplit*` + `internal/api.TestSplitRoute*`。骑缝章落盘 + bbox/拼回像素验收在 P4 |
 |P4 矢量落盘+BM|`[ ]`||
 |P5 光栅导出|`[ ]`||
 |P6 预设/批处理/打包|`[ ]`||

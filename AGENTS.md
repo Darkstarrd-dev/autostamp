@@ -170,7 +170,7 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
 |`POST /api/fs/pick`|原生文件选择器（`{filter,multi,startDir}`）或 `{"filePath":…}` 直开授权，返回 `pathGrantId`（owner 绑定，TTL）；取消回 `{cancelled:true, picks:[]}`，无选择器的平台回 501 `pick_unsupported`|
 |`POST /api/pdf/open`|按 `pathGrantId` 或 multipart 上传打开 PDF → `assetId` + 页元数据（页数、每页 pt 尺寸、rotation、是否含文字）|
 |`GET /api/pdf/raw?id=`|原始 PDF 字节（支持 Range/ETag），供 pdf.js 直接取|
-|`POST /api/pdf/split`|`{auto|rows/cols|cutFractions}` → 新 `assetId` + 切分后页信息|
+|`POST /api/pdf/split`|**已实现**:切分词表 `{assetId, splitMode, rows, cols, customCuts[], splitVeto}`（词表 = `UI_SPEC §2.2`；`splitVeto` 是指针,`false` 是真答案）→ 新 `assetId`（kind `split`）+ 同一形状的页元数据;原资产保留即「撤销切分」的实现|
 |`POST /api/pdf/seal/prepare`|上传印章 PNG/生成 → `sealId` + alpha 元数据（可去背/裁剪/重采样）|
 |`POST /api/pdf/apply`|矢量路径落盘：`{assetId, sealId, blend, opacity, scale, pos, offset, rotation, pages, crossPage}` → 新 `assetId`|
 |`POST /api/pdf/export`|光栅路径：`{assetId, dpi, quality, mode}` → 新 `assetId`（页位图由前端回传）|
@@ -276,3 +276,4 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
 |窗口/端口/浏览器回退|本文件 §5|`host_webview_windows.go`、`internal/app/`|
 |改 UI 契约 / 参数词表|`docs/UI_SPEC.md` + 本文件 §6 + `IMPLEMENTATION_PLAN.md` P0.5|`docs/ui/mockup.html`、`web/static/app-panel.js`、`web/static/app-overlay.js`、`internal/api/{pdf,seal,export}.go`|
 |改编译/测试流程|本文件 §4|`build.ps1`（任务分派 `Start-Dispatch`）、`tools/verify/*`|
+|改 UI 文案（i18n）|`UI_SPEC §4` 的 i18n 键表是**唯一来源**（`app-i18n.js` 由 `node tools/verify/gen-i18n.mjs` 生成，勿手改）|`docs/UI_SPEC.md` §4/§7、`web/static/app-shell.js` 的 `t()`、`web/static/app-i18n.js`|

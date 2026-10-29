@@ -3,11 +3,26 @@
 > `docs/FACTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-10-29 — P3 切分重跑 + §2.3 字段名纠正
+
+- §2.3「重跑补充」：`CutFile/ExtractPagesFile/PageCountFile/MergeCreateFile/ValidateFile`
+  的实测签名（全部 `ctx` 打头；`ExtractPagesFile` **是写到 outDir**，一页一个文件）、
+  产物命名（`<outFile>_page_<n>.pdf`、`<inBase>_page_<n>.pdf`）以及关键事实
+  **切分空间 = 旋转归一后**：`/Rotate 90` 的 595x842 切成 421x595（`Vert`），
+  `Hor` 给 842x297.5。所以 UI 的「左右切」恒为 `Vert`，**不能按 `/Rotate` 交换轴**。
+- §2.3 早先那句「`model.Cut` 没有 `Hor`/`Vcut`」是凭记忆的错话：实测字段名
+  `Hor`/`Vert []float64`（分数）。已改正。
+- §5.1 补 `pixel-matrix.mjs` 与 `go test -run 'Split'`（pdfcore / api）两行；
+  §5.2 写清历史探针目录的实际路径（`_scratch/pdfprobe/`，可 `go run`）与仍未搬的断言。
+- 永久断言落点：`internal/pdfcore/split_test.go`（几何 + 词表）与
+  `internal/api/split_test.go`（路由响应/词表 400/owner 边界/原资产仍可读）。
+
 ## 2026-10-29 — P2 印章通道：探针目录事实纠正 + §1.3/§1.4 重跑
 
-- §5 探针目录那条改成「已入库」：仓库里 `tools/verify/csp.mjs`、`probe.mjs` 都在
-  （早前会话记的「已删除」是未提交状态下的记忆错误，本次实测纠正）。§7.1 的
-  CSP 未验证项随之闭合：`web/embed.go` 的 CSP 已带 `'unsafe-inline'` + `data:`，
+- §5 探针目录那条改成「已入库」：仓库里的探针是 `tools/verify/{cdp,shell-smoke,ui-smoke,
+  ui-contract,webview-launch,preview-smoke,pixel-matrix,gen-i18n}.mjs` + `tools/verify/comprobe`
+  （早前会话记的「已删除」是未提交状态下的记忆错误，本次实测纠正；§5.1 的清单才是准的）。
+  §7.1 的 CSP 未验证项随之闭合：`web/embed.go` 的 CSP 已带 `'unsafe-inline'` + `data:`，
   并有 `web/embed_test.go` 断言。
 - §1.3 加重跑记录（`tools/verify/pixel-matrix.mjs --only=matrix`，应用的页面内跑，
   底 `#d9e6ff` 叠实心 `#c8181c`）：`multiply`×1.0 → (170,22,28) 与旧记录一致；

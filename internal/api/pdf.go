@@ -255,6 +255,118 @@ func handleOpen(settings *config.Store, store *tmpstore.Store, log *slog.Logger)
 	}
 }
 
+// splitBody is the POST /api/pdf/split request (AGENTS §6). The field names are
+// the frozen UI_SPEC §2.2 vocabulary — splitMode / rows / cols / customCuts /
+// splitVeto — so the panel sends exactly what it edits.
+type splitBody struct {
+	AssetID    string   `json:"assetId"`
+	SplitMode  string   `json:"splitMode"`
+	Rows       int      `json:"rows"`
+	Cols       int      `json:"cols"`
+	CustomCuts []string `json:"customCuts"`
+	SplitVeto  *bool    `json:"splitVeto"` // pointer: "no" is a real answer
+}
+
+// splitTimeout bounds a cut run: pdfcpu works page by page, and a large
+// document must not hold the request open indefinitely (AGENTS §5.11).
+const splitTimeout = 2 * time.Minute
+
+// handleSplit answers POST /api/pdf/split (需求 3 的第一半): it cuts the stored
+// document and answers with the same shape as /api/pdf/open, so the front-end
+// swaps the asset and re-reads the page list. The original asset is left in the
+// store — that is what a split's 撤销 means, with no undo stack of our own.
+//
+// The new asset's Name is deliberately empty: a split is the *same* document,
+// so the UI keeps its title instead of inventing a "split of …" label.
+func handleSplit(store *tmpstore.Store, log *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body splitBody
+		if err := webx.DecodeJSON(r, &body, 1<<20); err != nil {
+			webx.Fail(w, http.StatusBadRequest, "bad_body", "请求体不是合法的 split 请求: "+err.Error())
+			return
+		}
+		owner, err := webx.SessionOf(r)
+		if err != nil {
+			webx.Fail(w, http.StatusBadRequest, "bad_session", err.Error())
+			return
+		}
+		if body.AssetID == "" {
+			webx.Fail(w, http.StatusBadRequest, "bad_body", "缺少 assetId")
+			return
+		}
+		mode := body.SplitMode
+		if mode == "" {
+			mode = pdfcore.SplitAuto
+		}
+		if mode == pdfcore.SplitCustom && len(body.CustomCuts) == 0 {
+			webx.Fail(w, http.StatusBadRequest, "bad_body", "custom 切分需要 customCuts")
+			return
+		}
+		switch mode {
+		case pdfcore.SplitAuto, pdfcore.SplitRowsCols, pdfcore.SplitCustom, pdfcore.SplitUnsplit:
+		default:
+			// splitMode is client input: answer 400 instead of letting pdfcpu
+			// turn a bad name into a 500.
+			webx.Fail(w, http.StatusBadRequest, "bad_body", "splitMode 必须是 auto/rows-cols/custom/unsplit")
+			return
+		}
+		src, err := store.Path(body.AssetID, owner)
+		if err != nil {
+			webx.Fail(w, http.StatusNotFound, "not_found", "没有这个 PDF")
+			return
+		}
+		// The split heuristic reads per-page MediaBox sizes, so it needs the
+		// structure; inspecting the stored file again is a few ms and keeps the
+		// store from having to cache a Doc per asset.
+		doc, err := inspectAsset(r.Context(), src, "")
+		if err != nil {
+			failOpen(w, err)
+			return
+		}
+		spec := pdfcore.SplitSpec{Mode: mode, Rows: body.Rows, Cols: body.Cols, CustomCuts: body.CustomCuts}
+		if body.SplitVeto != nil {
+			spec.Veto = *body.SplitVeto
+		}
+
+		out, err := os.CreateTemp(store.Dir(), "split-*.pdf")
+		if err != nil {
+			failStoreError(w, err)
+			return
+		}
+		outPath := out.Name()
+		_ = out.Close() // pdfcpu writes to the path; the handle is closed on purpose
+
+		ctx, cancel := context.WithTimeout(r.Context(), splitTimeout)
+		defer cancel()
+		newDoc, err := pdfcore.Split(ctx, src, outPath, spec, doc)
+		if err != nil {
+			_ = os.Remove(outPath)
+			webx.Fail(w, http.StatusInternalServerError, "split_failed", err.Error())
+			return
+		}
+		id, err := tmpstore.NewID("split")
+		if err != nil {
+			_ = os.Remove(outPath)
+			webx.Fail(w, http.StatusInternalServerError, "internal_error", err.Error())
+			return
+		}
+		asset, err := store.AddFile(id, tmpstore.KindSplit, owner, outPath)
+		if err != nil {
+			_ = os.Remove(outPath)
+			failStoreError(w, err)
+			return
+		}
+		log.Info("pdf split", "from", body.AssetID, "into", asset.ID, "mode", mode, "pages", newDoc.PageCount)
+		webx.Created(w, openResult{
+			AssetID: asset.ID,
+			Name:    "",
+			Size:    asset.Size,
+			Kind:    string(asset.Kind),
+			Doc:     *newDoc,
+		})
+	}
+}
+
 // handleRaw serves the stored bytes so pdf.js can fetch the document itself
 // (AGENTS §6: GET /api/pdf/raw, Range + ETag). http.ServeContent owns Range,
 // If-Range and the weak ETag derived from the asset's mtime.

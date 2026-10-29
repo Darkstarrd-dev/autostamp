@@ -169,6 +169,30 @@
 - 逐页半枚印章 + `api.MergeCreateFile` 合成 6 页产物（未剔原页所致）实测通过 `ValidateFile`，
   两页各自带正确半枚印章（bbox 实测 page2 `[69,442,297,841]`、page3 `[0,442,65,529]`）。
 
+重跑补充（2026-10-29；`internal/pdfcore/split.go` + `split_test.go`，永久断言在那）：
+
+- 签名全是 `ctx` 打头：`CutFile(ctx, inFile, outDir, outFile, selectedPages []string, *model.Cut, conf)`、
+  `ExtractPagesFile(ctx, inFile, outDir, selectedPages, conf)`（**写到 outDir**，一页一个文件，
+  不是往某个 dst 写）、`PageCountFile(ctx, file)`、`MergeCreateFile(ctx, files, outFile, dividerPage bool, conf)`、
+  `ValidateFile(ctx, file, conf, *api.ProgressOptions)`（末参数可 nil）。`model.Cut` 的字段就叫 `Hor`/`Vert []float64`。
+- 产物命名实测：`CutFile(base="pg", pages=["3"])` → 每页**一个**文件 `pg_page_3.pdf`（内容 = 原页 + 全部切块）；
+  再按页抽取 → `pg_page_3_page_2.pdf`（`<inBase>_page_<n>.pdf`）。按名内页号升序读就是 reading order
+  （骑缝章条带顺序依赖它）。
+- **切分空间是「旋转归一后」的**：`/Rotate 90` 的 595x842 页切出 842x595 且 `rot=0`；
+  `Vert:[0.5]` 给两块 **421x595**，`Hor:[0.5]` 给 842x297.5。所以 UI 的「左右切」恒为 `Vert`，
+  **不能按 `/Rotate` 交换轴**（换了就切错方向，块变 842x297.5）。
+- 自动启发式的实际判定（`cutPlanForPage`）：`w/h > 0.7` 且 `w > h`（display 空间，即归一后）→ 判 2 拼、`Vert:0.5`；
+  否则该页不参与。实测 A4 portrait 三页不误切（`pageCount` 不变）；第 3 页 `/Rotate 90` 会被切。
+  `splitVeto=true` → 完全不切（`TestSplitAutoVetoKeepsPages`）。真实扫描样本的版面判定仍 `UNVERIFIED`（见 §6）。
+
+- 切分**不会**改动原资产：新资产 kind=`split` 另存，旧资产照旧可 `/api/pdf/raw` 取回
+  —— 这就是 UI「撤销切分」不需要 undo 栈的原因。
+
+加密 PDF 的切分：`/api/pdf/split` 走同一 `inspectAsset`，受保护文档会回
+`password_required`/`password_invalid`（前端已有的口令通道）。切分请求本身没有 `pw`
+字段（词表已冻结），所以口令只能从已打开的那次 open 带过来；这一条属 P7 加固项。
+
+
 ### 2.4 能力边界（实测）
 
 - **无 rasterize**：全模块（含 `cmd`）grep `raster` 无匹配 → 页面渲染只能在浏览器做。
@@ -253,15 +277,20 @@
 |`go run ./tools/verify/comprobe [-window]`|§1.6|COM `CoInitializeEx` 返回值实测(三种顺序)+ 真窗口泵消息|
 |`go run ./tools/genfix`|mock 资产|重生成 `docs/ui/fixtures/{page,seal}.png`|
 |`node tools/verify/preview-smoke.mjs`|§1.1 §1.7|真 exe + headless：四类样本渲染、中文 CID 文本层、分页 chip/缩略图、`/api/pdf/raw` 会话边界 + Range|
+|`node tools/verify/pixel-matrix.mjs`|§1.3 §1.4|混合模式 × 透明度像素矩阵 + filter 污染断言（P2 重跑来源；本机 Chrome 151）|
+|`go test ./internal/pdfcore -run 'Split'`|§2.3|切分词表 + 页尺寸断言（A4→297.5x842；`/Rotate 90`→421x595）|
+|`go test ./internal/api -run 'Split'`|AGENTS §6/§8.2|`/api/pdf/split` 的响应形状、词表 400、owner 边界、原资产仍可读|
 
 ### 5.2 尚未搬进仓库的历史探针
 
-- §1.1-§1.4、§2、§3、§4 的原始数值来自一次性探针 `C:/tmp/pdfprobe/`(已删除,
-  现不可就地重跑)。P1-P5 会把 PDF 相关断言重写进 `internal/pdfcore` 单测与
-  `tools/verify/`(P2 像素矩阵、P3 切分几何、P4 回读一致性、P5 体积表),
-  重跑后逐节标注重跑日期。
+- §1.1-§1.4、§2、§3、§4 的原始数值来自一次性探针 `C:/AutoStamp/_scratch/pdfprobe/`
+  （**仍在**，不是「已删除」——早先这句写错了；2026-10-29 实测：`pdfprobe/main.go`
+  + `sample.pdf`/`cmap.pdf`/`cn.pdf`/`image3.pdf` + `go.mod`，`go run .` 可直接跑）。
+  仓库内对应断言进度：§1.1-§1.4 → `pixel-matrix.mjs` / `preview-smoke.mjs`（P2 已重跑，
+  §1.3/§1.4 标注重跑日期）；§2.3 切分几何 → `internal/pdfcore/split_test.go`（今日重跑）；
+  §2 的 `/BM` 注入与 §4 的体积表仍未搬（P4/P5）。
 - 浏览器采样方式(历史):omp 托管 headless Chromium + jsdelivr 动态 `import()` +
-  base6 内存喂入 PDF + `ctx.getImageData` 采样;现行做法改为
+  base64 内存喂入 PDF + `ctx.getImageData` 采样;现行做法改为
   `tools/verify/cdp.mjs`(直连本机 Chrome 的 CDP,无 npm 依赖)。
 
 ## 6. 未验证(UNVERIFIED)
