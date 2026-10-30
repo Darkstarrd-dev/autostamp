@@ -307,6 +307,7 @@
   // ---------- instances (decision I1) ----------
 
   function renderInstances() {
+    notify("autostamp:instance", {});
     const ul = q("#seal-instances");
     ul.textContent = "";
     for (const inst of state.instances) {
@@ -340,11 +341,15 @@
     }
   }
 
-  function addInstance(name) {
+  function addInstance(name, params) {
     const inst = {
       id: state.nextInstance++,
       name: name || `Seal ${state.instances.length + 1}`,
       crossPage: Boolean(readField("api.apply.crossPage")),
+      // P2: the panel's apply-group values are this instance's parameters;
+      // settings.json only carries the group as the defaults for a new one.
+      params: params || defaultParams(),
+      sealId: null,
     };
     state.instances.push(inst);
     state.selected = inst.id;
@@ -353,8 +358,10 @@
   }
 
   function selectInstance(id) {
+    const prev = state.selected;
     state.selected = id;
     renderInstances();
+    if (id !== prev) loadParams(instanceById(id));
     setState(id ? "stamp-selected" : "opened");
     return id;
   }
@@ -373,15 +380,92 @@
   }
 
   function duplicateSelected() {
-    const src = state.instances.find((i) => i.id === state.selected);
+    const src = instanceById(state.selected);
     const inst = {
       id: state.nextInstance++,
       name: src ? `${src.name} *` : `Seal ${state.instances.length + 1}`,
       crossPage: src ? src.crossPage : false,
+      params: src ? { ...src.params } : defaultParams(),
+      sealId: src ? src.sealId : null,
     };
     state.instances.push(inst);
     state.selected = inst.id;
     renderInstances();
+    loadParams(inst);
+    return inst.id;
+  }
+
+
+  // ---------- P2: instance parameters and the canvas hand-off ----------
+  //
+  // The panel's apply-group controls edit the *selected instance*. Every edit
+  // both stores the value and asks the overlay to repaint, so the panel, the
+  // drag handles and the canvas never disagree (UI_SPEC §3).
+
+  const APPLY_FIELDS = new Set(
+    Object.keys(PERSIST).filter((f) => f.startsWith("api.apply.") || f === "ui.crosspage.binding")
+  );
+
+  function defaultParams() {
+    const p = {};
+    for (const f of APPLY_FIELDS) p[f] = readField(f);
+    return p;
+  }
+
+  function instanceById(id) {
+    return state.instances.find((i) => i.id === id) || null;
+  }
+
+  function selectedInstance() {
+    return instanceById(state.selected);
+  }
+
+  function notify(name, detail) {
+    doc.dispatchEvent(new CustomEvent(name, { detail: detail || {} }));
+  }
+
+  let loadingParams = false;
+
+  function loadParams(inst) {
+    if (!inst) return;
+    loadingParams = true;
+    try {
+      for (const [field, value] of Object.entries(inst.params || {})) writeField(field, value);
+    } finally {
+      loadingParams = false;
+    }
+    notify("autostamp:param", { instance: inst.id, loaded: true });
+  }
+
+  function syncInstanceParam(field, value) {
+    const inst = selectedInstance();
+    if (!inst) return;
+    inst.params = inst.params || defaultParams();
+    if (inst.params[field] === value) return;
+    inst.params[field] = value;
+    if (field === "api.apply.crossPage") inst.crossPage = Boolean(value);
+    renderInstances();
+    notify("autostamp:param", { field, value, instance: inst.id });
+  }
+
+  // setParam is the drag/keyboard route: it writes the control (so the panel
+  // shows the truth) and the change events run, which feeds syncInstanceParam
+  // and the settings persist timer exactly like a real edit.
+  function setParam(field, value) {
+    writeField(field, value);
+    fieldEls(field).forEach((el) => {
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    return readField(field);
+  }
+
+  function setSealForSelected(sealId) {
+    const inst = selectedInstance();
+    if (!inst) return null;
+    inst.sealId = sealId;
+    renderInstances();
+    notify("autostamp:seal", { instance: inst.id, sealId });
     return inst.id;
   }
 
@@ -427,18 +511,16 @@
     const step = shift ? 10 : 1;
     const delta = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[key];
     if (!delta) return false;
+    // The keyboard route goes through setParam so the value lands in the
+    // selected instance *and* the panel control stays the truth (P2).
     const [x, y] = parsePos(readField("api.apply.pos"));
-    writeField("api.apply.pos", `${x + delta[0]},${y + delta[1]}`);
-    persist("apply", { pos: readField("api.apply.pos") });
-    return true;
+    return setParam("api.apply.pos", `${x + delta[0]},${y + delta[1]}`);
   }
 
   function bumpScale(dir) {
     const v = Number(readField("api.apply.scale")) || 0;
     const next = Math.max(0.05, Math.min(0.9, +(v + dir * 0.01).toFixed(2)));
-    writeField("api.apply.scale", next);
-    persist("apply", { scale: next });
-    return next;
+    return setParam("api.apply.scale", next);
   }
 
   function onKey(e) {
@@ -516,6 +598,20 @@
   }
 
   function bindControls() {
+
+    // P2: every apply-group edit feeds the selected instance and asks the
+    // overlay to repaint (UI_SPEC §3). capture-phase keeps the pair sliders
+    // and the number inputs on the same path.
+    doc.addEventListener(
+      "input",
+      (e) => {
+        const el = e.target;
+        const name = el && el.getAttribute ? el.getAttribute("data-field") : null;
+        if (!name || !APPLY_FIELDS.has(name) || loadingParams) return;
+        syncInstanceParam(name, readField(name));
+      },
+      true,
+    );
     // pairs: slider <-> number sharing one data-field
     const pairs = new Map();
     qa("[data-field]").forEach((el) => {
@@ -560,8 +656,8 @@
     bindSegment("density-seg", "ui.density", (v) => setDensity(v));
     bindSegment("apply-anchor", "api.apply.anchor", (v) => persist("apply", { anchor: v }));
     bindSegment("split-mode", "ui.split.mode", (v) => persist("split", { mode: v }));
-    bindSegment("export-mode", "api.export.mode", (v) => persist("export", { mode: v }));
-    bindSegment("export-dpi", "api.export.dpi", (v) => persist("export", { dpi: v }));
+    bindSegment("export-mode", "api.export.mode", (v) => { persist("export", { mode: v }); refreshEstimate(); });
+    bindSegment("export-dpi", "api.export.dpi", (v) => { persist("export", { dpi: v }); refreshEstimate(); });
     bindSegment("crosspage-binding", "ui.crosspage.binding", (v) => {
       if (v === "none") {
         writeField("api.apply.crossPage", false);
@@ -631,12 +727,16 @@
       stage.dataset.drag = "off";
       handleFiles(e.dataTransfer ? e.dataTransfer.files : null);
     });
-    // Ctrl+wheel zooms the view; P2 hands the wheel to apply.scale once an
-    // instance owns it (UI_SPEC §5). passive:false keeps preventDefault valid.
+    // Ctrl+wheel: P2 owns it when the pointer is over the selected instance
+    // (UI_SPEC §5 V3: the wheel then means apply.scale), otherwise it zooms
+    // the view. passive:false keeps preventDefault legal.
     stage.addEventListener(
       "wheel",
       (e) => {
-        if (!(e.ctrlKey || e.metaKey) || !window.__autoStampPreview) return;
+        if (!(e.ctrlKey || e.metaKey)) return;
+        const overlay = window.__autoStampOverlay;
+        if (overlay && overlay.consumeWheel && overlay.consumeWheel(e)) return;
+        if (!window.__autoStampPreview) return;
         e.preventDefault();
         window.__autoStampPreview.zoomBy(e.deltaY < 0 ? 0.1 : -0.1);
       },
@@ -661,6 +761,113 @@
     const key = path[1];
     const value = readField(name);
     persist(path[0], { [key]: NUMERIC.has(key) ? Number(value) : value });
+    if (String(name).indexOf("api.export.") === 0) refreshEstimate();
+
+  }
+
+  // ---------- export estimate (UI_SPEC §E1: inline, live, never a request) ----------
+  // docs/FACTS §4 measured table: stdlib /DCTDecode writer, single A4 page.
+  // Off-grid DPI/quality values interpolate that table (documented in
+  // export.estimate.note); the numbers themselves are what the UI shows.
+  const FACTS_RASTER = [
+    { dpi: 72, q40: 35582, q75: 43722, q92: 57259 },
+    { dpi: 150, q40: 104089, q75: 123796, q92: 155781 },
+    { dpi: 300, q40: 328844, q75: 378606, q92: 459215 },
+  ];
+  const A4_PT_AREA = 595.28 * 841.89; // the page FACTS §4 rasterised
+
+  // exportPagesSelected resolves the api.export.pages vocabulary (UI_SPEC §2.2,
+  // same words as api.apply.pages) into a *count* for the estimate.
+  function exportPagesSelected() {
+    const total = state.file && state.file.pages ? state.file.pages.length : 0;
+    const raw = String(readField("api.export.pages") || "all").trim();
+    if (!total || raw === "all" || raw === "") return total;
+    let n = 0;
+    raw.split(",").forEach((tok) => {
+      const part = tok.trim();
+      if (!part) return;
+      const rng = part.match(/^(\d+)\s*-\s*(\d+)$/);
+      if (rng) {
+        const a = Math.min(Number(rng[1]), Number(rng[2]));
+        const b = Math.max(Number(rng[1]), Number(rng[2]));
+        for (let i = a; i <= b; i++) if (i >= 1 && i <= total) n++;
+        return;
+      }
+      if (/^\d+$/.test(part) && Number(part) >= 1 && Number(part) <= total) n++;
+    });
+    return n;
+  }
+
+  function computeEstimate() {
+    if (!state.file || !state.file.pages || !state.file.pages.length) return null;
+    const pages = state.file.pages;
+    const sel = exportPagesSelected();
+    const mode = readField("api.export.mode") || "vector";
+    if (mode === "vector") {
+      // vector keeps the document's own bytes; DPI/quality are not read.
+      const per = (state.file.size || 0) / pages.length;
+      return { mode, dpi: null, quality: null, areaFactor: 1, perPageBytes: per, totalBytes: per * sel };
+    }
+    // MediaBox area is what the raster writer encodes, so page area scales the
+    // FACTS sample; rotation is deliberately ignored.
+    let area = 0;
+    pages.forEach((pg) => { area += (Number(pg.width) || 0) * (Number(pg.height) || 0); });
+    const areaFactor = pages.length ? area / pages.length / A4_PT_AREA : 1;
+
+    const dpiSel = readField("api.export.dpi");
+    const dpi = dpiSel === "custom" ? Number(readField("api.export.customDpi")) || 150 : Number(dpiSel) || 150;
+    const quality = Math.min(95, Math.max(40, Number(readField("api.export.quality")) || 75));
+
+    const atQ = (row) => {
+      const pts = [[40, row.q40], [75, row.q75], [92, row.q92]];
+      if (quality <= pts[0][0]) return pts[0][1];
+      const last = pts[pts.length - 1];
+      if (quality >= last[0]) return last[1];
+      for (let i = 1; i < pts.length; i++) {
+        if (quality <= pts[i][0]) {
+          const a = pts[i - 1];
+          const b = pts[i];
+          return a[1] + ((b[1] - a[1]) * (quality - a[0])) / (b[0] - a[0]);
+        }
+      }
+      return last[1];
+    };
+
+    let base;
+    const hit = FACTS_RASTER.find((r) => r.dpi === dpi);
+    if (hit) base = atQ(hit);
+    else {
+      const below = FACTS_RASTER.filter((r) => r.dpi < dpi).pop();
+      const above = FACTS_RASTER.find((r) => r.dpi > dpi);
+      if (below && above) {
+        const lo = atQ(below);
+        const hi = atQ(above);
+        const f = (Math.log(dpi) - Math.log(below.dpi)) / (Math.log(above.dpi) - Math.log(below.dpi));
+        base = lo + (hi - lo) * f;
+      } else {
+        const anchor = below || above;
+        base = atQ(anchor) * Math.pow(dpi / anchor.dpi, 2);
+      }
+    }
+    const per = base * areaFactor;
+    return { mode, dpi, quality, areaFactor, perPageBytes: per, totalBytes: per * sel };
+  }
+
+  function refreshEstimate() {
+    const box = q("#estimate");
+    const total = q("#estimate-total");
+    const per = q("#estimate-per-page");
+    if (!box || !total || !per) return;
+    const e = computeEstimate();
+    if (!e) {
+      total.textContent = "-";
+      per.textContent = "-";
+      return;
+    }
+    total.textContent = `~ ${formatBytes(e.totalBytes)} (${exportPagesSelected()} pages)`;
+    per.textContent = e.mode === "vector"
+      ? `~ ${formatBytes(e.perPageBytes)}/page (vector: ${formatBytes(state.file.size || 0)} source / ${state.file.pages.length} pages)`
+      : `~ ${formatBytes(e.perPageBytes)}/page (raster ${e.dpi} dpi q${e.quality}, page area x${e.areaFactor.toFixed(2)} A4)`;
   }
 
   // submitSave posts the real /api/pdf/save route. Until P4 registers it the
@@ -822,8 +1029,9 @@
   // adopt is the one document-change funnel: metadata from the server, pixels
   // from pdf.js, and the state machine in one place.
   async function adopt(info, pw) {
-    state.file = { assetId: info.assetId, name: info.name, size: info.size };
+    state.file = { assetId: info.assetId, name: info.name, size: info.size, pages: info.pages || [] };
     state.assets.open = info.assetId;
+    refreshEstimate();
     // A new document invalidates every derived asset id that is still on the
     // screen; leaving stale ids would let Save point at a dead session file.
     state.assets.split = "";
@@ -943,7 +1151,13 @@
       case "density":
         return q("#app-main").dataset.density;
       case "instances":
-        return state.instances.map((i) => ({ id: i.id, name: i.name, crossPage: i.crossPage }));
+        return state.instances.map((i) => ({
+          id: i.id,
+          name: i.name,
+          crossPage: i.crossPage,
+          sealId: i.sealId || null,
+          params: { ...(i.params || {}) },
+        }));
       case "instanceCount":
         return state.instances.length;
       case "selected":
@@ -960,6 +1174,22 @@
         return state.theme;
       case "version":
         return q("#app-version").textContent;
+      case "estimate": {
+        const e = computeEstimate();
+        if (!e) return { mode: "", pagesSelected: 0, pagesTotal: 0, perPageBytes: null, totalBytes: null, perPageText: "", totalText: "" };
+        return {
+          mode: e.mode,
+          dpi: e.dpi,
+          quality: e.quality,
+          areaFactor: Number(e.areaFactor.toFixed(3)),
+          pagesSelected: exportPagesSelected(),
+          pagesTotal: state.file ? state.file.pages.length : 0,
+          perPageBytes: Math.round(e.perPageBytes),
+          totalBytes: Math.round(e.totalBytes),
+          perPageText: q("#estimate-per-page").textContent,
+          totalText: q("#estimate-total").textContent,
+        };
+      }
       case "labels":
         return qa("[data-i18n]").map((el) => ({ key: el.getAttribute("data-i18n"), text: el.textContent.trim() }))
           .filter((x) => x.text);
@@ -990,6 +1220,12 @@
     setModal, clearToast, t,
     q, qa,
     addInstance, selectInstance, deleteSelected, duplicateSelected,
+    // P2: instance parameters + the hand-off the overlay/seal modules use.
+    APPLY_FIELDS, defaultParams, instanceById, selectedInstance,
+    // `adopt` is the single document funnel: the verify real-chain drives it so
+    // the chain exercises exactly what a real open does (state flip, asset
+    // bookkeeping, preview.open) instead of poking the preview module directly.
+    setParam, setSealForSelected, notify, adopt,
   };
 
   if (doc.readyState === "loading") doc.addEventListener("DOMContentLoaded", boot);

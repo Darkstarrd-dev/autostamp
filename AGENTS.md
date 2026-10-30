@@ -59,7 +59,7 @@ AutoStamp/
   host_console.go              //go:build !windows 或无 webview tag：仅控制台 + 打开浏览器
   web/embed.go                 //go:embed all:static
   web/static/
-    index.html  app-shell.js  app-api.js  app-preview.js  app-textlayer.js  app-pager.js  app-i18n.js  style.css  favicon.svg
+    index.html  app-shell.js  app-api.js  app-preview.js  app-seal.js  app-overlay.js  app-textlayer.js  app-pager.js  app-i18n.js  style.css  favicon.svg
     vendor/pdfjs/build/{pdf.min.mjs,pdf.worker.min.mjs}      (P1 起)
     vendor/pdfjs/{cmaps,wasm,image_decoders,standard_fonts,iccs}/  见 FACTS §3 体积 (P1 起)
     vendor/pdfjs/web/pdf_viewer.css                          (P1 起：文本层 CSS，README 记录裁剪)
@@ -161,6 +161,19 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
 11. **本地安全边界。** 只监听 `127.0.0.1:0`（随机端口）；校验 `Host`/`Origin`
     （防 DNS-rebinding）；上传走 `MaxBytesHandler`；pdfcpu `MaxImageBytes`/`MaxImagePixels`
     显式设限（默认 512MB/100MP 太大）。无鉴权（本机工具），但不得暴露非 loop 接口。
+12. **印章「去白底」在前端做（D4），后端只存原图 + 选项。** `seal.prepare.despill` 默认开；
+   规则：`min(R,G,B) >= 60` 判彩色（保留 alpha），白/灰 alpha 置 0，彩像素按
+   `c -= (255-c)*min(255,255-min(c))/195` 反算回红。实测三例见 FACTS §1.8；白底照片类
+   印章会被整图丢弃（`UNVERIFIED`，关掉选项是唯一出路）。「撤销去背」= 用内存里的原图
+   以 `despill:false` 重跑 `/api/pdf/seal/prepare`，不依赖 undo 栈。
+13. **画布合成必须显式预乘 uint8。** `getImageData` 读回的是预乘值；半透明印章要
+   `round(a*r/255)` 预乘后再 `source-over`，否则出暗环。预览与落盘的同点像素由
+   FACTS §1.3 公式钉死（`overlay-smoke` 的 16 模式 × 3 透明度矩阵 absdiff ≤ 1）。
+14. **坐标一律左上原点、y 向下（PDF pt）**：`pos`/`offset`/手柄/标尺/条带同一坐标系
+   （C1 未评审默认，`UI_SPEC §8` C1）；P4 落盘换算有单测钉死。滚轮缩放只在**光标位于
+   选中实例内**时改 `apply.scale`，且事件必须 `stopPropagation`（FACTS §1.8 V3）。
+15. **导出体积预估是前端派生值，不发请求**：按 FACTS §4 实测表 × MediaBox 面积/A4 面积
+   缩放，离表 DPI 按对数插值（E1：导出段内联显示 `#estimate-total` / `#estimate-per-page`）。
 
 ## 6. HTTP 契约（`/api/*`，全部 JSON；字段在 **P0.5 与用户确认后**才冻结，改动必须同步本文、`docs/UI_SPEC.md` 与前端）
 
@@ -171,7 +184,7 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
 |`POST /api/pdf/open`|按 `pathGrantId` 或 multipart 上传打开 PDF → `assetId` + 页元数据（页数、每页 pt 尺寸、rotation、是否含文字）|
 |`GET /api/pdf/raw?id=`|原始 PDF 字节（支持 Range/ETag），供 pdf.js 直接取|
 |`POST /api/pdf/split`|**已实现**:切分词表 `{assetId, splitMode, rows, cols, customCuts[], splitVeto}`（词表 = `UI_SPEC §2.2`；`splitVeto` 是指针,`false` 是真答案）→ 新 `assetId`（kind `split`）+ 同一形状的页元数据;原资产保留即「撤销切分」的实现|
-|`POST /api/pdf/seal/prepare`|上传印章 PNG/生成 → `sealId` + alpha 元数据（可去背/裁剪/重采样）|
+|`POST /api/pdf/seal/prepare`|**已实现**:multipart 上传印章 PNG/生成 → `sealId` + alpha 元数据（`seal.prepare.despill/alphaTrim/resampleDpi` 词表见 `UI_SPEC §2.2`；**去背在前端**，见 §5.12 与 FACTS §1.8）。配套 `GET /api/pdf/seal/raw?id=` 只回印章字节给合成|
 |`POST /api/pdf/apply`|矢量路径落盘：`{assetId, sealId, blend, opacity, scale, pos, offset, rotation, pages, crossPage}` → 新 `assetId`|
 |`POST /api/pdf/export`|光栅路径：`{assetId, dpi, quality, mode}` → 新 `assetId`（页位图由前端回传）|
 |`POST /api/pdf/save`|`{assetId, targetPath|pathGrantId, replaceOriginal}` → 原子写盘|
@@ -234,8 +247,22 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
      真 exe + 真 UI（`#empty-path` + `#empty-open`）跑一遍：断言画布有真实像素、
      `getTextContent` 条数（图片型必须为 0）、`.textLayer` span 计数与层框宽度 == 画布 CSS 宽、
      翻页与分页条 chip 数、缩放后 backing store 尺寸变化、vendor 资源 0 失败（FACTS §1.7）。
-  10. 以上全部由 `build.ps1` 串成一条命令（`-Task verify` / `go vet` / `go test`），
-     任一失败退出码 1。
+  10. P2 叠加预览（P2 起常驻）：`node tools/verify/overlay-smoke.mjs` — 真 exe + 真 UI，
+      分段令牌 `--only=<open|geometry|despill|matrix|drag|strip|filter|export>`（缺省全跑）。
+      断言：上传印章 → 16 模式 ×{1.0,0.6,0.3}（脚本页内独立重算再与真实画布比，absdiff ≤ 1）、
+      alpha 预乘规则、去背 alpha/bbox 计数、几何（fit 缩放、四角→`scale`、拖拽→`offset`、
+      旋转手柄→`rotation`、滚轮只在光标位于选中实例内时改 `scale`）、骑缝条带
+      （宽 = 页宽 10%、`startOffset` 位移误差 0、`alternate` 条带数 == 页数、逐页列对齐 ≤1 px）、
+      `ctx.filter` 复位读数、导出体积预估 == FACTS §4（含 vector 忽略 DPI/质量）。
+      **改前端后必须去掉 `--reuse-build`**（该旗标复用 `dist/autostamp-overlay-smoke.exe`，
+      旧嵌入副本会让新代码看不到 —— 2026-10-30 实测踩过的坑）。
+  11. P2 像素等值性：`node tools/verify/pixel-matrix.mjs`（分段 `--only=matrix|chain`）=
+      FACTS §1.3/§1.4 就地重跑（48 个模式×透明度组合、污染值复现、复位后回原值），外加
+      **真链路桥**：`fs/pick` 直开 → `pdf/open` → `seal/prepare` → 实例 → 叠加层取样，
+      断言叠加层像素 == 同一对颜色在同族渲染器里的独立 blend（±2，取印章框中部避开 AA）。
+      「必须与底不同」不是断言：lighten/saturation 与这块实心底组合本来就可能等于底。
+  12. 以上全部由 `build.ps1` 串成一条命令（`-Task verify` / `go vet` / `go test`），
+      任一失败退出码 1。
 - `go test ./...` 全绿；`go vet ./...` 无输出。
 - UI 阶段用真实窗口（WebView2）+ headless 各跑一次，console 必须 0 error。
 - **UI 语义门槛：**任何 UI 语义/字段改动必须能在 `UI_SPEC` 决策表找到用户确认记录
@@ -268,12 +295,14 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
 
 |任务|先读|涉及文件|
 |---|---|---|
-|改切分/骑缝几何|`docs/FACTS.md` §2.3|`internal/pdfcore/split.go`、`sealimg.go`、`web/static/app-crosspage.js`|
+|改切分/骑缝几何|`docs/FACTS.md` §2.3 + §1.8|`internal/pdfcore/split.go`、`sealimg.go`（落盘条带）、`web/static/app-preview.js`（`drawSplitMarks` 切点预览）、`web/static/app-overlay.js`（`stripGeometryFor/stripRectsFor` 条带）、`web/static/app-shell.js`（`#split-veto` 逐页否决）|
+|改叠加层/印章通道|`docs/FACTS.md` §1.8 + §1.3|`web/static/app-overlay.js`（合成/affordance/滚轮）、`web/static/app-seal.js`（上传/去背/撤销）、`web/static/app-shell.js`（`sealIdFor`/`restoreInstanceSeals`）、`internal/api/seal.go`|
+|改导出体积预估|`docs/FACTS.md` §4|`web/static/app-shell.js`（`computeEstimate/refreshEstimate`、`probe('estimate')`）|
 |改混合模式/透明度|`docs/FACTS.md` §1.2/§1.3/§2.2|`internal/pdfcore/blend.go`、`web/static/app-overlay.js`|
 |改导出 DPI/质量|`docs/FACTS.md` §4|`internal/pdfcore/raster.go`、`internal/api/export.go`|
 |改预览渲染|`docs/FACTS.md` §1|`web/static/app-preview.js`、`web/static/vendor/pdfjs/`|
 |新增路由|本文件 §6|`internal/api/register.go`、`web/static/app-api.js`|
 |窗口/端口/浏览器回退|本文件 §5|`host_webview_windows.go`、`internal/app/`|
-|改 UI 契约 / 参数词表|`docs/UI_SPEC.md` + 本文件 §6 + `IMPLEMENTATION_PLAN.md` P0.5|`docs/ui/mockup.html`、`web/static/app-panel.js`、`web/static/app-overlay.js`、`internal/api/{pdf,seal,export}.go`|
+|改 UI 契约 / 参数词表|`docs/UI_SPEC.md` + 本文件 §6 + `IMPLEMENTATION_PLAN.md` P0.5|`docs/ui/mockup.html`、`web/static/index.html`（面板标记 + `data-field`）、`web/static/app-shell.js`（字段读写/实例）、`web/static/app-overlay.js`、`internal/api/{pdf,seal,export}.go`|
 |改编译/测试流程|本文件 §4|`build.ps1`（任务分派 `Start-Dispatch`）、`tools/verify/*`|
 |改 UI 文案（i18n）|`UI_SPEC §4` 的 i18n 键表是**唯一来源**（`app-i18n.js` 由 `node tools/verify/gen-i18n.mjs` 生成，勿手改）|`docs/UI_SPEC.md` §4/§7、`web/static/app-shell.js` 的 `t()`、`web/static/app-i18n.js`|

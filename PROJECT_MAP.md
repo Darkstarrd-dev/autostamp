@@ -1,7 +1,8 @@
 # PROJECT_MAP.md — AutoStamp 代码地图
 
-> 最后核对：2026-10-29（P0 骨架 + P0.5 UI 契约完成）。新增/删除包必须同步本文件
-> （AGENTS §10.1）。阶段状态见 `docs/IMPLEMENTATION_PLAN.md §10`。
+> 最后核对：2026-10-30（P0/P0.5/P1 绿 + **P2 叠加预览**绿：`app-seal.js`、`app-overlay.js`、
+> 骑缝条带预览、导出体积预估；`app-crosspage.js` 仍是 P3 计划名，尚未创建）。
+> 新增/删除包必须同步本文件（AGENTS §10.1）。阶段状态见 `docs/IMPLEMENTATION_PLAN.md §10`。
 
 ## 1. 可执行入口（根包 `main`）
 
@@ -36,9 +37,9 @@
 |`internal/webx`|`json.go`|`Envelope{ok,data,code,error}` + `OK/Created/Fail` + `DecodeJSON`（`http.MaxBytesReader`）|P0|
 |（续）|`session.go`|`SessionHeader = X-AutoStamp-Session`：前端 `crypto.getRandomValues` 生成的 128-bit 令牌 = 资产/grant 的 owner 能力；`SessionOf` 校验格式（缺失 → 400 `bad_session`）、`NewToken` 服务端测试用|P0（P1 全线使用）|
 |`internal/pdfcore`|`read.go`|`Inspect(ctx, r, conf)`：页数、每页 MediaBox pt 尺寸/rotation/`hasFonts`/`hasXObject`、加密探测（`ErrNeedsPassword`/`ErrBadPassword` 再导出 pdfcpu 信号，`DefaultLimits` 显式限流）|P1|
-|(续)|`sealimg.go`|印章图通道：`Prepare`(去白底 despill → alpha 包围盒裁剪 `AlphaRect` → `ResampleDPI` 重采样，词表 `alphaTrim/despill/resampleDpi/targetDpi/maxSide`，扩展名按实际内容写)、`SealMeta`(src*/out*/alphaBBox/opaqueRatio 按**源图**计)、`SplitSealImage`+`SplitImage`(骑缝条带几何：奇偶两半 / 外缘 n 条)、`applyCrossPageStrips`+`place`(锚点词表 `pos/anchor/offset`，FACTS §2.3)|P2-P3|
-|(续)|`split.go`|自动切分：词表 `SplitAuto/SplitRowsCols/SplitCustom/SplitUnsplit` + `SplitSpec{Mode,Rows,Cols,CustomCuts,Veto}`；`CutPlanForPage`(display 空间,**不按 /Rotate 交换轴**，FACTS §2.3)、`SplitOnePage`(剔掉 pdfcpu 附带的原页)、`MergeCreateFile` 合并回一个 PDF；`TestSplit*` 断言 A4→297.5x842 与旋转页 421x595|P3|
-|(续)|`read_test.go` / `sealimg_test.go` / `split_test.go`|结构摘要、去背/裁剪/重采样字节、条带与锚点几何、切分词表与页尺寸|P1-P3|
+|(续)|`sealimg.go`|印章图通道：`PrepareSeal`(去白底 `despillWhite` despill → alpha 包围盒裁剪 `alphaBounds`/`cropNRGBA` → `scaleDPI` 重采样 + `maxSide` 上限；词表 `despill/alphaTrim/resampleDpi/targetDpi/maxSide`，扩展名按实际内容写)、`SealMeta`(src*/out* 尺寸与 DPI、`AlphaBBox`、`OpaqueRatio` 按**源图**计)、`SealBox`。|P2（骑缝条带切分未做，见 P3）|
+|(续)|`split.go`|自动切分：词表 `SplitAuto/SplitRowsCols/SplitCustom/SplitUnsplit` + `SplitSpec{Mode,Rows,Cols,CustomCuts,Veto}`；`PlanForSplit`/`CutPlanForPage`（display 空间,**不按 /Rotate 交换轴**，FACTS §2.3）、`PageIsSpread`(横排且 `w/h>AutoSpreadRatio=0.7`)、`SplitOnePage`（剔掉 pdfcpu 附带的原页）、`MergeCreateFile` 合并回一个 PDF、`sortByPageTail`（按名内页号升序 = reading order）|P3|
+|(续)|`read_test.go` / `sealimg_test.go` / `split_test.go`|`TestPrepareSeal*`（去背/裁剪/重采样/maxSide/拒绝/JPEG）、`TestSplitA4ToHalves`、`TestSplitQuarterGrid`、`TestSplitCustomFractions`、`TestSplitAutoCutsRotatedSpreadOnly`、`TestSplitAutoVetoKeepsPages`、`TestSplitRejectsUnknownMode`、`TestSortByPageTailOrdersNumericTails`、`TestCutPlanForPageKeepsDisplayAxes`|P1-P3|
 
 ## 3. `web/`（嵌入 + 前端）
 
@@ -47,12 +48,14 @@
 |`web/embed.go`|`//go:embed all:static`；`RegisterStatic`：`GET /` → `index.html`（CSP 见下）、`/vendor/*`（长缓存）、`app-*.js`/`style.css`/`favicon.svg`；遍历/未知路径 → 404；`.mjs` → `text/javascript`|
 |`web/embed_test.go`|断言：嵌入文件存在、`GET /` 返回壳且**无内联 `<script>`**、CSP 指令逐条（`default-src 'self'`/`script-src 'self'`/`style-src 'self' 'unsafe-inline'`/`object-src 'none'`/`base-uri 'none'`）、`Cache-Control: no-cache`、`nosniff`、遍历拒绝、`.mjs` MIME|
 |`web/static/index.html`|壳 DOM（id/`data-field`/`data-i18n` 即契约，`UI_SPEC §6`）；无内联脚本（CSP）。`#preview-stage` **刻意留空**：`app-preview.js` 渲染首个 `page-frame`（canvas + `.textLayer`）后才有内容，P2 在其内加实例叠层；`#asset-hooks` / `pathGrantId` 的 chip 只显示句柄值，本地化文案走 `title`|
-|`web/static/app-shell.js`|IIFE + `window.__autoStampShell`：状态机 12 态、i18n（`data-i18n` 与 `data-i18n-placeholder` 独立生效）、密度切换（`two-col`/`single-col`/`collapsed`）、实例列表（增/删/复制/改名 + 选中）、参数控件 ↔ `settings` 持久（`{"patch":{…}}`）、P1 打开流程（`pickAndOpen`/`openByPath`/`handleFiles`/`openGrant`/`retryOpen`/`adopt` + 密码弹窗 + `SetRecent` 读回 + 拖放）、`probe()`/`fields()`/`ids()` 给 verify、深链 `#<state>`、toast/modals、`/api/health` 版本校验、`autostamp:lang`/`autostamp:open`/`autostamp:page` 事件（跨模块同步）|
+|`web/static/app-shell.js`|IIFE + `window.__autoStampShell`：状态机 12 态、i18n（`data-i18n` 与 `data-i18n-placeholder` 独立生效）、密度切换（`two-col`/`single-col`/`collapsed`）、实例列表（增/删/复制/改名 + 选中）、**P2 印章通道**（`sealIdFor`/`restoreInstanceSeals`/`applyTo`、`#stamp-layer` 由 overlay 拥有）、参数控件 ↔ `settings` 持久（`{"patch":{…}}`）、**导出体积预估**（`computeEstimate`/`refreshEstimate`，前端按 FACTS §4 表 × 页面积缩放，无请求；`probe('estimate')`）、P1 打开流程（`pickAndOpen`/`openByPath`/`handleFiles`/`openGrant`/`retryOpen`/`adopt` + 密码弹窗 + `SetRecent` 读回 + 拖放）、`probe()`/`fields()`/`ids()` 给 verify、深链 `#<state>`、toast/modals、`/api/health` 版本校验、`autostamp:lang`/`autostamp:open`/`autostamp:page`/`autostamp:param`/`autostamp:seal`/`autostamp:instance` 事件（跨模块同步）|
 |`web/static/app-api.js`|信封解析（`ok/data/code/error`）+ `http_<status>` 上报（未接线路由回 405 纯文本时不假装 JSON，FACTS §1.5）+ `GET/POST /api/settings` + P1 的 `pick/openGrant/uploadPDF/rawURL` 与 sessionStorage 会话令牌（`X-AutoStamp-Session`）|
-|`web/static/app-preview.js`|P1 渲染核：`import()` 载入 vendor `pdf.min.mjs`（`workerSrc`/`cMapUrl`/`standardFontDataUrl`/`wasmUrl` 指向 vendor 路径，`isEvalSupported:false` 保持 CSP 无 `unsafe-eval`）、`getDocument({url: rawURL})` 逐页 `render`（DPR 经 `RenderParameters.transform`，`MAX_RENDER_PIXELS` 超限降级 + `warn.render.hint`）、`goTo/next/prev/zoomBy/fit`、标尺与像素读数、`sample(x,y,w,h)` 按 PDF 点取样 + `probe()` 供 verify（FACTS §1.7）|
+|`web/static/app-preview.js`|P1 渲染核 + P2/P3 串接：`import()` 载入 vendor `pdf.min.mjs`（`workerSrc`/`cMapUrl`/`standardFontDataUrl`/`wasmUrl` 指向 vendor 路径，`isEvalSupported:false` 保持 CSP 无 `unsafe-eval`）、`getDocument({url: rawURL})` 逐页 `render`（DPR 经 `RenderParameters.transform`，`MAX_RENDER_PIXELS` 超限降级 + `warn.render.hint`）、`goTo/next/prev/zoomBy/fit`、标尺与像素读数、`sample(x,y,w,h)` 按 PDF 点取样、干净页快照（`state.snapshot` → `drawImage`，供 overlay 重合成不重跑 pdf.js）、`overlay.paint/repaint/syncAffordance/selectAt/consumeWheel` 调用点、切分预览（`drawSplitMarks` 按 `split.mode` 在页框上画切点/网格，`probe('splitPreview')`）、`probe()` 供 verify（FACTS §1.7）|
 |`web/static/app-textlayer.js`|pdf.js 自带 `TextLayer` 驱动（6.4 无 `renderTextContent` 导出，官方 `TextLayerBuilder` 在未 vendor 的 `web/pdf_viewer.mjs`）：`attach({pdfjs,pageObj,viewport,frame,dpr})` 设 `--total-scale-factor = viewport.scale × OutputScale.pixelRatio` + `--scale-round-x/y` + `transform: scale(1/dpr)`，CSS 用 vendor 的 `.textLayer` 规则；`count(pageObj)` 给验收断言|
 |`web/static/app-pager.js`|`#page-pager` 分页条（2026-10-29 P0.5 协议确认：chip + chip 内缩略图，无新增 id）：计数 chip（`pager.count` 走 `title`/`aria-label`）+ 每页一枚 `button.chip[data-page]`（`.pg-no` + `canvas.pg-thumb`，`IntersectionObserver` 懒渲染、重建时 `task.cancel()`）、`All` chip 写 `apply.pages`/`export.pages`|
-|`web/static/app-i18n.js`|en/cn 文案表（由 `tools/verify/gen-i18n.mjs` 从 mock 生成，禁止手改）|
+|`web/static/app-seal.js`|P2 印章图通道：`upload/prepare`（`POST /api/pdf/seal/prepare`，multipart + 页内选项 `seal.prepare.*`）、`revert()`（内存原图 → `despill:false` 重跑 = 「撤销去背」）、`bitmapOf(sealId)`（`/api/pdf/seal/raw` + `createImageBitmap`，给 overlay 合成）、`renderMeta`（chip 文案）、`probe('seals'/'count'/'meta')`。**去背在前端**（UI_SPEC D4 / FACTS §1.8 的反算规则：彩色保留、白/灰丢弃，`min(R,G,B)>=60` 判彩色，彩像素按 `max(0,min(255-c,255-60)/195)` 校正 RGB）|
+|`web/static/app-overlay.js`|P2 叠加层：`paint(ctx, info)`（先把干净页存进 `state.snapshot`，再把印章按 alpha 预乘 uint8 + `globalCompositeOperation` + `ctx.filter` 合成进同一 canvas；`save()/restore()` + 显式 `filter='none'`，FACTS §1.4）、`repaint()`（拖拽廉价重合成）、`stripGeometryFor/stripRectsFor`（骑缝条带：单边 right/双面 alternate，宽 = 页宽 ×10%，`startOffset` 位移，逐页不同列）、DOM affordance（`#stamp-layer .instance` + 四角/中心/旋转手柄）、`hitTest/selectAt/beginDrag/moveDrag/endDrag/consumeWheel`（V3：光标在选中实例内时 wheel = `apply.scale` 并 `stopPropagation`）、`parsePages`（`all/none/1,3/2-4`）、`imageDataOf/pixelsForRect`（给 verify 算像素）、`probe()`：`rects strips view affordance drag instancePixels selected filter snapshot canvasRect`（FACTS §1.8）|
+|`web/static/app-i18n.js`|en/cn 文案表（由 `tools/verify/gen-i18n.mjs` 从 `docs/UI_SPEC.md §4` 生成，196 键，禁止手改）|
 |`web/static/style.css`|壳样式（两列密度 / 折叠态 / 控件表现代码）+ P1：分页条缩略图（`#page-pager canvas.pg-thumb`）、拖放高亮（`#preview[data-drag]`）|
 |`web/static/favicon.svg`|图标（`<link rel="icon">`，否则 Chromium 自动 404 `/favicon.ico`，FACTS §1.5）|
 |`web/static/vendor/pdfjs/`|pdf.js 6.4.299 资产（P1 已进）：`build/`（只有 ESM，FACTS §1.1）、`cmaps/`、`standard_fonts/`、`wasm/`、`image_decoders/`、`iccs/`、`web/pdf_viewer.css`（文本层 CSS）；205 文件 / 5,486,850 B，`SHA256.txt` + `web/embed_test.go:TestVendorChecksums` 断言；见该目录 `README.md`|
@@ -62,20 +65,22 @@
 |文件|作用|
 |---|---|
 |`tools/genfix/main.go`|（独立模块 `go.mod`）生成 `docs/ui/fixtures/{page,seal}.png`（stdlib `image/png`，含 alpha 印章）|
-|`tools/verify/ui-smoke.mjs`|mock：状态机 15 态 + i18n 170 键 + 0 console error + 无横向溢出 + 切分/骑缝条带 + 混合模式像素矩阵（FACTS §1.2-§1.4）|
+|`tools/verify/ui-smoke.mjs`|mock：状态机 15 态 + i18n 196 键 + 0 console error + 无横向溢出 + 切分/骑缝条带 + 混合模式像素矩阵（FACTS §1.2-§1.4）|
 |`tools/verify/ui-contract.mjs`|三方契约：mock `data-field` ↔ `UI_SPEC §2` ↔ AGENTS §6 请求字段（含 §6 覆盖度、id 存在性、i18n 表）|
 |`tools/verify/shell-smoke.mjs`|真实 `dist/autostamp.exe` + headless Chromium（沙箱 `%APPDATA%`/`%LOCALAPPDATA%`）：壳契约 12 态、en/cn i18n、密度、实例、深链、`/api` 往返、`{"patch":…}` 合并；P1 起断言「未打开文档时 `#preview-stage` 没有假页」|
-|`tools/verify/preview-smoke.mjs`|P1 端到端：CDP `Page.printToPDF` 现场生成样本（英文多页文字 / 中文 CID / 混合 / 图片型无文字）→ 真 exe → 真 UI 打开（`#empty-path` + `#empty-open`）→ 画布像素、`getTextContent` 条数、`.textLayer` span 计数与层框宽度对齐、翻页/分页条/缩放、vendor 资源 0 失败（FACTS §1.7）|
+|`tools/verify/pixel-matrix.mjs`|P2/P4 像素矩阵（页内算法独立重算 vs 真实画布；filter 污染回归；`--only=` 分段）——§1.3/§1.4 的仓库内重跑来源|
+|`tools/verify/overlay-smoke.mjs`|**P2 主校验**（真 exe + 真 UI + headless）：上传印章 → 16 模式 ×{1.0,0.6,0.3} → 几何/拖拽/四角/旋转/滚轮 → 骑缝条带 → `ctx.filter` 复位 → 去背计数 → 导出预估 == FACTS §4。分段令牌 `--only=<open\|geometry\|despill\|matrix\|drag\|strip\|filter\|export>`（缺省全跑）；`--reuse-build` 复用 `dist/autostamp-overlay-smoke.exe`（改前端后必须去掉该旗标重建）|
+|`tools/verify/preview-smoke.mjs`|P1 端到端：CDP `Page.printToPDF` 现场生成样本（英文多页文字 / 中文 CID / 混合 / 图片型无文字）→ 真 exe → 真 UI 打开（`#empty-path` + `#empty-open`）→ 画布像素、`getTextContent` 条数、`.textLayer` span 计数与层框宽度对齐、翻页/分页条/缩放、切分预览切点计数、vendor 资源 0 失败（FACTS §1.7）|
 |`tools/verify/cdp.mjs`|无依赖 CDP 客户端（launch Chrome → `page.*`/`Runtime.evaluate`）|
 |`tools/verify/webview-launch.mjs`|`-tags webview` 二进制真窗口启动断言（FACTS §1.6）|
 |`tools/verify/comprobe/main.go`|COM `CoInitializeEx` 实测探针（含 `-window` 真窗口泵消息）|
-|`tools/verify/gen-i18n.mjs`|从 `docs/ui/mockup.html` 生成 `web/static/app-i18n.js`|
+|`tools/verify/gen-i18n.mjs`|从 `docs/UI_SPEC.md §4` 生成 `web/static/app-i18n.js`（改文案只改 §4 表，然后重跑 + 重编 exe）|
 
 ## 5. 构建与校验
 
 |文件|作用|
 |---|---|
-|`build.ps1`|一键：`clean → vet → test → genfix/fixtures → 3 个 exe → verify（ui-smoke/ui-contract/shell-smoke）→ sizes`；`-Task`、`-Watch`、`-Run`；失败退出码 1（AGENTS §4）|
+|`build.ps1`|一键：`clean → vet → test → genfix/fixtures → 3 个 exe → verify（ui-smoke/ui-contract/shell-smoke/preview-smoke/overlay-smoke/pixel-matrix/webview-launch/comprobe）→ sizes`；`-Task`、`-Watch`、`-Run`；失败退出码 1（AGENTS §4）|
 |`docs/FACTS.md §5.1`|就地可重跑的探针清单 ↔ 本文编号映射|
 
 ## 6. 数据目录（运行期，不属于仓库）

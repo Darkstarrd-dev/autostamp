@@ -84,7 +84,11 @@
     <!-- The stage is empty by design: app-preview.js renders one page-frame
          (canvas + .textLayer) per opened page, and P2 adds the instance overlay
          inside it. A static placeholder here would be a fake document. -->
-    <div id="preview-stage" data-split="off"></div>
+    <div id="preview-stage" data-split="off">
+      <!-- P2: the selection affordance (dashed box + handles) lives here, so the
+           canvas paint stays the seal itself and the handles stay hit-able. -->
+      <div id="stamp-layer" aria-hidden="true"></div>
+    </div>
 
     <div id="preview-ruler" data-i18n="ruler.hint" data-i18n-cn="页面尺寸（pt）；标尺原点在左上">- x - pt</div>
     <div id="pixel-readout" data-i18n="ruler.hint" data-i18n-cn="页面尺寸（pt）；标尺原点在左上">page size in pt; origin at top-left</div>
@@ -134,8 +138,16 @@
             </div>
             <div class="hintline" data-i18n="api.seal.preset.presetName.hint" data-i18n-cn="预设写入 %APPDATA%\AutoStamp\seals：图片与参数一起存。">Presets keep image and parameter group together.</div>
           </div>
-          <div class="row">
-            <button type="button" id="seal-upload" class="btn" data-i18n="seal.upload.btn" data-i18n-cn="上传印章 PNG">Upload seal PNG</button>
+          <div class="field">
+            <div class="flabel"><span data-i18n="seal.meta.label" data-i18n-cn="印章元数据">Seal metadata</span><span class="tag">seal.prepare</span></div>
+            <div class="row">
+              <button type="button" id="seal-upload" class="btn" data-i18n="seal.upload.btn" data-i18n-cn="上传印章 PNG">Upload seal PNG</button>
+              <span class="chip" id="seal-meta">-</span>
+            </div>
+            <div class="hintline" data-i18n="seal.upload.hint" data-i18n-cn="去白底/自动裁边/重采样按上方参数处理；「撤销」会用原图重跑一次。">Keying, trim and resample follow the options above; revert re-runs from the source.</div>
+            <div class="hintline" data-i18n="stamp.drag.hint" data-i18n-cn="拖动虚线框移动，四角缩放，顶部手柄旋转。">Drag the dashed box to move; corners resize; the top handle rotates.</div>
+            <div class="hintline" data-i18n="seal.err.type" data-i18n-cn="印章图片必须是带透明通道的 PNG 或 JPEG">Stamp image must be PNG or JPEG with an alpha channel</div>
+
           </div>
         </div>
       </details>
@@ -424,6 +436,7 @@
 </section>
 
 <input id="file-input" type="file" accept=".pdf" hidden>
+<input id="seal-file-input" type="file" accept="image/*" hidden>
 
 <div id="error-toast" role="status" aria-live="polite"></div>
 
@@ -489,6 +502,8 @@
 <script src="app-textlayer.js" defer></script>
 <script src="app-preview.js" defer></script>
 <script src="app-pager.js" defer></script>
+<script src="app-seal.js" defer></script>
+<script src="app-overlay.js" defer></script>
 <script src="app-shell.js" defer></script>
 </body>
 </html>

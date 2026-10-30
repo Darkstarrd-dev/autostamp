@@ -265,6 +265,15 @@
     }
 
     const stage = q("#preview-stage");
+    // #stamp-layer is contract markup (index.html), and the affordance nodes
+    // live inside the *page frame* so its inset:0 box covers the canvas
+    // exactly - the page-point -> client-point maths depends on that anchor.
+    let layer = doc.getElementById("stamp-layer");
+    if (!layer) {
+      layer = doc.createElement("div");
+      layer.id = "stamp-layer";
+      layer.setAttribute("aria-hidden", "true");
+    }
     const frame = doc.createElement("div");
     frame.className = "page-frame";
     frame.dataset.page = String(state.page);
@@ -272,6 +281,7 @@
     canvas.className = "page-canvas";
     frame.appendChild(canvas);
     stage.replaceChildren(frame);
+    frame.appendChild(layer);
     state.frame = frame;
 
     const cssW = Math.floor(vp.width);
@@ -305,6 +315,12 @@
     // The text layer is an overlay: it must not change what the canvas drew,
     // and it must not break the render if the page has no text at all.
     await attachTextLayer(pageObj, vp, frame);
+
+    // P2: seals are drawn *into* this canvas (not a DOM layer) because the
+    // blend modes have to composite against the page pixels — the measured
+    // preview == disk equivalence in FACTS §1.3 only holds on this path.
+    // A missing overlay module (P2 not loaded) never breaks the page.
+    await paintSeals(ctx, { page: state.page, meta, scale, dpr });
 
     updateReadout(meta, vp, scale, reduced);
     doc.dispatchEvent(new CustomEvent("autostamp:page", { detail: { page: state.page, pageCount: pageCount() } }));
@@ -463,6 +479,25 @@
     }
   }
 
+  // paintSeals hands the composited page canvas to the overlay module. The
+  // overlay is optional by design: P1 renders without any seal layer, and the
+  // hook keeps P2's drawing code out of the pdf.js pipeline.
+  async function paintSeals(ctx, info) {
+    const overlay = window.__autoStampOverlay;
+    if (!overlay || !overlay.paint) return false;
+    try {
+      await overlay.paint(ctx, {
+        ...info,
+        canvas: state.frame && state.frame.querySelector("canvas.page-canvas"),
+      });
+      return true;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn("seal layer skipped:", e && e.message);
+      return false;
+    }
+  }
+
   window.__autoStampPreview = {
     state,
     // setPassword must run before open(): the password goes into getDocument,
@@ -477,6 +512,8 @@
     zoomBy,
     zoomTo,
     fit,
+    // The overlay repaints without re-fetching the document.
+    redraw: renderCurrent,
     pageCount,
     pageMeta,
     sample,

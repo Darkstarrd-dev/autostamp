@@ -117,6 +117,27 @@
     return envelopeOf(res, "/api/pdf/open");
   }
 
+  // uploadPOST is the multipart channel for the seal image: the same shape as
+  // uploadPDF (a `file` field plus the option fields the route understands).
+  async function uploadPOST(path, file, fields) {
+    const fd = new FormData();
+    fd.append("file", file, file.name);
+    for (const [k, v] of Object.entries(fields || {})) fd.append(k, String(v));
+    const init = {
+      method: "POST",
+      body: fd,
+      credentials: "same-origin",
+      headers: { [SESSION_HEADER]: sessionToken() },
+    };
+    let res;
+    try {
+      res = await fetch(path, init);
+    } catch (e) {
+      throw new ApiError(0, "network", `${path}: ${e.message}`);
+    }
+    return envelopeOf(res, path);
+  }
+
   window.__autoStampApi = {
     ApiError,
     request,
@@ -150,5 +171,22 @@
     uploadPDF,
     // rawURL is what pdf.js fetches; Range/ETag come from http.ServeContent.
     rawURL: (assetId) => `/api/pdf/raw?id=${encodeURIComponent(assetId)}`,
+
+    // --- P2: the seal image channel (AGENTS §6) ---
+
+    // sealPrepare uploads the PNG/JPEG and asks the server to key/trim/resample
+    // it; the response carries sealId + the alpha metadata the panel shows.
+    sealPrepare: (file, options) => uploadPOST("/api/pdf/seal/prepare", file, options || {}),
+    uploadPOST,
+    // sealURL is the prepared byte channel. The session token cannot ride an
+    // <img>, so app-seal.js fetches it as a blob and keeps an ImageBitmap.
+    sealURL: (sealId) => `/api/pdf/seal/raw?id=${encodeURIComponent(sealId)}`,
+    // bitmapOf fetches with the session header and turns the body into an
+    // ImageBitmap (createImageBitmap never touches CSP, unlike <img src>).
+    bitmapOf: async (url) => {
+      const res = await fetch(url, { credentials: "same-origin", headers: { [SESSION_HEADER]: sessionToken() } });
+      if (!res.ok) throw new ApiError(res.status, `http_${res.status}`, `${url}: ${res.statusText}`);
+      return createImageBitmap(await res.blob());
+    },
   };
 })();

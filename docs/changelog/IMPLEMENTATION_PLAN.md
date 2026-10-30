@@ -2,6 +2,21 @@
 
 > `docs/IMPLEMENTATION_PLAN.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-10-30 — P2 勾 `[x]` + 实测数据回填（前端半边补齐）
+
+- §10 的 P2 行改 `[x]`：上一轮缺的前端半边（`app-seal.js` 上传/去背/撤销、
+  `app-overlay.js` 合成 + affordance、`app-shell.js` 实例↔印章通道、
+  骑缝条带预览、`app-preview.js` 的 `state.snapshot` 与切切点预览）本轮补齐。
+- P2 正文加「实测（2026-10-30）」小节：16 模式 ×{1.0,0.6,0.3} 全部 absdiff≤1 且
+  参考点 == FACTS §1.3；alpha=89 样本落在 `dst*(1-a)+premul*a`；条带（宽 = 页宽 10%、
+  `startOffset` 误差 0、`alternate` 条带数 == 页数、逐页列对齐 ≤1 px）；几何
+  （四角→`scale`、拖拽→`offset`、旋转手柄→`rotation`、滚轮→V3）；filter 读数 `none`；
+  体积预估 == FACTS §4（含 vector 忽略 DPI/质量）；seal meta 计数。
+- 验收命令写实：`node tools/verify/overlay-smoke.mjs`（分段 `--only=`）+
+  `powershell -NoProfile -File build.ps1 -Task vet,test,verify` → 失败 0 / 跳过 0。
+- 顺带修一处真错：`build.ps1` 的 verify 任务列表**缺 `overlay-smoke.mjs` 与
+  `pixel-matrix.mjs`**（所以「失败 0」不含 P2 验收脚本，绿灯是假的）→ 已加进列表，
+  重跑仍是 失败 0 / 跳过 0。
 ## 2026-10-29 — P2 状态纠正 + P3 切分后端绿
 
 - **纠正**：§10 的 P2 行先前写成「前端 overlay/探针已 10/10」是错的——仓库里没有

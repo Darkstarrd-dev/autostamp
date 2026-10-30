@@ -1,6 +1,8 @@
 # AutoStamp — UI_SPEC（P0.5 UI 契约）
 
-> 最后核对：2026-10-29（P0.5 冻结：§2 字段表 / §6 契约 id / §8 决策表 2 轮确认已落定）。本文是 **UI 语义唯一权威**：字段名/取值域/控件绑定/DOM id/状态机
+> 最后核对：2026-10-30（P0.5 冻结的 §2 字段表 / §6 契约 id / §8 决策表已定；P2 叠加预览接线：
+> §2.2 补 `seal.prepare.*`/`seal.err.*`/`ui.split.*` 行、§4 加 2 键、§7.1 探针表补齐、
+> §8 C1/V3 记 P2 实测）。本文是 **UI 语义唯一权威**：字段名/取值域/控件绑定/DOM id/状态机
 > 在此冻结；P0 起 `web/static/index.html` 必须照 §1 骨架与 §7 id 搭建，P1–P5 只换数据源。
 > 与 `AGENTS.md` §6 路由字段冲突时：先改本文 + §6（同一提交），再改代码。
 > 三方一致性由 `node tools/verify/ui-contract.mjs` 常驻校验；mock 行为 `node tools/verify/ui-smoke.mjs`。
@@ -108,7 +110,9 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 - `api.apply.brightness/saturate` 只在预览（`ctx.filter`），**落盘不写**；每层叠加前显式
   `ctx.filter='none'`（FACTS §1.4 的污染坑）。
 - `api.apply.scale` 是相对页宽分数（换算显示 pt/mm）；`api.apply.pos` 与 `api.apply.anchor`
-  二选一（选锚点后 pos 归算）。
+  二选一（选锚点后 pos 归算）。**页内坐标约定（P2 实测；见 §8「页内坐标原点」行）**：
+  display 空间、原点左上、y 向下（与 `#preview-ruler` 的「标尺原点在左上」一致）。
+  落盘侧换算到 pdfcpu 的 y 向上 MediaBox（含 `/Rotate` 补偿），换算在 P4 apply 内做并有单测钉死。
 - `api.apply.startOffset` 是骑缝条带沿装订边的起始偏移（pdfcpu `offset:0 -N`），与 `api.apply.offset` 独立。
 - `api.export.dpi/customDpi/quality` 仅 `mode=raster` 生效（页位图由前端回传，FACTS §2.4 无 rasterize）。
 - `api.open.pw`：UserPW/OwnerPW 都试；AES-256 链路 `UNVERIFIED`（FACTS §6）。
@@ -119,6 +123,9 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 | 面板/控件 | 字段 | 控件形态 | 落点 |
 |---|---|---|---|
 | 印章段 · 上传印章 PNG | `sealId`（响应侧） | button | `POST /api/pdf/seal/prepare` |
+| 印章段 · 撤销去背 | `seal.prepare`（`despill:false` 重跑） | button | `POST /api/pdf/seal/prepare`（同一份字节） |
+| 印章段 · 元数据 | `sealId` + `alpha`/`opaque`（响应侧） | chip（只读） | 无请求 |
+| 主画布 · 选中实例（`#stamp-layer`） | `apply.offset`（拖框）/ `apply.scale`（四角、Ctrl+滚轮 V3）/ `apply.rotation`（顶部手柄） | 虚线框 + 手柄 | 无请求（叠加层内部状态） |
 | 印章段 · 去白底 | `api.seal.prepare.despill` | toggle + 撤销 | 同上 |
 | 印章段 · 存为预设 | `api.seal.preset.presetName` | text + button | `GET/POST /api/seal/preset` |
 | 实例段 · 列表 | instance（名称/模式/删除） | list + text | 内部状态 |
@@ -159,7 +166,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 滑杆 + 数值必须**双向绑定**（同一 `data-field` 复用两次，mock 已实现 `bindPair`）；
 隐藏 `type=file` input 只作选择器触发器，不占字段。
 
-## 4. i18n 清单（key | en | cn；共 174 行，全部由 mock + 状态文案生成）
+## 4. i18n 清单（key | en | cn；共 198 键，全部由 mock + 状态文案生成；`node tools/verify/gen-i18n.mjs` 打印同数）
 
 规则（AGENTS §7）：每个可见控件/文案必须有 `data-i18n` key，en/cn 两值非空；
 `data-i18n-cn`（及 `-placeholder`、`-title`）提供中文值，en 取元素自身文本或 `class="tag"` 的字段名。
@@ -329,6 +336,12 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |seal.preset.placeholder|Company A - red seal|公司甲 · 红章|
 |seal.preset.save|Save preset|保存预设|
 |seal.upload.btn|Upload seal PNG|上传印章 PNG|
+|seal.meta.label|Seal metadata|印章元数据|
+|seal.upload.hint|Keying, trim and resample follow the options above; revert re-runs from the source.|去白底/自动裁边/重采样按上方参数处理；「撤销」会用原图重跑一次。|
+|seal.err.type|Stamp image must be PNG or JPEG with an alpha channel|印章图片必须是带透明通道的 PNG 或 JPEG|
+|seal.err.nosource|Upload a seal image first, then revert|先上传印章图片，再点撤销|
+|stamp.box.aria|Selected stamp instance position|选中印章实例的位置|
+|stamp.drag.hint|Drag the dashed box to move; corners resize; the top handle rotates|拖动虚线框移动，四角缩放，顶部手柄旋转|
 |shortcuts.hint|shortcut list|快捷键列表|
 |shortcuts.title|Shortcuts|快捷键|
 |split.apply.btn|Split preview|切分预览|
@@ -379,7 +392,8 @@ P0/P1 的 `index.html` 必须使用下表 id（`ui-ids` 块 = `ui-contract.mjs` 
 新增 id 要先登记，mock 缺该 id 即报错。
 
 ```ui-ids
-app-main  app-root  apply-anchor  apply-blend  asset-hooks  btn-export  btn-open  btn-save  btn-shortcuts  btn-upload  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  density-seg  empty-open  empty-path  empty-pick  empty-pick-filter  empty-pick-multi  empty-state  empty-upload  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-add  instance-delete  instance-duplicate  lang-seg  modal-layer  page-pager  panel  panel-actions  panel-crosspage  panel-export  panel-instances  panel-overlay  panel-position  panel-seal  panel-split  password-modal  pixel-readout  pos-center  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  right-sidebar  save-cancel  save-confirm  save-modal  file-input  error-toast  save-open  save-pick  save-source  scale-pt  seal-despill-revert  seal-instances  seal-preset-name  seal-preset-save  seal-upload  shortcuts-close  shortcuts-modal  shortcuts-table  split-apply  split-mode  split-veto  strip-previews  theme-seg  top-file  topbar
+app-main  app-root  apply-anchor  apply-blend  asset-hooks  btn-export  btn-open  btn-save  btn-shortcuts  btn-upload  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  density-seg  empty-open  empty-path  empty-pick  empty-pick-filter  empty-pick-multi  empty-state  empty-upload  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-add  instance-delete  instance-duplicate  lang-seg  modal-layer  page-pager  panel  panel-actions  panel-crosspage  panel-export  panel-instances  panel-overlay  panel-position  panel-seal  panel-split  password-modal  pixel-readout  pos-center  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  right-sidebar  save-cancel  save-confirm  save-modal  file-input  error-toast  save-open  save-pick  save-source  scale-pt  seal-despill-revert  seal-file-input  seal-instances  seal-meta  seal-preset-name  seal-preset-save  seal-upload  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  split-apply  split-mode  split-veto  strip-previews  theme-seg  top-file  topbar
+
 ```
 
 `#file-input` 是隐藏的 `<input type=file>` 选择器触发器，不占字段（§2 里没有 `data-field`）。
@@ -405,25 +419,52 @@ app-main  app-root  apply-anchor  apply-blend  asset-hooks  btn-export  btn-open
 `fields()`（全部 `data-field` 控件快照；display-only `span` 不计）、`ids()`、
 `i18nPairs()`（每个 `data-i18n` 的 en+cn 原值）、`probe(name)`、
 `applyLang(lang)`、`applyTheme(t)`、`setDensity(d)`、`setModal(id)`、`clearToast()`、
-`addInstance(name)`、`selectInstance(id)`、`deleteSelected()`、`duplicateSelected()`、
+`addInstance(name, params)`、`selectInstance(id)`、`deleteSelected()`、`duplicateSelected()`、
+`APPLY_FIELDS`、`defaultParams()`、`instanceById(id)`、`selectedInstance()`、
+`setParam(field, value)`（改**选中实例**的参数并派发 input/change，等价于滑杆改值）、
+`setSealForSelected(sealId)`、`notify(name, detail)`、
+`adopt(info, pw)`（文档接管的唯一漏斗：状态翻转 + `assets.*` 记账 + `preview.open`；
+`pixel-matrix` 真链路驱动的就是它，而不是直接调预览模块）、
 `q()/qa()`、`t(key)`。
 `probe` 关键字：`state` `overflow` `density` `instances` `instanceCount` `selected`
-`modal` `toast` `lang` `theme` `version` `labels`。
+`modal` `toast` `lang` `theme` `version` `labels` `estimate`（导出体积预估，见 §7 E1）。
 
 `window.__autoStampPreview`（`app-preview.js`）：`open(info)`、`setPassword(pw)`、`reload(pw)`、
 `close()`、`goTo(n)`、`next()`、`prev()`、`zoomBy(step)`、`zoomTo(v)`、`fit()`、`pageCount()`、
 `pageMeta(n)`、`sample(x,y,w,h)`（`x,y,w,h` 为 PDF 点，返回 RGBA + 换算后的像素矩形）、
-`probe(name)`：`page` `pageCount` `asset` `zoom` `fitZoom` `dpr` `canvas` `textLayer` `reduced`。
+`probe(name)`：`page` `pageCount` `asset` `zoom` `fitZoom` `dpr` `canvas` `textLayer` `reduced`
+`splitPreview`（P3 切分预览：`on` `marks` `boxes` `parts`，`marks` 按 `split.mode` 画在页框上）。
 `window.__autoStampTextLayer`（`app-textlayer.js`）：`attach({pdfjs,pageObj,viewport,frame,dpr})`、
 `count(pageObj)`。`window.__autoStampPager`（`app-pager.js`）：`build()`、`refresh()`。
 
-跨模块事件（`app-shell.js` 派发，`app-pager.js` / `app-preview.js` 监听）：
+`window.__autoStampSeal`（`app-seal.js`，P2 印章图通道）：`upload(file)`（→
+`POST /api/pdf/seal/prepare`，选项取面板 `seal.prepare.*`）、`prepare(file, override)`、
+`revert()`（用内存里的原始上传重跑 `despill:false`，即「撤销去背」）、`bitmapOf(sealId)`、
+`renderMeta(sealId)`、`lastSource()`、`probe(name)`：`seals` `count` `meta`。
+
+`window.__autoStampOverlay`（`app-overlay.js`，P2 叠加层）：`paint(ctx, info)`（由
+`app-preview.js` 在每次页渲染后调用：先把干净页存进 `state.snapshot`，再把印章合成进
+同一 canvas —— FACTS §1.3 的预览==落盘等值性只在这条路径成立）、`repaint()`（拖拽用的
+廉价重合成，不重跑 pdf.js）、`syncAffordance()`、`selectAt(ev)`、`hitTest(pt)`、
+`consumeWheel(ev)`（V3：光标在选中实例上时滚轮 = `apply.scale`）、`parsePages(spec)`、
+`rectFor(inst)`、`beginDrag/moveDrag/endDrag`、
+`probe(name)`：`rects` `strips` `view` `affordance`（选中实例的包围盒 + 句柄数）、`drag`
+（`moveDown/centerDown/rotDown` 命中诊断）、`instancePixels`（该实例四角的本机
+alpha/预乘 RGB，见 §11 P2 反算规则）、`selected`、`filter`（`ctx.filter` 读数，
+FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
+`pixelsForRect(info, rect)` 两个纯函数供 verify 脚本算像素。
+
+跨模块事件（`app-shell.js` 派发，`app-pager.js` / `app-preview.js` / `app-overlay.js` 监听）：
 `autostamp:lang`（语言切换后重绘动态读数）、`autostamp:open`（新文档打开，重建分页条）、
-`autostamp:page`（翻页，更新分页条 pressed 态与计数）。
+`autostamp:page`（翻页，更新分页条 pressed 态与计数）、
+`autostamp:param`（面板参数改动 → 实例参数 + 叠加层重绘）、`autostamp:seal`（实例换印章）、
+`autostamp:instance`（实例列表变化）。
 深链：`http://127.0.0.1:<port>/#crosspage`（`hashchange` 重走状态机；清空 hash 回文档态）。
 校验命令：`node tools/verify/shell-smoke.mjs`（真二进制 + headless Chromium，
 沙箱化 `%APPDATA%`/`%LOCALAPPDATA%`）、`node tools/verify/preview-smoke.mjs`
 （P1 查看链路：现场生成样本 + 真 UI 打开 + 像素/文本层/翻页断言，FACTS §1.7）、
+`node tools/verify/overlay-smoke.mjs`（P2 叠加层：上传→16 模式×3 透明度→几何/拖拽/旋转
+→骑缝条带→filter 污染，见 §7.1 与 FACTS §1.3）、
 `node tools/verify/webview-launch.mjs`（WebView2 真窗口）、
 `go run ./tools/verify/comprobe`（COM 实测，FACTS §1.6）。
 
@@ -445,10 +486,13 @@ app-main  app-root  apply-anchor  apply-blend  asset-hooks  btn-export  btn-open
 |V1|P1 预览区显示形态|单页视图 + 分页条（推荐）/ 连续多页滚动（mock 里两页并排）|已确认：单页视图（一次渲染一页；翻页走分页条、`1..9`、`PgUp/PgDn`）|2026-10-29|ask 第 3 轮 view|
 |V2|P1 分页条形态|仅 chip 分页条（P0.5 冻结形态）/ chip + chip 内缩略图（无新增 id）/ 独立缩略图侧栏（需新增契约 id）|已确认：chip + chip 内缩略图，都在 `#page-pager` 内（`button.chip[data-page]` 里的 `canvas.pg-thumb`，`IntersectionObserver` 懒渲染）|2026-10-29|ask 第 3 轮 pager|
 |V3|Ctrl+滚轮归属|P1 = 预览视图缩放，P2 起交给 `apply.scale`（推荐）/ 只留给印章 / 另立按键|已确认：P1 滚轮缩放视图；P2 起「光标在选中实例上」时滚轮 = `apply.scale`，页背景仍为视图缩放|2026-10-29|ask 第 3 轮 wheel|
+|C1|页内坐标原点（`pos`/`offset` 的 y 方向）|display 空间、原点左上、y 向下（推荐：与 `#preview-ruler` 一致，拖拽手柄也按它画）/ PDF 原生 y 向上（用户要换算心里有记）|未评审默认（P2 实测：手柄、标尺、条带都按左上原点；P4 落盘换算有单测钉死）|2026-10-29|待 ask 下一轮确认；不确认即按默认|
 
 D2–D4、L1、CP1 已在 P0.5 第 1 轮确认（2026-10-29）；D1、I1、S1、E1 在第 2 轮确认（同日）。
 V1–V3 是 P1 开工前的形态问题，用第 3 轮确认（同日），因为它们改的是预览区/分页条的可见形态而非字段词表。
 B1/D5 属 `IMPLEMENTATION_PLAN` §9 的「不阻塞 P0.5」，按 §9 默认实现并在此登记。
+C1 是 P2 叠加层落地的坐标语义，本轮未评审：先按默认实现，落盘一致性（预览==落盘）靠 P4 的
+单测钉死；若用户选 y 向上，只改 `apply.go` 的换算与前端 `pos/offset` 的读法。
 
 ## 9. 与 AGENTS §6 的字段映射
 

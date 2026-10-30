@@ -60,7 +60,11 @@ export async function openChrome(opts) {
       ws.addEventListener("message", wait);
     });
 
-  const evaluate = async (expression, awaitPromise = false) => {
+  // awaitPromise defaults to true: every verify expression that touches /api is an
+  // async IIFE. With awaitPromise:false Chrome serialises the Promise itself to `{}`
+  // (returnByValue has no objectId to hang on), which reads as an empty object and
+  // would silently turn a real assertion into a pass — the failure mode we want.
+  const evaluate = async (expression, awaitPromise = true) => {
     const r = await send("Runtime.evaluate", {
       expression,
       awaitPromise,

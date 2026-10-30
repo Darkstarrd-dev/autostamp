@@ -38,18 +38,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function waitFor(fn, maxMs, msg) {
   const t0 = Date.now();
+  let last = null;
   for (;;) {
     let value = null;
+    let why = null;
     try {
       value = await fn();
-    } catch {
-      value = null;
+    } catch (e) {
+      why = String((e && e.message) || e);
     }
     if (value) return value;
-    if (Date.now() - t0 > maxMs) throw new Error(msg);
+    last = why === null ? JSON.stringify(value) : "throw:" + why;
+    if (Date.now() - t0 > maxMs) throw new Error(`${msg} (last=${last})`);
     await sleep(100);
   }
 }
+
 
 async function run(args, opts) {
   const o = opts || {};
@@ -115,7 +119,11 @@ function solidPNG(w, h, c) {
       raw[p + 3] = c[3];
     }
   }
-  const ihdr = Buffer.alloc(13);
+  // IHDR data is exactly 13 bytes (width/height/bitdepth/colourtype/compression/
+  // filter/interlace); the leading 4 bytes hold the chunk type, so the scratch
+  // buffer must be 17 long or ihdr[13] (colour type) silently drops off the end
+  // and Go's png.Decode rejects the image (seal_type).
+  const ihdr = Buffer.alloc(17);
   ihdr.write("IHDR", 0);
   ihdr.writeUInt32BE(w, 4);
   ihdr.writeUInt32BE(h, 8);
@@ -268,74 +276,139 @@ async function checkMatrix(app) {
 async function checkRealChain(app, pdfPath, sealB64) {
   if (!sealB64) bad("seal fixture missing");
 
+  // The envelope is asserted on, so a transport failure must not be mistaken for
+  // an empty object: report status + text verbatim on the failure path.
   const pick = await app.evaluate(
-    `(async () => (await fetch('/api/fs/pick', {method:'POST', headers:{'content-type':'application/json','X-AutoStamp-Session':sessionStorage.getItem('autostamp.session')}, body: JSON.stringify({filePath: ${JSON.stringify(pdfPath)}, filter:'pdf'})}).then(r=>r.json()))`
+    `(async () => { try { const r = await fetch('/api/fs/pick', {method:'POST', headers:{'content-type':'application/json','X-AutoStamp-Session':sessionStorage.getItem('autostamp.session')}, body: JSON.stringify({filePath: ${JSON.stringify(pdfPath)}, filter:'pdf'})}); return { href: location.href, status: r.status, body: await r.json().catch(() => null) }; } catch (e) { return { href: location.href, err: String(e && e.stack || e) }; } })()`
   );
-  const grant = (((pick.data || {}).picks || [])[0] || {}).pathGrantId;
-  if (!grant) {
-    bad("open chain: no pathGrantId: " + JSON.stringify(pick).slice(0, 200));
+  const grantId = ((((pick.body?.data || {}).picks || [])[0] || {}).pathGrantId) || "";
+  if (!grantId) {
+    bad(
+      `open chain: no pathGrantId href=${pick.href} status=${pick.status} ` +
+        (pick.err ? "err=" + pick.err.slice(0, 200) : JSON.stringify(pick.body ?? pick).slice(0, 240))
+    );
     return;
   }
   const opened = await app.evaluate(
-    `(async () => (await fetch('/api/pdf/open', {method:'POST', headers:{'content-type':'application/json','X-AutoStamp-Session':sessionStorage.getItem('autostamp.session')}, body: JSON.stringify({pathGrantId: ${JSON.stringify(grant)})}).then(r=>r.json()))`
+    `(async () => { try { const r = await fetch('/api/pdf/open', {method:'POST', headers:{'content-type':'application/json','X-AutoStamp-Session':sessionStorage.getItem('autostamp.session')}, body: JSON.stringify({pathGrantId: ${JSON.stringify(grantId)}})}); return { href: location.href, status: r.status, body: await r.json().catch(() => null) }; } catch (e) { return { href: location.href, err: String(e && (e.stack || e)) }; } })()`
   );
-  if (!(opened.data || {}).assetId) {
-    bad("open chain: no assetId: " + JSON.stringify(opened).slice(0, 200));
+  const openEnv = (opened.body && opened.body.data) || {};
+  if (!openEnv.assetId) {
+    bad(`open chain: no assetId (status ${opened.status}) ` + JSON.stringify(opened).slice(0, 240));
     return;
   }
-  await app.evaluate(`window.__autoStampPreview.open(${JSON.stringify(opened.data)})`);
-  await waitFor(async () => (await app.evaluate(`window.__autoStampPreview.probe('page')`)) === 1, 8000, "预览页 1 未渲染");
-
-  // 纯色印章:despill 关掉(纯色没有白底可去),alphaTrim 关掉(整幅都是印章)。
-  const prepared = await app.evaluate(
-  `(async () => {
-    const bin = atob(${JSON.stringify(sealB64)});
-    const buf = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-    const form = new FormData();
-    form.append('file', new Blob([buf], {type:'image/png'}), 'solid.png');
-    form.append('despill', 'false');
-    form.append('alphaTrim', 'false');
-    form.append('resampleDpi', '300');
-    return await (await fetch('/api/pdf/seal/prepare', {method:'POST', headers:{'X-AutoStamp-Session':sessionStorage.getItem('autostamp.session')}, body: form})).json();
-  })()`
+  // The chain goes through the shell's one document funnel (adopt): state flip +
+  // asset bookkeeping + preview.open, exactly like a real open does.
+  await app.evaluate(`(async () => await window.__autoStampShell.adopt(${JSON.stringify(openEnv)}))()`);
+  await waitFor(
+    async () => {
+      const st = await app.evaluate(
+        `(() => { const p = window.__autoStampPreview; return { page: p.probe('page'), doc: Boolean(p.state.doc), canvas: p.probe('canvas') }; })()`
+      );
+      if (st.page === 1 && st.doc && st.canvas) return true;
+      throw new Error(JSON.stringify(st));
+    },
+    12000,
+    "预览页 1 未渲染(frame 未就绪)"
   );
-  const sealId = (prepared.data || {}).sealId;
+
+  // 纯色印章:despill/alphaTrim 关掉(纯色没有白底可去,整幅都是印章)。走的是
+  // 面板上传的同一模块路径(__autoStampSeal.prepare -> seal/prepare -> bitmap),
+  // 这样断言的既有服务端信封,也有前端通道的真实接线。
+  const prepared = await app.evaluate(
+    `(async () => {
+      const bin = atob(${JSON.stringify(sealB64)});
+      const buf = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      const file = new File([buf], 'solid.png', { type: 'image/png' });
+      const m = await window.__autoStampSeal.prepare(file, { despill: false, alphaTrim: false, resampleDpi: 300 });
+      return { sealId: m.sealId, srcWidth: m.srcWidth, mime: m.mime, ready: window.__autoStampSeal.probe('seals').some((s) => s.ready) };
+    })()`
+  );
+  const sealId = prepared.sealId;
   if (!sealId) {
     bad("seal/prepare 失败: " + JSON.stringify(prepared).slice(0, 200));
     return;
   }
-  cmp("prepared seal 尺寸", prepared.data.srcWidth, 48);
-  cmp("prepared seal mime", prepared.data.mime, "image/png");
+  cmp("prepared seal 尺寸", prepared.srcWidth, 48);
+  cmp("prepared seal mime", prepared.mime, "image/png");
+  truthy("seal 位图已缓存(seal/raw 通道)", prepared.ready);
   console.log("  ok seal/prepare -> " + sealId.slice(0, 12) + "…");
 
-  const overlay = await app.evaluate(
-    `(async () => {
-      const o = window.__autoStampOverlay;
-      if (!o) return { missing: true };
-      const id = await o.add(${JSON.stringify(sealId)}, {
-        blend: 'multiply', opacity: 1, brightness: 1, saturate: 1,
-        scale: 0.15, pos: '150,300', anchor: 'tl', offset: '0,0', rotation: 0, pages: 'all',
+  // The real chain uses the same module surface the UI uses (shell.addInstance +
+  // setSealForSelected -> the overlay paints), not a private test hook.
+  const created = await app.evaluate(
+    `(() => {
+      const sh = window.__autoStampShell;
+      if (!sh) return { missing: true };
+      const id = sh.addInstance('chain-seal', {
+        'api.apply.blend': 'multiply', 'api.apply.opacity': 1, 'api.apply.brightness': 1,
+        'api.apply.saturate': 1, 'api.apply.scale': 0.15,
+        // UI_SPEC §2: anchor is a nine-point *page* anchor and offset is relative
+        // to it (picking an anchor recomputes pos, which is why the disk side
+        // writes pdfcpu's anchor constant). tl + 150,300 puts the box top-left at
+        // page-space 150,300 -- the sample point below is inside that box.
+        'api.apply.anchor': 'tl', 'api.apply.offset': '150,300', 'api.apply.pos': '150,300',
+        'api.apply.rotation': 0, 'api.apply.pages': 'all', 'api.apply.crossPage': false,
       });
-      await new Promise((r) => setTimeout(r, 350));
-      return { id, instances: o.probe('instances') };
+      sh.setSealForSelected(${JSON.stringify(sealId)});
+      return { id, count: sh.state.instances.length, selected: sh.state.selected };
     })()`
   );
-  if (overlay.missing) {
-    bad("window.__autoStampOverlay 未实现(P2 交付物)");
+  if (created.missing) {
+    bad("window.__autoStampShell 未实现(P2 交付物)");
     return;
   }
-  if (!overlay.id) bad("overlay.add 没有返回实例 id");
-  if (!Array.isArray(overlay.instances) || overlay.instances.length !== 1) {
-    bad("instances = " + JSON.stringify(overlay.instances).slice(0, 200) + ", want 1 个实例");
+  // boot() seeds "Seal 1" (the 12-state contract), so the chain's instance is #2.
+  if (created.count !== 2 || created.selected !== created.id) {
+    bad("实例创建异常: " + JSON.stringify(created).slice(0, 200) + ", want 2 个实例且新建被选中");
     return;
   }
+  // The bitmap arrives through the autostamp:seal channel; wait until the seal
+  // module has it ready (probe token 'seals' exposes per-seal ready flags) before
+  // sampling -- the paint itself is synchronous.
+  await waitFor(
+    async () => {
+      const seals = await app.evaluate(`window.__autoStampSeal.probe('seals')`);
+      return Array.isArray(seals) && seals.some((s) => s.ready);
+    },
+    6000,
+    "印章位图未加载(seal/raw 通道未接通)"
+  );
+  await app.evaluate(`window.__autoStampOverlay.repaint()`);
+  // One diagnostic line so a "composite == page" failure can be attributed to the
+  // instance geometry vs the bitmap without re-running with a debugger.
+  console.log(
+    "  chain paint: " +
+      JSON.stringify({
+        rects: await app.evaluate(`window.__autoStampOverlay.probe('rects')`),
+        nodes: await app.evaluate(`document.querySelectorAll('#stamp-layer .instance').length`),
+        view: await app.evaluate(`window.__autoStampOverlay.probe('rects') + '|' + JSON.stringify(window.__autoStampOverlay.probe('view'))`),
+        seals: await app.evaluate(`window.__autoStampSeal.probe('seals').map((s) => ({ ready: s.ready, px: s.meta && s.meta.outWidthPx }))`),
+        inst: await app.evaluate(`(() => { const i = window.__autoStampShell.selectedInstance(); return { id: i && i.id, seal: Boolean(i && i.sealId), keys: i && Object.keys(i.params).length, pos: i && i.params['api.apply.pos'], scale: i && i.params['api.apply.scale'] }; })()`),
+      })
+  );
 
-  // 页面底像素:先按 §1.3 的公式自己算,再与叠加后的取样比对。
-  const ground = await app.evaluate(`window.__autoStampPreview.sample(150, 300, 24, 24)`);
+  // 页面底像素:先按 §1.3 的公式自己算,再与叠加后的取样比对。A toast/repaint can
+  // momentarily clear state.frame, so sampling retries instead of assuming a hit.
+  const sampleOf = (expr, ms = 8000) =>
+    waitFor(
+      async () => {
+        try {
+          return await app.evaluate(expr);
+        } catch (e) {
+          throw new Error("sample: " + (e && e.message ? e.message : e));
+        }
+      },
+      ms,
+      "取样失败: " + expr.slice(0, 72)
+    );
+  // The overlay paints into the preview's page canvas, so the page-only pixels
+  // must come from the module's clean snapshot ('page' source), not the live canvas.
+  const ground = await sampleOf(`window.__autoStampOverlay.sample(150, 300, 24, 24, 'page')`);
   const g = [ground.data[0], ground.data[1], ground.data[2]];
-  const over = await app.evaluate(`window.__autoStampOverlay.sample(150, 300, 24, 24)`);
-  const o1 = [over.data[0], over.data[1], over.data[2]];
+  const ovm = await sampleOf(`window.__autoStampOverlay.sample(150, 300, 24, 24, 'composite')`);
+  const o1 = [ovm.data[0], ovm.data[1], ovm.data[2]];
   const want = [
     Math.round((g[0] * INK[0]) / 255),
     Math.round((g[1] * INK[1]) / 255),
@@ -343,46 +416,70 @@ async function checkRealChain(app, pdfPath, sealB64) {
   ];
   within(`multiply x 1.0(底 ${g.join(",")})`, o1, want, 2);
 
-  // opacity 0.6 = §1.3 的 dst*0.4 + (dst*src/255)*0.6。
-  await app.evaluate(`window.__autoStampOverlay.setParam(${JSON.stringify(overlay.id)}, 'opacity', 0.6)`);
-  await sleep(300);
-  const over2 = await app.evaluate(`window.__autoStampOverlay.sample(150, 300, 24, 24)`);
-  const o6 = [over2.data[0], over2.data[1], over2.data[2]];
+  // opacity 0.6 = §1.3 的 dst*0.4 + (dst*src/255)*0.6. The panel fields are the only
+  // way to change an instance parameter (UI_SPEC §3), so the script drives the shell
+  // exactly like a slider does; no private test hook.
+  await app.evaluate(`window.__autoStampShell.setParam('api.apply.opacity', 0.6)`);
+  const o6s = await sampleOf(`window.__autoStampOverlay.sample(150, 300, 24, 24, 'composite')`);
+  const o6 = [o6s.data[0], o6s.data[1], o6s.data[2]];
   const want6 = [0, 1, 2].map((i) => Math.round(g[i] * 0.4 + ((g[i] * INK[i]) / 255) * 0.6));
   within(`multiply x 0.6(底 ${g.join(",")})`, o6, want6, 2);
 
   // 混合模式在真实叠加层里也必须换像素(不是把 gco 当摆设)。
   const before = o1.join(",");
-  await app.evaluate(`window.__autoStampOverlay.setParam(${JSON.stringify(overlay.id)}, 'blend', 'screen')`);
-  await sleep(300);
-  const over3 = await app.evaluate(`window.__autoStampOverlay.sample(150, 300, 24, 24)`);
-  const oS = [over3.data[0], over3.data[1], over3.data[2]];
+  await app.evaluate(`window.__autoStampShell.setParam('api.apply.blend', 'screen')`);
+  const oSs = await sampleOf(`window.__autoStampOverlay.sample(150, 300, 24, 24, 'composite')`);
+  const oS = oSs.data;
   if (oS.join(",") === before) bad("blend=screen 未改变叠图像");
-  else console.log("  ok blend=screen 改变了叠图像 " + before + " -> " + oS.join(","));
+  else console.log("  ok blend=screen 改变了叠图像 " + before + " -> " + oS.slice(0, 3).join(","));
 
-  // 16 模式在叠加层里都能画完(不抛错、不透明、有像素)。
+  // 模式扫描回到 opacity 1:参考 canvas 也按 alpha 1 混合,这样比对的是模式本身,
+  // 不掺半透明的合成项(opacity 0.6 已经在前一条 §1.3 断言里验过了)。
+  await app.evaluate(`window.__autoStampShell.setParam('api.apply.opacity', 1)`);
+  await app.evaluate(`window.__autoStampShell.setParam('api.apply.blend', 'multiply')`);
+  // 16 模式的真链路断言:叠加层像素必须等于「同一对颜色在同一渲染族里独立 blend」
   const modes = await app.evaluate(
-  `(async () => {
-    const o = window.__autoStampOverlay;
-    const id = ${JSON.stringify(overlay.id)};
-    const modes = ${JSON.stringify(BLEND)};
-    const out = [];
-    for (const m of modes) {
-      o.setParam(id, 'blend', m);
-      await new Promise((r) => setTimeout(r, 120));
-      const s = o.sample(150, 300, 24, 24);
-      out.push({ m, px: [s.data[0], s.data[1], s.data[2], s.data[3]] });
-    }
-    return out;
-  })()`
+    `(async () => {
+      const o = window.__autoStampOverlay;
+      const sh = window.__autoStampShell;
+      const GROUND = ${JSON.stringify(GROUND)}, INK = ${JSON.stringify(INK)};
+      const gco = ${JSON.stringify(GCO)};
+      const ref = document.createElement('canvas');
+      ref.width = 8; ref.height = 8;
+      const ctx = ref.getContext('2d');
+      const modes = ${JSON.stringify(BLEND)};
+      const out = [];
+      for (const m of modes) {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+        ctx.filter = 'none';
+        ctx.fillStyle = 'rgb(' + GROUND.join(',') + ')';
+        ctx.fillRect(0, 0, 8, 8);
+        ctx.globalCompositeOperation = gco[m] || m;
+        if (ctx.globalCompositeOperation !== (gco[m] || m)) return { rejected: m };
+        ctx.fillStyle = 'rgb(' + INK.join(',') + ')';
+        ctx.fillRect(0, 0, 8, 8);
+        const reference = Array.from(ctx.getImageData(4, 4, 1, 1).data);
+        sh.setParam('api.apply.blend', m);
+        await new Promise((r) => setTimeout(r, 90));
+        const s = o.sample(190, 340, 8, 8, 'composite');
+        out.push({ m, px: s.data.slice(0, 4), reference, gco: ctx.globalCompositeOperation });
+      }
+      return out;
+    })()`
   );
-  for (const e of modes) {
-    if (e.px[3] !== 255) bad(`${e.m}: 叠加 alpha = ${e.px[3]}, want 255`);
-    if (e.px[0] === g[0] && e.px[1] === g[1] && e.px[2] === g[2] && e.m !== "normal" && e.m !== "multiply") {
-      bad(`${e.m}: 叠图像素与底完全相同,该模式没有生效`);
+  if (!Array.isArray(modes)) {
+    bad(`canvas 拒绝了混合模式名 ${JSON.stringify(modes)}`);
+  } else {
+    for (const e of modes) {
+      if (e.px[3] !== 255) bad(`${e.m}: 叠加 alpha = ${e.px[3]}, want 255`);
+      const d = [0, 1, 2].map((i) => Math.abs(e.px[i] - e.reference[i]));
+      if (d.some((v) => v > 2)) {
+        bad(`${e.m}: 叠加层 ${e.px.slice(0, 3).join(",")} != 独立 blend ${e.reference.slice(0, 3).join(",")} (Δ ${d.join(",")})`);
+      }
     }
+    console.log(`  ok 16 模式在真实叠加层里全部画完并与独立 blend 一致`);
   }
-  console.log(`  ok 16 模式在真实叠加层里全部画完`);
 }
 
 // ---------- 主流程 --------------------------------------------------------

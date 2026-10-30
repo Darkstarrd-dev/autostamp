@@ -3,6 +3,30 @@
 > `docs/FACTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-10-30 — P2 实测：新增 §1.8、§4 预估重跑、§5.1 加脚本、§6 加两条 UNVERIFIED
+
+- 新增 **§1.8**（P2 实测，全部由 `tools/verify/overlay-smoke.mjs` 就地重跑）：
+  canvas 读回是**预乘 uint8**（必须显式预乘，否则出暗环）；16 模式 ×{1.0,0.6,0.3}
+  与页内独立重算逐点比对（`soft-light` 用 W3C 分段公式 = `ctx.filter` 的实现）；
+  去背三例 (255,166,240)/(220,0,0)/(280,0,0) 与反算系数 0.456/0.902/0；条带几何
+  （宽 = 页宽 10%、`startOffset` 位移误差 0、`alternate` 条带数 == 页数、逐页列对齐 ≤1 px）；
+  **V3 滚轮陷阱**（光标在选中实例内时 wheel 必须 `stopPropagation`，否则 stage 的通用
+  wheel 会改 zoom 并重渲染，`apply.scale` 读数被后写覆盖）；`range` 步进会被 Chromium
+  规整（写 92 → 回读 90，UI 只能表达 40+5n）。
+- §4 加「体积预估」条目：按本表 × MediaBox 面积/A4 面积缩放，重跑命令与数值（±2%）。
+- §5.1：加 `overlay-smoke.mjs`（分段 `--only=`）、`gen-i18n` 行、`go test ./internal/api
+  -run Seal` / `./internal/pdfcore -run PrepareSeal` 两行；§5.2 进度行同步。
+- §6：新增 `UNVERIFIED` —— 去背规则对**白底照片类印章**会把整图判白丢弃（三种红印章
+  情形已实测通过，照片类只能关选项）。
+
+## 2026-10-30 — §5.1 加 `gen-i18n.mjs`：文案唯一来源是 mock 的内嵌 JSON 字典
+
+- §5.1 的 `gen-i18n.mjs` 行原写「从 `docs/ui/mockup.html` 生成」正确，但**易踩坑**：
+  它读的是 mock 里 `id="i18n-dict"` 的 JSON 块，**不是** `UI_SPEC §4` 表。只改 §4 表不会
+  进目录；必须在 mock 的字典 + 标记里加键，再 `node tools/verify/gen-i18n.mjs` 重生成，
+  然后**重编 exe**（`app-i18n.js` 是 embed 资产）。本轮实测：`seal.err.type` /
+  `seal.err.nosource` 只加进 §4 时 `shell-smoke` 报「壳解析不出该键」，补进 mock 字典后
+  196 键才三方一致（`ui-contract` / `ui-smoke` / `shell-smoke` 同绿）。
 ## 2026-10-29 — P3 切分重跑 + §2.3 字段名纠正
 
 - §2.3「重跑补充」：`CutFile/ExtractPagesFile/PageCountFile/MergeCreateFile/ValidateFile`

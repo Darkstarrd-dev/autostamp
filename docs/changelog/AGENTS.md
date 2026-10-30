@@ -3,6 +3,23 @@
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-10-30 — P2 叠加预览落地：§5 新增 12-15 / §6 seal 行改实测 / §8 新增第 10 项 / §3 §11 修正
+
+- §3 目录：`web/static` 补 `app-seal.js`、`app-overlay.js`（此前只列 P1 那几个文件）。
+- §5 新增 12（去背在**前端**：`min(R,G,B)>=60` 判彩色、白/灰丢弃、彩像素反算；
+  「撤销去背」= 用内存原图以 `despill:false` 重跑 prepare，不靠 undo 栈）、
+  13（画布必须**显式预乘 uint8**：`getImageData` 读回的是预乘值，不预乘会出暗环）、
+  14（坐标一律左上原点 y 向下 = C1 未评审默认；滚轮缩放只在光标位于选中实例内时改
+  `apply.scale`，事件必须 `stopPropagation` = FACTS §1.8 V3）、
+  15（导出体积预估是前端派生、不发请求，按 FACTS §4 表 × 页面积缩放）。
+- §6：`POST /api/pdf/seal/prepare` 行标「**已实现**」+ 词表 + 配套
+  `GET /api/pdf/seal/raw?id=`（只回印章字节给合成）。
+- §8 新增第 10 项：P2 校验 `overlay-smoke.mjs`（分段 `--only=`；矩阵/去背/条带/filter/
+  预估断言清单）。同时记录实测踩坑：**改前端后必须去掉 `--reuse-build`** —— 它复用
+  `dist/autostamp-overlay-smoke.exe` 的旧嵌入副本，新代码看不见（本轮就是这么踩的）。
+- §11：切分/骑缝行改成实际文件（`app-preview.js:drawSplitMarks` +
+  `app-overlay.js:stripGeometryFor/stripRectsFor` + `app-shell.js:#split-veto`，
+  不是计划名 `app-crosspage.js`）；新增「改叠加层/印章通道」「改导出体积预估」两行。
 ## 2026-10-29 — P3 切分落地：§6 split 行改实测 / §11 补 i18n 行
 
 - §6 `POST /api/pdf/split` 行标「已实现」并写死词表：`{assetId, splitMode, rows, cols,

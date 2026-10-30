@@ -2,6 +2,24 @@
 
 > `docs/UI_SPEC.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-10-30 — P2 接线：§2.2 词表补全 / §4 加 2 键 / §6 修 fence / §7.1 探针表 / §8 C1+V3 / §11 令牌记录
+
+- §2.2 补 P2 用到的词表行：`seal.prepare.despill/alphaTrim/resampleDpi`（含默认值与
+  「撤销去背」语义）、`seal.err.type` / `seal.err.nosource`（toast 文案）、
+  `ui.split.mode` / `ui.split.veto`（逐页否决，切点预览在页框上画）。
+- §4 加两行（`seal.err.type`、`seal.err.nosource`）；`stamp.drag.hint` 在 mock 与真实面板
+  都上屏（此前只登记不显示，`ui-contract` 判「§4 键未在 mock 使用」而失败）。
+  重新生成目录：196 键（**唯一来源仍是 §4 表**；`gen-i18n.mjs` 读 mock 的内嵌字典，
+  两者由 `ui-contract` 互相校验 —— 只改 §4 不上 mock 会失败）。
+- §6 `ui-ids` 块**缺闭合 fence**（`ui-contract` 报 `E-SPEC: ui-ids block is empty`、
+  `ids=0`）→ 补 ` ``` `；块内 78 个 id 与 `index.html` 一致（ids=82 含 4 个 JS 生成的
+  动态 id 例外，见 §6 说明）。
+- §7.1 探针表：壳 `probe` 补 `estimate`（导出体积预估，早已在 §7 列出但壳未实现 → 本轮实现）；
+  预览 `probe` 补 `splitPreview`；叠加层 `probe` 补 `drag instancePixels selected filter affordance`
+  并说明 `imageDataOf/pixelsForRect` 是供脚本算像素的纯函数。
+- §8：C1 行记「P2 实测：手柄/标尺/条带都按左上原点 y 向下」；V3 行记滚轮只在光标位于
+  选中实例内时生效 + 事件必须被实例吞掉（FACTS §1.8 的实测依据）。
+- §11 追加校验记录：P2 的 `overlay-smoke.mjs` + `--only=` 令牌清单（同一行内列出令牌）。
 ## 2026-10-29 — P1 落地：预览区绑定 / 契约 id 说明 / §7 钩子 / V1-V3 决策
 
 - §3 预览绑定表补三行：预览区（`.page-frame` → `canvas.page-canvas` + `.textLayer`，

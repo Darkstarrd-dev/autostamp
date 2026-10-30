@@ -1,8 +1,9 @@
 # docs/FACTS.md — 实测事实（依赖与浏览器）
 
-> 最后核对：2026-10-29（本机 Windows + Go 1.26.5 + Chrome 151 + WebView2 Runtime）。
-> §1.5/§1.6/§4.1/§5.1 本轮新增并重跑；§1.1-§1.4、§2、§3、§4 的数值来自 2026-10-19/28
-> 的一次性探针（已删除，不可就地重跑，见 §5.2），P1-P5 会把它们重写进仓库探针。
+> 最后核对：2026-10-30（本机 Windows + Go 1.26.5 + Chrome 151 + WebView2 Runtime）。
+> §1.2/§1.3/§1.4 由 `tools/verify/pixel-matrix.mjs`（2026-10-29）与
+> `tools/verify/overlay-smoke.mjs`（2026-10-30）在仓库内重跑；§1.7 P1、§1.8 P2、
+> §2.3 切分、§4 导出体积表（预估断言，见 §4 末）均可就地重跑，命令见 §5.1。
 > 本文只记录**已执行验证**得到的事实；决策引用本文编号，不得凭记忆改写。
 > 未验证项一律标 `UNVERIFIED`。复现方式见 §5。
 
@@ -125,6 +126,40 @@
 - 样本体积（现场生成，不落仓库）：英文 5 页 54,763 B / 中文 4 页 186,950 B /
   混合型 23,935 B / 图片型 3 页 46,043 B。
 
+### 1.8 P2 叠加预览（实测 2026-10-30，`tools/verify/overlay-smoke.mjs`，分段 `--only=`）
+
+- **canvas 读回是预乘 uint8**：半透明印章必须先显式预乘（`round(a*r/255)`）再用
+  `source-over` 画；不预乘时 Chromium 会把「未预乘值」当预乘解，边缘出现暗环。
+  alpha=89 的渐变印章在 `normal`×opacity 1.0 下四角读数精确落在
+  `dst*(255-a)/255 + premul*a/255`（absdiff ≤ 1，样本 174,73,174）。
+- **16 模式 × {1.0,0.6,0.3} 全部命中**：脚本在页内用同一套 PDF/SVG 混合公式独立重算
+  一遍再与真实画布比对（不是只比上一轮输出）。非可分离分量模式（Hue/Saturation/
+  Color/Luminosity）走 `rgb↔HSL` 互换，`soft-light` 用 W3C 分段公式 —— 与
+  `ctx.filter` 的实现一致（因次两者互为参考，不是自证）。
+- **去背（D4）实测**（样本：`docs/ui/fixtures/seal.png` 400x400 白底红印章）：
+  alpha 覆盖 22%（未去背）→ 去背后 36%；600x600 渐变印章 alpha 76%、bbox 6..594、
+  150 dpi → 353.19 pt。规则见 `UI_SPEC §8` D4：`min(R,G,B) >= 60` 视为彩色并保留
+  alpha，白/灰置 0，边缘反算 `c -= (255-c)*min(255,255-min(c))/195`。一次性浏览器
+  探针三例（探针已删，数值现由 `overlay-smoke --only=despill` 的 alpha 计数钉住）：
+  98% → (255,166,240)@alpha 100%、100% → (220,0,0)@100%、90% → (280,0,0)@alpha 0%；
+  去背后依次 → (220,0,0)、(220,0,0)、整块丢弃；反算系数实测 0.456 / 0.902 / 0。
+- **骑缝条带（预览半边）**：`binding=right` 每页 1 条，宽 = 页宽 × 10%（样本页
+  458 pt → 45.8 pt）；`startOffset`（pt）位移**误差 0**；`alternate` 奇右偶左且
+  条带数 == 页数；逐页取印章不同列 → 与「整枚印章切 N 刀」按列对齐（≤1 px）；
+  `binding=none` → 0 条。坐标原点（C1 未评审默认）：`offset`/`pos`/手柄/条带一律
+  **左上原点、y 向下**（PDF pt），与 `#preview-ruler` 一致。
+- **V3 陷阱（滚轮缩放）**：光标落在**选中实例内部**时 wheel 被实例吃掉，若事件继续
+  冒泡到 `#preview-stage`，通用 wheel 会改 `zoom` 并整页重渲染，实测 `apply.scale`
+  读数被后写覆盖（旧行为 NaN→缺键）。→ `app-overlay.js:consumeWheel` 里
+  `stopPropagation()`，实例不缩放时同样不冒泡。
+- **range 输入会被步进规整**：`quality` 滑杆 `min=40 max=95 step=5`，脚本写 92 时
+  Chromium 回读 **90**（滑杆与数值框同步后同值）→ UI 只能表达 `40+5n`；预估与落盘
+  一律按该值。自定义 DPI（96..600，任意整数）走另一条输入框。
+- **体积预估 == FACTS §4 表**（前端派生、不请求，UI_SPEC E1）：150dpi q75 每页
+  123,796 B ±2%；300/150 dpi 比值 3.06 ±0.12；q40 行 328,844 B ±2%；页面积按
+  MediaBox 面积 / A4 面积缩放；`vector` 完全忽略 DPI/质量；离表 DPI 在相邻两行间
+  按对数插值（200 dpi 落在 150/300 行之间 ✓）。
+
 ## 2. 后端库：`github.com/pdfcpu/pdfcpu v0.16.3`（2026-10-19，Apache-2.0，纯 Go）
 
 `go.mod` 依赖：`spf13/cobra`、`google/jsonschema-go`、`hhrutter/tiff`、
@@ -243,6 +278,11 @@
 - 同一 writer 亦输出过含 `SMask` + `ExtGState /BM /Multiply /ca 0.6` 的 2 页骑缝章 PDF，
   渲染采样见 §1.3。
 
+- 前端「体积预估」（UI_SPEC E1，纯前端派生、不请求）按本表 × MediaBox 面积 / A4 面积
+  缩放。重跑（2026-10-30，`node tools/verify/overlay-smoke.mjs --only=export`）：
+  150dpi q75 每页 == 123,796 B（±2%）、300/150 比值 == 3.06、q40 行 == 328,844 B
+  （±2%）；离表 DPI 在相邻两行间按对数插值；`vector` 模式不受 DPI/质量影响。
+
 ### 4.1 骨架构建体积(实测 2026-10-29)
 
 |构建|命令|strip 后|
@@ -278,6 +318,9 @@
 |`go run ./tools/genfix`|mock 资产|重生成 `docs/ui/fixtures/{page,seal}.png`|
 |`node tools/verify/preview-smoke.mjs`|§1.1 §1.7|真 exe + headless：四类样本渲染、中文 CID 文本层、分页 chip/缩略图、`/api/pdf/raw` 会话边界 + Range|
 |`node tools/verify/pixel-matrix.mjs`|§1.3 §1.4|混合模式 × 透明度像素矩阵 + filter 污染断言（P2 重跑来源；本机 Chrome 151）|
+|`node tools/verify/overlay-smoke.mjs [--only=<open\|geometry\|despill\|drag\|strip\|filter\|export>]`|§1.3 §1.8|真 exe + 真 UI：上传印章→16 模式×{1.0,0.6,0.3}（页内独立重算比对）、去背 meta 计数、几何/拖拽/四角/旋转/滚轮、骑缝条带、`ctx.filter` 复位、导出体积预估 == §4|
+|`go test ./internal/api -run 'Seal'`|§2.6|`/api/pdf/seal/prepare` 词表 + `/api/pdf/seal/raw` 只发印章资产（owner 绑定）|
+|`go test ./internal/pdfcore -run 'PrepareSeal'`|§2.6|`PrepareSeal`/`SealMeta`/`SealBox`（去背/裁剪/重采样的后端等价实现，供对照）|
 |`go test ./internal/pdfcore -run 'Split'`|§2.3|切分词表 + 页尺寸断言（A4→297.5x842；`/Rotate 90`→421x595）|
 |`go test ./internal/api -run 'Split'`|AGENTS §6/§8.2|`/api/pdf/split` 的响应形状、词表 400、owner 边界、原资产仍可读|
 
@@ -286,9 +329,11 @@
 - §1.1-§1.4、§2、§3、§4 的原始数值来自一次性探针 `C:/AutoStamp/_scratch/pdfprobe/`
   （**仍在**，不是「已删除」——早先这句写错了；2026-10-29 实测：`pdfprobe/main.go`
   + `sample.pdf`/`cmap.pdf`/`cn.pdf`/`image3.pdf` + `go.mod`，`go run .` 可直接跑）。
-  仓库内对应断言进度：§1.1-§1.4 → `pixel-matrix.mjs` / `preview-smoke.mjs`（P2 已重跑，
-  §1.3/§1.4 标注重跑日期）；§2.3 切分几何 → `internal/pdfcore/split_test.go`（今日重跑）；
-  §2 的 `/BM` 注入与 §4 的体积表仍未搬（P4/P5）。
+  仓库内对应断言进度：§1.1-§1.4 → `pixel-matrix.mjs` / `preview-smoke.mjs` /
+  `overlay-smoke.mjs`（P2 全绿，§1.3/§1.4 标注重跑日期）；§2.3 切分几何 →
+  `internal/pdfcore/split_test.go`；§2.6 印章 prepare/raw → `internal/api` +
+  `internal/pdfcore` 测试；§4 的**缩放规则**由 `overlay-smoke --only=export` 钉住
+  （字节表本身仍是探针数值）；§2 的 `/BM` 注入仍未搬进仓库（P4）。
 - 浏览器采样方式(历史):omp 托管 headless Chromium + jsdelivr 动态 `import()` +
   base64 内存喂入 PDF + `ctx.getImageData` 采样;现行做法改为
   `tools/verify/cdp.mjs`(直连本机 Chrome 的 CDP,无 npm 依赖)。
@@ -300,5 +345,8 @@
 - `UNVERIFIED`:更窄包(只用 `pkg/pdfcpu` 子集)的体积下界。
 - `UNVERIFIED`:未安装 WebView2 Runtime 的机器的回退行为(窗口本身已在带 Runtime 的
   本机实测通过,见 §1.6)。
-- `UNVERIFIED`:2 拼 1 扫描页的**自动**版面判定(启发式:MediaBox 纵横比 > 0.7 且横排即判 2 拼)
+- `UNVERIFIED`:2 拼 1 扫描页的**自动**版面判定（启发式：MediaBox 纵横比 > 0.7 且横排即判 2 拼）
   —— P3 需带样本实测。
+- `UNVERIFIED`:去背规则（§1.8）对**白底照片类印章**会把整图判为白→丢弃；三种红印章
+  情形（98%/100%/90%）已实测通过，照片类只有「关掉 `seal.prepare.despill`」这条出路，
+  是否需要按色相分档尚未评审。
