@@ -140,6 +140,7 @@ html[data-state="empty"] #preview-stage, html[data-state="empty"] #page-pager { 
 /* state-driven surface visibility (UI_SPEC §1: the state machine drives the UI) */
 html[data-state="empty"] .btn, html[data-state="empty"] #preview-ruler, html[data-state="empty"] #pixel-readout { visibility: hidden; }
 html:not([data-state="stamp-selected"]):not([data-state="stamp-dragging"]):not([data-state="stamp-resizing"]) .instance .sel-box { display: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 html:not([data-state="crosspage"]) #panel-crosspage .body, html:not([data-state="crosspage"]) #strip-previews { display: none; }
 html[data-state="opened"] #panel-crosspage, html[data-state="opened"] #panel-split .field[data-mode] { opacity: 1; }
 html:not([data-state="crosspage"]):not([data-state="split-preview"]) #panel-crosspage summary { color: var(--muted); }
@@ -339,11 +340,12 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
       </div>
     </div>
 
-    <div id="preview-stage" data-split="off">
+    <div id="preview-stage" data-split="off"><div id="stamp-layer" aria-hidden="true"></div>
       <div class="page-frame" data-page="1">
         <canvas class="page-canvas" width="744" height="1052"></canvas>
         <div class="instance" data-instance="1" data-selected="true">
-          <div class="sel-box" style="left:196px;top:603px;width:150px;height:150px">
+          <div class="sel-box" role="group" style="left:196px;top:603px;width:150px;height:150px">
+            <span class="sr-only" data-i18n="stamp.box.aria" data-i18n-cn="选中印章实例的位置">Selected stamp instance position</span>
             <span class="handle" data-handle="nw"></span>
             <span class="handle" data-handle="ne"></span>
             <span class="handle" data-handle="sw"></span>
@@ -383,6 +385,7 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
               <button type="button" id="seal-despill-revert" class="btn" data-i18n="seal.despill.revert" data-i18n-cn="撤销">revert</button>
             </div>
             <div class="hintline" data-i18n="api.seal.prepare.despill.hint" data-i18n-cn="对白底扫描件即时去背；预览可撤销，预设保存时保留 alpha。">White-background keying applied live; reversible before save.</div>
+            <div class="hintline" data-i18n="seal.err.nosource" data-i18n-cn="先上传印章图片，再点撤销">Upload a seal image first, then revert</div>
           </div>
           <div class="field">
             <div class="flabel"><span data-i18n="api.seal.prepare.alphaTrim.ctl" data-i18n-cn="自动裁边">seal.prepare.alphaTrim</span><span class="tag">seal.prepare.alphaTrim</span></div>
@@ -406,8 +409,14 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
           </div>
           <div class="row">
             <button type="button" id="seal-upload" class="btn" data-i18n="seal.upload.btn" data-i18n-cn="上传印章 PNG">Upload seal PNG</button>
+            <span class="flabel"><span data-i18n="seal.meta.label" data-i18n-cn="印章元数据">Seal metadata</span></span>
+            <span class="chip" id="seal-meta">-</span>
+            <input id="seal-file-input" type="file" accept="image/*" hidden>
           </div>
-        </div>
+          <div class="hintline" data-i18n="seal.upload.hint" data-i18n-cn="去白底/自动裁边/重采样按上方参数处理；「撤销」会用原图重跑一次。">Keying, trim and resample follow the options above; revert re-runs from the source.</div>
+          <div class="hintline" data-i18n="seal.err.type" data-i18n-cn="印章图片必须是带透明通道的 PNG 或 JPEG">Stamp image must be PNG or JPEG with an alpha channel</div>
+          <div class="hintline" data-i18n="stamp.drag.hint" data-i18n-cn="拖动虚线框移动，四角缩放，顶部手柄旋转。">Drag the dashed box to move; corners resize; the top handle rotates.</div>
+          </div>
       </details>
 
       <details class="section" id="panel-instances" open>
@@ -987,6 +996,12 @@ window.__autoStampMock = (function () {
           ins.dataset.selected = String(k === S.selId);
           ins.dataset.mode = inst.mode;
           var box = mk("div", "sel-box");
+          box.setAttribute("role", "group");
+          var lab = mk("span", "sr-only");
+          lab.dataset.i18n = "stamp.box.aria";
+          lab.dataset.i18nCn = "选中印章实例的位置";
+          lab.textContent = "Selected stamp instance position";
+          box.appendChild(lab);
           ["nw", "ne", "sw", "se", "rot"].forEach(function (h) {
             var hs = mk("span", "handle"); hs.dataset.handle = h; box.appendChild(hs);
           });
