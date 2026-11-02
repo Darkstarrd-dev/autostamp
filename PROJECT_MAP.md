@@ -1,7 +1,8 @@
 # PROJECT_MAP.md — AutoStamp 代码地图
 
-> 最后核对：2026-10-30（P0/P0.5/P1 绿 + **P2 叠加预览**绿：`app-seal.js`、`app-overlay.js`、
-> 骑缝条带预览、导出体积预估；`app-crosspage.js` 仍是 P3 计划名，尚未创建）。
+> 最后核对：2026-11-02（P0/P0.5/P1/P2/P3/**P4 落盘**绿：`internal/api/apply.go`+`save.go`、
+> `internal/pdfcore/{apply,stamp,blend,pages,pxdims,validate}.go`、`tools/verify/apply-smoke.mjs`；
+> 骑缝落盘已绿，计划里的 `app-crosspage.js` 从未创建 —— 真实形态在 `app-overlay.js`+`app-shell.js`）。
 > 新增/删除包必须同步本文件（AGENTS §10.1）。阶段状态见 `docs/IMPLEMENTATION_PLAN.md §10`。
 
 ## 1. 可执行入口（根包 `main`）
@@ -21,8 +22,11 @@
 |(续)|`middleware.go`|中间链 `recoverLog → requestLog → hostGuard → gzip`；`hostGuard` 拒外部 `Host`（421 `bad_host`）、`strict` 时拒外部 `Origin`（403 `bad_origin`）；`gzipExt` 白名单（跳过 cmaps/wasm/PDF/PNG）|P0|
 |(续)|`browser.go`|`Browse(url)`：`rundll32 url.dll,FileProtocolHandler`（Windows）/ `xdg-open` 回退|P0|
 |(续)|`version.go`|`BuildInfo`（`debug.ReadBuildInfo` 的 VCS 戳：version/commit/go/os/arch）|P0|
-|`internal/api`|`register.go`|`Deps`、`NewMux`（注册静态资产 + `GET /api/health`、`GET/POST /api/settings`、P1 的 `POST /api/fs/pick`、`POST /api/pdf/open`、`GET /api/pdf/raw`；未接线的后续路由**不注册**，保留 `ServeMux` 的 405/404，FACTS §1.5）|P0+P1|
+|`internal/api`|`register.go`|`Deps`、`NewMux`（注册静态资产 + `GET /api/health`、`GET/POST /api/settings`、P1 的 `POST /api/fs/pick`、`POST /api/pdf/open`、`GET /api/pdf/raw`、P3 的 `POST /api/pdf/split`、P2 的 `POST /api/pdf/seal/prepare` + `GET /api/pdf/seal/raw`、**P4 的 `POST /api/pdf/apply` + `POST /api/pdf/save`**；未接线的后续路由**不注册**，保留 `ServeMux` 的 405/404，FACTS §1.5）|P0-P4|
 |（续）|`pdf.go`|P1 本地文件通道：`handlePick`（原生选择器 + `filePath` 直开授权）、`handleOpen`（grant/multipart 两形态 + 密码两错误码 + `SetRecent`）、`handleRaw`（`http.ServeContent` 的 Range/ETag + owner 绑定 404）、`pdfcore` 密码错误映射|P1|
+|（续）|`apply.go`|**P4 矢量落盘**：`handleApply`（`{assetId, instances[]}` → `pdfcore.Stamp` → 先 `Validate` 再注册，kind `applied`，失败删临时文件）、`resolveInstance`（词表逐项解析 + 400 分类：`bad_body`/`not_found`/`kind_denied`）、`(blend,opacity)` 分组、`Origin` 向前继承、`openResult` 复用 open 的响应形状|P4|
+|（续）|`save.go`|**P4 写盘**：`handleSave`（目标三选一：`targetPath` / `pathGrantId` / `replaceOriginal`，`replaceOriginal` 走 `tmpstore.Asset.Origin`）+ `fsx.AtomicWriteFunc` 原子写 + 目标校验（拒绝写进会话目录）|P4|
+|（续）|`apply_test.go` / `save_test.go`|apply 词表 400 分类、owner 边界、未知字段拒绝、空 instances 拒绝、响应 `kind:applied` + 页元数据；save 目标三选一/互斥、`Origin` 继承链（open→split→apply）、磁盘文件内容 == applied 字节、拒绝写会话目录|P4|
 |`internal/config`|`types.go`|`Settings`（`ui`/`overlay`/`split`/`crosspage`/`export`/`recent` 六组，字段名 = UI_SPEC 词表）|P0|
 |�|`defaults.go`|`Defaults()`（与 UI_SPEC §2 默认值一致，测试断言）|P0|
 |�|`sanitize.go`|枚举/范围校验 + clamp（越界修正并回报 warning；词表 = `allowedBlend`/`allowedDPI`/…）|P0|
@@ -32,13 +36,19 @@
 |（续）|`path.go`|路径校验（允许根白名单、符号链接解析、扩展名）|P0（P1 起用全量）|
 |（续）|`pick.go` / `pick_windows.go` / `pick_script.go` / `pick_other.go`|原生文件选择器：`PickFiles(ctx, PickOptions)` → PowerShell `Forms·FileDialog`（`-STA`、UTF-8 输出、`Cancel` 退出码 3 → `ErrPickCancelled`；`filter pdf|all`、`multi`、`startDir`），非 Windows → `ErrPickUnsupported`（501 `pick_unsupported`）|P1|
 |（续）|`pick_test.go` / `pick_windows_test.go`|脚本词表/旗标映射（`TestPickDialogFlags`、`TestPickDialogFilterVocabulary`）、`-STA` 必需、取消退出码、`parsePickScript` 解析|P1|
-|`internal/tmpstore`|`store.go`|会话资产库：`Add/AddFile/Get/List/Delete`（owner 绑定 + TTL 2h + 配额 256MiB/2GiB）、`index.json` 持久 + 过期清扫、`GrantPath/CheckGrant/Rename/Rights`（`pathGrantId`）、`ErrNotFound`/`ErrOwner`|P1（open/raw 已接线）|
+|`internal/tmpstore`|`store.go`|会话资产库：`Add/AddFile/Get/List/Delete`（owner 绑定 + TTL 2h + 配额 256MiB/2GiB）、`index.json` 持久 + 过期清扫、`GrantPath/CheckGrant/Rename/Rights`（`pathGrantId`）、`SetOrigin/OriginOf`（**P4**：资产来自哪个磁盘文件，split/apply 向前继承，`replaceOriginal` 用）、`ErrNotFound`/`ErrOwner`|P1+P4|
 |`internal/console`|`logger.go`|`slog` 封装（级别过滤、stderr、`-verbose`）|P0|
 |`internal/webx`|`json.go`|`Envelope{ok,data,code,error}` + `OK/Created/Fail` + `DecodeJSON`（`http.MaxBytesReader`）|P0|
 |（续）|`session.go`|`SessionHeader = X-AutoStamp-Session`：前端 `crypto.getRandomValues` 生成的 128-bit 令牌 = 资产/grant 的 owner 能力；`SessionOf` 校验格式（缺失 → 400 `bad_session`）、`NewToken` 服务端测试用|P0（P1 全线使用）|
 |`internal/pdfcore`|`read.go`|`Inspect(ctx, r, conf)`：页数、每页 MediaBox pt 尺寸/rotation/`hasFonts`/`hasXObject`、加密探测（`ErrNeedsPassword`/`ErrBadPassword` 再导出 pdfcpu 信号，`DefaultLimits` 显式限流）|P1|
 |(续)|`sealimg.go`|印章图通道：`PrepareSeal`(去白底 `despillWhite` despill → alpha 包围盒裁剪 `alphaBounds`/`cropNRGBA` → `scaleDPI` 重采样 + `maxSide` 上限；词表 `despill/alphaTrim/resampleDpi/targetDpi/maxSide`，扩展名按实际内容写)、`SealMeta`(src*/out* 尺寸与 DPI、`AlphaBBox`、`OpaqueRatio` 按**源图**计)、`SealBox`。|P2（骑缝条带切分未做，见 P3）|
 |(续)|`split.go`|自动切分：词表 `SplitAuto/SplitRowsCols/SplitCustom/SplitUnsplit` + `SplitSpec{Mode,Rows,Cols,CustomCuts,Veto}`；`PlanForSplit`/`CutPlanForPage`（display 空间,**不按 /Rotate 交换轴**，FACTS §2.3）、`PageIsSpread`(横排且 `w/h>AutoSpreadRatio=0.7`)、`SplitOnePage`（剔掉 pdfcpu 附带的原页）、`MergeCreateFile` 合并回一个 PDF、`sortByPageTail`（按名内页号升序 = reading order）|P3|
+|(续)|`stamp.go`|落盘几何与词表：`StampGeom{Scale,Anchor,OffX/OffY,PosX/PosY,CrossPage,Binding,StartOffset,Slot,SlotCount}` + `Box(Page)`（== `app-overlay.rectFor`，条带框高取**整枚印章**的比）、`ParseAnchor`/`ParseBinding`/`ParsePair`、`SealAspect`、`Strips(png,count)`（骑缝条带切片，stdlib 逐列裁切）、`StampInstance`、`ClampScale`|P3+P4|
+|(续)|`apply.go`|**落盘主路径** `Stamp(ctx, r, doc, instances)`：按外观分组 → 每组一次 pdfcpu pass → `newStamp` 把契约框翻译成 `model.Watermark{Pos:BottomLeft, Dx/Dy(y 翻转), ScaleAbs}`（FACTS §2.6）→ `BlendApply` 注入本 pass 新 GS 的 `/BM` → 断言页自身的 GS 未被污染|P4|
+|(续)|`blend.go`|`/BM` 注入层：`Blend` 16 名 ↔ PDF `/BM`、`BlendApply`、`ExtGStateKeysOf`/`StampGraphicStatesOf`（只注入本 pass 新建、`Artifact/Watermark` 引用的状态；共享对象不重写；已有别的 `/BM` 报错）、内容流 token 扫描器（`>>BDC` 无空格实测）|P4|
+|(续)|`pages.go`|pages 词表：`ParsePages`（`all`/`none`/`1,3`/`2-4` → 页号列表，越界拒绝），`/api/pdf/{apply,split,export}` 共用|P4|
+|(续)|`pxdims.go` + `validate.go`|`pxDims`（位图字节 → 尺寸，只解头部）、`Validate(ctx, path)` = pdfcpu `ValidateFile` + 显式限流（`DefaultLimits`）|P4|
+|(续)|`stamp_test.go` + `apply_test.go`|`Box` 几何镜像（九宫格锚点 / `pos` 通道 / 条带 `startOffset` + 装订边交替 / 非法值拒绝）、`TestStampStripBoxUsesWholeSealAspect`（写进内容流的 `cm` 数字必须来自整枚印章的比）、`TestStampWritesBMAndOpacity`、`TestStampKeepsAppearanceSeparateOnOnePage`、`TestStampDoesNotTouchPageOwnStates`、`TestStampRejectsBadRequests`|P4|
 |(续)|`read_test.go` / `sealimg_test.go` / `split_test.go`|`TestPrepareSeal*`（去背/裁剪/重采样/maxSide/拒绝/JPEG）、`TestSplitA4ToHalves`、`TestSplitQuarterGrid`、`TestSplitCustomFractions`、`TestSplitAutoCutsRotatedSpreadOnly`、`TestSplitAutoVetoKeepsPages`、`TestSplitRejectsUnknownMode`、`TestSortByPageTailOrdersNumericTails`、`TestCutPlanForPageKeepsDisplayAxes`|P1-P3|
 
 ## 3. `web/`（嵌入 + 前端）
@@ -55,6 +65,8 @@
 |`web/static/app-pager.js`|`#page-pager` 分页条（2026-10-29 P0.5 协议确认：chip + chip 内缩略图，无新增 id）：计数 chip（`pager.count` 走 `title`/`aria-label`）+ 每页一枚 `button.chip[data-page]`（`.pg-no` + `canvas.pg-thumb`，`IntersectionObserver` 懒渲染、重建时 `task.cancel()`）、`All` chip 写 `apply.pages`/`export.pages`|
 |`web/static/app-seal.js`|P2 印章图通道：`upload/prepare`（`POST /api/pdf/seal/prepare`，multipart + 页内选项 `seal.prepare.*`）、`revert()`（内存原图 → `despill:false` 重跑 = 「撤销去背」）、`bitmapOf(sealId)`（`/api/pdf/seal/raw` + `createImageBitmap`，给 overlay 合成）、`renderMeta`（chip 文案）、`probe('seals'/'count'/'meta')`。**去背在前端**（UI_SPEC D4 / FACTS §1.8 的反算规则：彩色保留、白/灰丢弃，`min(R,G,B)>=60` 判彩色，彩像素按 `max(0,min(255-c,255-60)/195)` 校正 RGB）|
 |`web/static/app-overlay.js`|P2 叠加层：`paint(ctx, info)`（先把干净页存进 `state.snapshot`，再把印章按 alpha 预乘 uint8 + `globalCompositeOperation` + `ctx.filter` 合成进同一 canvas；`save()/restore()` + 显式 `filter='none'`，FACTS §1.4）、`repaint()`（拖拽廉价重合成）、`stripGeometryFor/stripRectsFor`（骑缝条带：单边 right/双面 alternate，宽 = 页宽 ×10%，`startOffset` 位移，逐页不同列）、DOM affordance（`#stamp-layer .instance` + 四角/中心/旋转手柄）、`hitTest/selectAt/beginDrag/moveDrag/endDrag/consumeWheel`（V3：光标在选中实例内时 wheel = `apply.scale` 并 `stopPropagation`）、`parsePages`（`all/none/1,3/2-4`）、`imageDataOf/pixelsForRect`（给 verify 算像素）、`probe()`：`rects strips view affordance drag instancePixels selected filter snapshot canvasRect`（FACTS §1.8）|
+|（续）|`web/static/app-shell.js` 的 **P4 落盘通道**|`stampIntoPDF`（`POST /api/pdf/apply` → applied 资产 `adopt`，W2：实例挂到新资产上、`apply-undo` 可用）、`undoRoute('apply'|'split')`、`submitSave`（目标三选一）、`stampBodyOf()` 让 verify 直接读请求体、`probe('chain')` 打印链上 5 个 asset id|
+|（续）|`web/static/app-overlay.js` 的 **P4 快照身份**|`paint` 用 `state.surface = info.canvas` 决定快照归属（按**画布元素**，不按 page/scale/尺寸）—— 换文档必须重抓快照，AGENTS §5.18 / FACTS §1.9|
 |`web/static/app-i18n.js`|en/cn 文案表（由 `tools/verify/gen-i18n.mjs` 从 `docs/UI_SPEC.md §4` 生成，196 键，禁止手改）|
 |`web/static/style.css`|壳样式（两列密度 / 折叠态 / 控件表现代码）+ P1：分页条缩略图（`#page-pager canvas.pg-thumb`）、拖放高亮（`#preview[data-drag]`）|
 |`web/static/favicon.svg`|图标（`<link rel="icon">`，否则 Chromium 自动 404 `/favicon.ico`，FACTS §1.5）|
@@ -71,6 +83,7 @@
 |`tools/verify/pixel-matrix.mjs`|P2/P4 像素矩阵（页内算法独立重算 vs 真实画布；filter 污染回归；`--only=` 分段）——§1.3/§1.4 的仓库内重跑来源|
 |`tools/verify/overlay-smoke.mjs`|**P2 主校验**（真 exe + 真 UI + headless）：上传印章 → 16 模式 ×{1.0,0.6,0.3} → 几何/拖拽/四角/旋转/滚轮 → 骑缝条带 → `ctx.filter` 复位 → 去背计数 → 导出预估 == FACTS §4。分段令牌 `--only=<open\|geometry\|despill\|matrix\|drag\|strip\|filter\|export>`（缺省全跑）；`--reuse-build` 复用 `dist/autostamp-overlay-smoke.exe`（改前端后必须去掉该旗标重建）|
 |`tools/verify/preview-smoke.mjs`|P1 端到端：CDP `Page.printToPDF` 现场生成样本（英文多页文字 / 中文 CID / 混合 / 图片型无文字）→ 真 exe → 真 UI 打开（`#empty-path` + `#empty-open`）→ 画布像素、`getTextContent` 条数、`.textLayer` span 计数与层框宽度对齐、翻页/分页条/缩放、切分预览切点计数、vendor 资源 0 失败（FACTS §1.7）|
+|`tools/verify/apply-smoke.mjs`|**P4 主校验**（真 exe + 真 UI + headless）：回读一致性矩阵（48 组：落盘 → pdf.js 重渲染 == 独立 blend，FACTS §1.9）、骑缝落盘（逐页半枚 + 条带 bbox 四边 ≤1 pt）、切分→盖章→保存链（磁盘文件再 `fs/pick`+`open`）、撤销盖章/撤销切分。分段 `--only=<matrix|strip|chain|undo>`；改前端后别用 `--reuse-build`|
 |`tools/verify/cdp.mjs`|无依赖 CDP 客户端（launch Chrome → `page.*`/`Runtime.evaluate`）|
 |`tools/verify/webview-launch.mjs`|`-tags webview` 二进制真窗口启动断言（FACTS §1.6）|
 |`tools/verify/comprobe/main.go`|COM `CoInitializeEx` 实测探针（含 `-window` 真窗口泵消息）|

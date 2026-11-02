@@ -113,6 +113,9 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
   二选一（选锚点后 pos 归算）。**页内坐标约定（P2 实测；见 §8「页内坐标原点」行）**：
   display 空间、原点左上、y 向下（与 `#preview-ruler` 的「标尺原点在左上」一致）。
   落盘侧换算到 pdfcpu 的 y 向上 MediaBox（含 `/Rotate` 补偿），换算在 P4 apply 内做并有单测钉死。
+  - 二选一是**逐实例**的（实例上的 `geomMode`）：改 `pos` 输入框或方向键 → 该实例走 pos 通道
+    （`offset` 归零，落盘发 `pos` 不带 `anchor`）；改锚点/拖拽/缩角 → 走 anchor+offset 通道
+    （`pos` 只作派生读数）。预览与落盘共用同一套换算：`app-overlay.rectFor` == `pdfcore.StampGeom.Box`。
 - `api.apply.startOffset` 是骑缝条带沿装订边的起始偏移（pdfcpu `offset:0 -N`），与 `api.apply.offset` 独立。
 - `api.export.dpi/customDpi/quality` 仅 `mode=raster` 生效（页位图由前端回传，FACTS §2.4 无 rasterize）。
 - `api.open.pw`：UserPW/OwnerPW 都试；AES-256 链路 `UNVERIFIED`（FACTS §6）。
@@ -246,6 +249,10 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |app.shortcuts.btn|Shortcuts|快捷键|
 |app.title|AutoStamp|AutoStamp 印章|
 |app.upload.btn|Upload|上传文件|
+|split.undo.btn|Undo split|撤销切分|
+|apply.undo.btn|Undo stamping|撤销盖章|
+|apply.write.btn|Stamp into PDF|盖到 PDF|
+|apply.write.hint|Bakes the instances into a new session asset; the original file is untouched. Saving stamps first if anything is still unbaked.|把实例烘焙成新的会话 asset（原文件不动）；保存时若仍有未落盘实例会自动先盖章。|
 |asset.hint|asset ids|会话资产 ID（内部状态，只读）|
 |binding.alternate|Duplex: odd right / even left|双面：奇右偶左|
 |binding.none|No cross-page seal|无骑缝章|
@@ -278,8 +285,12 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |err.corrupt.hint|Not a PDF or damaged header: cannot open|不是 PDF 或文件头损坏，无法打开|
 |err.encrypted.hint|PDF is encrypted: password required|PDF 已加密，需要口令|
 |err.fix.ext.hint|Remove .bin suffix|移除 .bin 后缀|
+|err.apply.noDoc|no document is open|未打开文档|
+|err.apply.noSeal|the selected instance has no seal yet|该实例还没有印章|
 |err.pwEmpty.hint|password is empty|口令为空|
 |err.savePermission.hint|Cannot write the file: locked by another process|无法写入文件：被另一进程占用|
+|err.undo.empty|nothing to undo|没有可回退的步骤|
+|err.undo.newer|undo the newer step first|请先回退更后的一步|
 |esc.hint|close dialog / clear toast|关闭对话框 / 清除提示|
 |export.customDpi.placeholder|96..600|96..600|
 |export.dpi.custom|Custom|自定义|
@@ -300,6 +311,8 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |modal.close|Close|关闭|
 |nudge.hint|move 1pt (Shift: 10pt)|移动 1pt（Shift = 10pt）|
 |ok.saved|saved (atomic temp+rename, ValidateFile passed)|已保存（原子 temp+rename，ValidateFile 通过）|
+|ok.applied|stamped（已盖章，新 asset 已就绪）|已盖章（新 asset 就绪）|
+|ok.undoStep|reverted to the previous step|已回退到上一步|
 |open.hint|open a PDF|打开 PDF|
 |overlay.filter.note|ctx.filter is context state: reset to none per layer (FACTS §1.4).|注意：ctx.filter 是上下文状态，每层叠加前必须置 none（FACTS §1.4）。|
 |page.hint|jump to page|跳到某页|
@@ -487,6 +500,11 @@ FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 |V2|P1 分页条形态|仅 chip 分页条（P0.5 冻结形态）/ chip + chip 内缩略图（无新增 id）/ 独立缩略图侧栏（需新增契约 id）|已确认：chip + chip 内缩略图，都在 `#page-pager` 内（`button.chip[data-page]` 里的 `canvas.pg-thumb`，`IntersectionObserver` 懒渲染）|2026-10-29|ask 第 3 轮 pager|
 |V3|Ctrl+滚轮归属|P1 = 预览视图缩放，P2 起交给 `apply.scale`（推荐）/ 只留给印章 / 另立按键|已确认：P1 滚轮缩放视图；P2 起「光标在选中实例上」时滚轮 = `apply.scale`，页背景仍为视图缩放|2026-10-29|ask 第 3 轮 wheel|
 |C1|页内坐标原点（`pos`/`offset` 的 y 方向）|display 空间、原点左上、y 向下（推荐：与 `#preview-ruler` 一致，拖拽手柄也按它画）/ PDF 原生 y 向上（用户要换算心里有记）|未评审默认（P2 实测：手柄、标尺、条带都按左上原点；P4 落盘换算有单测钉死）|2026-10-29|待 ask 下一轮确认；不确认即按默认|
+|W1|印章何时真正写进 PDF（落盘时机）|「盖到 PDF」按钮 + 保存时自动补盖章（推荐）/ 只有按钮 / 保存时自动无按钮|已确认：按钮（`#apply-write`）+ 保存弹窗点「保存」时若有未落盘实例先自动 apply|2026-10-30|ask 第 4 轮 apply-trigger|
+|W2|盖章后实例叠加层的处理|切到已盖章 asset、清空已落盘实例（推荐）/ 保留可继续微调 / 保留但禁用编辑|已确认：切到已盖章 asset 并清空已落盘实例（预览显示 PDF 里已有的章，不会二次叠加）|2026-10-30|ask 第 4 轮 after-apply|
+|W3|撤销盖章入口|顶栏「撤销盖章」按钮（推荐）/ 实例行撤销 / 无撤销按钮|已确认：`#apply-undo`（另配 `#split-undo` 撤销切分；逐级回到上一个 asset）|2026-10-30|ask 第 4 轮 undo-entry|
+|W4|实例 pages 的落盘语义|按实例 pages 词表逐页写（推荐）/ 只写当前可见页|已确认：按实例 `pages` 词表逐页落章（与 P2 预览按 pages 绘制一致）|2026-10-30|ask 第 4 轮 pages-semantics|
+
 
 D2–D4、L1、CP1 已在 P0.5 第 1 轮确认（2026-10-29）；D1、I1、S1、E1 在第 2 轮确认（同日）。
 V1–V3 是 P1 开工前的形态问题，用第 3 轮确认（同日），因为它们改的是预览区/分页条的可见形态而非字段词表。
@@ -497,8 +515,8 @@ C1 是 P2 叠加层落地的坐标语义，本轮未评审：先按默认实现�
 ## 9. 与 AGENTS §6 的字段映射
 
 `AGENTS.md` §6 请求词表：`fs.pick{pathGrantId, owner, TTL, multi, filter, filePath}`、
-`pdf.open{pathGrantId, multipart, assetId}`、`pdf.split{auto, rows, cols, cutFractions, pages, vetoedPages}`、
-`pdf.seal/prepare{despill, alphaTrim, resampleDpi}`、`pdf.apply{assetId, sealId, blend, opacity, scale, pos, offset, rotation, pages, crossPage, startOffset, anchor}`、
+`pdf.split{assetId, splitMode(auto|rows-cols|custom|unsplit), rows, cols, customCuts[], splitVeto, vetoPages[], splitPages}`、
+`pdf.apply{assetId, instances[]: sealId blend opacity scale pos anchor offset rotation pages crossPage binding startOffset}`（实例是数组；`brightness/saturate` 不发送）、
 `pdf.export{assetId, dpi, customDpi, quality, mode, pages}`、`pdf.save{assetId, targetPath, pathGrantId, replaceOriginal}`、
 `seal/preset{presetName}`。`offset` 与 `startOffset` 独立；`brightness/saturate` 仅预览不落盘。
 

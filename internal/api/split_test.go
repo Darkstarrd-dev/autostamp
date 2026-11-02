@@ -205,6 +205,53 @@ func TestSplitCustomNeedsCuts(t *testing.T) {
 	}
 }
 
+// The chip row sends page numbers; a number that addresses no page must fail
+// instead of silently vetoing nothing (decision D3).
+func TestSplitVetoPagesVocabulary(t *testing.T) {
+	mux, _, _ := newTestMux(t)
+	session := newSession(t)
+	id := openUploadedPDF(t, mux, session, threePageA4(t))
+
+	if rec := splitJSON(t, mux, map[string]any{"assetId": id, "splitMode": "auto", "vetoPages": []int{4}}, session); rec.Code != http.StatusBadRequest {
+		t.Fatalf("vetoPages=4 on a 3-page document: status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+	if rec := splitJSON(t, mux, map[string]any{"assetId": id, "splitMode": "auto", "vetoPages": []int{0}}, session); rec.Code != http.StatusBadRequest {
+		t.Fatalf("vetoPages=0: status = %d, want 400", rec.Code)
+	}
+	rec := splitJSON(t, mux, map[string]any{"assetId": id, "splitMode": "auto", "vetoPages": []int{1, 2, 3}}, session)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("valid vetoPages = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+	// Auto-split on this fixture cuts nothing (three portrait pages), and the
+	// veto list must not turn the answer into a different shape.
+	if dims := splitDims(t, rec); len(dims) != 3 || dims[0] != "595x842" {
+		t.Errorf("vetoed auto-split changed the page shape: %v", dims)
+	}
+}
+
+// splitPages is the pages vocabulary: a bad range is 400, `none` is an honest
+// 400 (it selects nothing), and a valid list restricts the cut.
+func TestSplitPagesVocabularyThroughRoute(t *testing.T) {
+	mux, _, _ := newTestMux(t)
+	session := newSession(t)
+	id := openUploadedPDF(t, mux, session, threePageA4(t))
+
+	for _, bad := range []string{"1-9", "none", "all,none", "sideways"} {
+		rec := splitJSON(t, mux, map[string]any{"assetId": id, "splitMode": "rows-cols", "rows": 2, "cols": 1, "splitPages": bad}, session)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("splitPages=%q: status = %d, want 400: %s", bad, rec.Code, rec.Body.String())
+		}
+	}
+	rec := splitJSON(t, mux, map[string]any{"assetId": id, "splitMode": "rows-cols", "rows": 2, "cols": 1, "splitPages": "1,3"}, session)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("splitPages=1,3 = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+	// page 1 -> 2 rows, page 2 untouched, page 3 -> 2 rows = 5 pages
+	if dims := splitDims(t, rec); len(dims) != 5 {
+		t.Errorf("page shape = %v, want 5 pieces (only pages 1 and 3 cut)", dims)
+	}
+}
+
 func TestSplitNeedsSessionAndAsset(t *testing.T) {
 	mux, _, _ := newTestMux(t)
 	rec := splitJSON(t, mux, map[string]any{"assetId": "as1", "splitMode": "auto"}, "")

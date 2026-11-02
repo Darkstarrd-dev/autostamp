@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -233,6 +234,11 @@ func handleOpen(settings *config.Store, store *tmpstore.Store, log *slog.Logger)
 				failStoreError(w, err)
 				return
 			}
+			// The disk original is what replaceOriginal writes back onto;
+			// uploads deliberately get no origin (AGENTS §6 /api/pdf/save).
+			if err := store.SetOrigin(asset.ID, path); err != nil {
+				log.Warn("记录原文件路径失败", "asset", asset.ID, "err", err)
+			}
 		}
 
 		doc, err := inspectAsset(r.Context(), asset.Path, pw)
@@ -264,7 +270,9 @@ type splitBody struct {
 	Rows       int      `json:"rows"`
 	Cols       int      `json:"cols"`
 	CustomCuts []string `json:"customCuts"`
-	SplitVeto  *bool    `json:"splitVeto"` // pointer: "no" is a real answer
+	SplitVeto  *bool    `json:"splitVeto"`  // pointer: "no" is a real answer
+	VetoPages  []int    `json:"vetoPages"`  // decision D3: per-page veto chips
+	SplitPages string   `json:"splitPages"` // api.split.pages vocabulary (empty = all pages)
 }
 
 // splitTimeout bounds a cut run: pdfcpu works page by page, and a large
@@ -324,9 +332,33 @@ func handleSplit(store *tmpstore.Store, log *slog.Logger) http.HandlerFunc {
 			return
 		}
 		spec := pdfcore.SplitSpec{Mode: mode, Rows: body.Rows, Cols: body.Cols, CustomCuts: body.CustomCuts}
+		// api.split.pages (`all | none | 1-2,5`) restricts which pages may be
+		// cut. An empty selection is an error, not "all": silently cutting every
+		// page would be the opposite of what the box says.
+		if s := strings.TrimSpace(body.SplitPages); s != "" {
+			pages, err := pdfcore.ParsePages(s, doc.PageCount)
+			if err != nil {
+				webx.Fail(w, http.StatusBadRequest, "bad_body", "splitPages: "+err.Error())
+				return
+			}
+			if len(pages) == 0 {
+				webx.Fail(w, http.StatusBadRequest, "bad_body", "splitPages 选中的是 none：没有可切分的页")
+				return
+			}
+			spec.Pages = pages
+		}
 		if body.SplitVeto != nil {
 			spec.Veto = *body.SplitVeto
 		}
+		// The chip row sends page numbers, so they must address real pages:
+		// a stale or bogus number would silently veto nothing.
+		for _, n := range body.VetoPages {
+			if n < 1 || n > doc.PageCount {
+				webx.Fail(w, http.StatusBadRequest, "bad_body", fmt.Sprintf("vetoPages 页 %d 超出 1..%d", n, doc.PageCount))
+				return
+			}
+		}
+		spec.VetoPages = body.VetoPages
 
 		out, err := os.CreateTemp(store.Dir(), "split-*.pdf")
 		if err != nil {
@@ -356,6 +388,13 @@ func handleSplit(store *tmpstore.Store, log *slog.Logger) http.HandlerFunc {
 			failStoreError(w, err)
 			return
 		}
+		// A split is the same document, so its disk origin carries forward —
+		// replaceOriginal must still work after a cut.
+		if origin, err := store.OriginOf(body.AssetID, owner); err == nil && origin != "" {
+			if err := store.SetOrigin(asset.ID, origin); err != nil {
+				log.Warn("carry origin failed", "asset", asset.ID, "err", err)
+			}
+		}
 		log.Info("pdf split", "from", body.AssetID, "into", asset.ID, "mode", mode, "pages", newDoc.PageCount)
 		webx.Created(w, openResult{
 			AssetID: asset.ID,
@@ -372,7 +411,11 @@ func handleSplit(store *tmpstore.Store, log *slog.Logger) http.HandlerFunc {
 // If-Range and the weak ETag derived from the asset's mtime.
 func handleRaw(store *tmpstore.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		serveAssetRaw(w, r, store, tmpstore.KindSource)
+		// Every document copy the session can adopt is servable: after a split
+		// or a stamping pass the UI points pdf.js at the *new* asset, and the
+		// read-back check (AGENTS §8.4) has to see exactly those bytes.
+		serveAssetRaw(w, r, store,
+			tmpstore.KindSource, tmpstore.KindSplit, tmpstore.KindApplied, tmpstore.KindExport)
 	}
 }
 
@@ -388,7 +431,7 @@ func handleSealRaw(store *tmpstore.Store) http.HandlerFunc {
 // keeps the two byte channels apart: a seal id fetched through the PDF route
 // (or the other way round) is a client bug, not a miss, and answering 400 says
 // so instead of handing back a body the caller cannot use.
-func serveAssetRaw(w http.ResponseWriter, r *http.Request, store *tmpstore.Store, wantKind tmpstore.Kind) {
+func serveAssetRaw(w http.ResponseWriter, r *http.Request, store *tmpstore.Store, kinds ...tmpstore.Kind) {
 	owner, err := webx.SessionOf(r)
 	if err != nil {
 		webx.Fail(w, http.StatusBadRequest, "bad_session", err.Error())
@@ -411,15 +454,36 @@ func serveAssetRaw(w http.ResponseWriter, r *http.Request, store *tmpstore.Store
 		return
 	}
 	defer f.Close()
-	if asset.Kind != wantKind {
+	if !kindInSet(kinds, asset.Kind) {
 		webx.Fail(w, http.StatusBadRequest, "kind_denied",
-			"该 id 不是 "+string(wantKind)+" 资产（用对应的 raw 路由）")
+			"该 id 不是 "+kindSetMessage(kinds)+" 资产（用对应的 raw 路由）")
 		return
 	}
 	w.Header().Set("Content-Type", contentTypeFor(asset.Kind))
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Accept-Ranges", "bytes")
 	http.ServeContent(w, r, asset.ID, asset.Created, f)
+}
+
+// kindInSet answers whether an asset kind may be streamed by this route; the
+// kind check keeps the byte channels apart (seal PNG vs PDF document).
+func kindInSet(set []tmpstore.Kind, k tmpstore.Kind) bool {
+	for _, want := range set {
+		if want == k {
+			return true
+		}
+	}
+	return false
+}
+
+// kindSetMessage renders the allowed kinds for the error text so the front-end
+// can show which route the id belongs to.
+func kindSetMessage(set []tmpstore.Kind) string {
+	names := make([]string, 0, len(set))
+	for _, k := range set {
+		names = append(names, string(k))
+	}
+	return strings.Join(names, "/")
 }
 
 // contentTypeFor maps the asset kind to the media type the browser needs to
@@ -478,6 +542,9 @@ func failStoreError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		webx.Fail(w, http.StatusNotFound, "not_found", "文件不存在")
+	case errors.Is(err, tmpstore.ErrNotFound) || errors.Is(err, tmpstore.ErrOwner):
+		// An asset owned by another window answers as if it did not exist.
+		webx.Fail(w, http.StatusNotFound, "not_found", "assetId 不存在或已过期")
 	case strings.Contains(msg, "exceeds") || strings.Contains(msg, "limit") ||
 		strings.Contains(msg, "quota") || strings.Contains(msg, "too large"):
 		webx.Fail(w, http.StatusRequestEntityTooLarge, "payload_too_large", msg)

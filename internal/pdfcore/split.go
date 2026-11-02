@@ -42,7 +42,39 @@ type SplitSpec struct {
 	Rows       int
 	Cols       int
 	CustomCuts []string
-	Veto       bool // only meaningful with Mode == SplitAuto
+	Veto       bool  // only meaningful with Mode == SplitAuto
+	VetoPages  []int // per-page veto (decision D3): page numbers the user un-checked
+	Pages      []int // api.split.pages: the pages eligible for cutting (empty = all)
+}
+
+// vetoed reports whether this page was vetoed by the user. The global Veto
+// flag is the 一键否决 answer; VetoPages is the per-page list the chip row
+// produces, and both only matter for Mode == SplitAuto.
+func (s SplitSpec) vetoed(pageNr int) bool {
+	if s.Veto {
+		return true
+	}
+	for _, n := range s.VetoPages {
+		if n == pageNr {
+			return true
+		}
+	}
+	return false
+}
+
+// eligible answers whether this page may be cut at all (api.split.pages
+// vocabulary: `all | none | 1-2,5`). A page outside the selection keeps its
+// whole form, which is also what 切分页范围 means in the UI.
+func (s SplitSpec) eligible(pageNr int) bool {
+	if len(s.Pages) == 0 {
+		return true
+	}
+	for _, n := range s.Pages {
+		if n == pageNr {
+			return true
+		}
+	}
+	return false
 }
 
 // CutPlan is the resolved set of cut lines for one page, in **display space**
@@ -90,11 +122,14 @@ func PlanForSplit(spec SplitSpec, pg Page) (CutPlan, error) {
 	case "", SplitUnsplit:
 		return CutPlan{}, nil
 	case SplitAuto:
-		if spec.Veto || !PageIsSpread(pg) {
+		if !spec.eligible(pg.Number) || spec.vetoed(pg.Number) || !PageIsSpread(pg) {
 			return CutPlan{}, nil
 		}
 		return CutPlan{Vert: []float64{0.5}}, nil
 	case SplitRowsCols:
+		if !spec.eligible(pg.Number) {
+			return CutPlan{}, nil
+		}
 		rows, cols := spec.Rows, spec.Cols
 		if rows < 1 {
 			rows = 1

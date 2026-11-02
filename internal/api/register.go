@@ -51,6 +51,13 @@ func NewMux(d Deps) *http.ServeMux {
 	// P3: 自动切分. The body is a small JSON command (the split vocabulary), the
 	// bytes already live in the session store, so no upload cap is needed here.
 	mux.HandleFunc("POST /api/pdf/split", handleSplit(d.Assets, d.Log))
+	// P4: the seal write-back. Same shape as the response of /api/pdf/open so
+	// the UI can swap the asset; the body is the panel vocabulary (AGENTS §6),
+	// not a file upload, so no MaxBytesHandler here.
+	mux.HandleFunc("POST /api/pdf/apply", handleApply(d.Assets, d.Log))
+	// P4 write-back (AGENTS §6): the asset lands on the user's disk through
+	// fsx.AtomicWriteFunc, so a save is either complete or absent.
+	mux.HandleFunc("POST /api/pdf/save", handleSave(d.Assets, d.Log))
 	// Routes no later stage has implemented still match the static pattern, so
 	// they reply 405 (empty body) or 404 (static handler). The front-end
 	// reports those as http_405 / http_404 with the status text instead of a

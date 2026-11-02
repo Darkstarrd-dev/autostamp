@@ -80,6 +80,11 @@
     pending: null, // the open that asked for a password, so Retry can replay it
     lastGrant: "", // last pathGrantId the picker returned (readout chip)
     saveGrant: null, // pathGrantId for the save dialog's target (P4 writes it)
+    saveGrantPath: "", // the path the grant covers, so the text box can be edited
+    splitChain: null, // previous document snapshot for 撤销切分
+    applyChain: null, // previous document + instances for 撤销盖章
+    vetoed: new Set(), // D3: page numbers the split must skip
+    lastInfo: null, // the answer that opened the current document
   };
 
   const escapeHtml = (s) =>
@@ -324,7 +329,6 @@
       const mode = doc.createElement("span");
       mode.className = "chip";
       mode.dataset.role = "mode";
-      mode.textContent = inst.crossPage ? t("binding.right") && "cross-page" : "normal";
       mode.textContent = inst.crossPage ? "cross-page" : "normal";
       const sel = doc.createElement("button");
       sel.type = "button";
@@ -339,6 +343,9 @@
       });
       ul.append(li);
     }
+    // CP1: the strip zoom belongs to the selected instance's parameters, and
+    // renderInstances runs on every parameter edit, so this keeps it live.
+    renderStripPreviews();
   }
 
   function addInstance(name, params) {
@@ -350,6 +357,10 @@
       // settings.json only carries the group as the defaults for a new one.
       params: params || defaultParams(),
       sealId: null,
+      // U1: which position control this instance answers to. `pos` sends the
+      // page point; `anchor` sends corner + offset. The overlay keeps both in
+      // sync so one geometry shows in both boxes (UI_SPEC §8 U1).
+      geomMode: "anchor",
     };
     state.instances.push(inst);
     state.selected = inst.id;
@@ -387,6 +398,7 @@
       crossPage: src ? src.crossPage : false,
       params: src ? { ...src.params } : defaultParams(),
       sealId: src ? src.sealId : null,
+      geomMode: src ? src.geomMode || "anchor" : "anchor",
     };
     state.instances.push(inst);
     state.selected = inst.id;
@@ -444,8 +456,35 @@
     if (inst.params[field] === value) return;
     inst.params[field] = value;
     if (field === "api.apply.crossPage") inst.crossPage = Boolean(value);
+    // U1: the page-point box and the corner+offset pair describe one geometry.
+    // Typing a point switches this instance to `pos` mode (the offset box then
+    // means nothing, so it resets to "0,0" and the point the user typed is
+    // where the box starts); every other position edit - corner, offset, drag,
+    // corner-handle, wheel, rotation - answers to `anchor`, and the point box
+    // is recomputed from the canvas box so both boxes stay truthful.
+    if (field === "api.apply.pos") {
+      inst.geomMode = "pos";
+      inst.params["api.apply.offset"] = "0,0";
+      writeField("api.apply.offset", "0,0");
+    } else if (field === "api.apply.anchor" || field === "api.apply.offset") {
+      inst.geomMode = "anchor";
+    }
+    if (inst.geomMode === "anchor") syncPosBox(inst);
     renderInstances();
     notify("autostamp:param", { field, value, instance: inst.id });
+  }
+
+  // syncPosBox mirrors the canvas box into the page-point box. The overlay owns
+  // the geometry (anchor + offset + scale + seal aspect), so the shell asks it
+  // for the rect instead of re-deriving the corners here.
+  function syncPosBox(inst) {
+    const ov = window.__autoStampOverlay;
+    if (!ov || !ov.rectFor) return;
+    const box = ov.rectFor(inst);
+    if (!box) return;
+    const v = `${box.x.toFixed(2)},${box.y.toFixed(2)}`;
+    inst.params["api.apply.pos"] = v;
+    writeField("api.apply.pos", v);
   }
 
   // setParam is the drag/keyboard route: it writes the control (so the panel
@@ -727,6 +766,12 @@
       stage.dataset.drag = "off";
       handleFiles(e.dataTransfer ? e.dataTransfer.files : null);
     });
+    // P4 write-back. The two split buttons are siblings of the cut-fraction
+    // box; 盖到 PDF / 撤销盖章 live in the instance panel (UI_SPEC §7 ids).
+    q("#split-apply").addEventListener("click", () => runSplit());
+    q("#split-undo").addEventListener("click", () => undoSplit());
+    q("#apply-write").addEventListener("click", () => stampIntoPDF());
+    q("#apply-undo").addEventListener("click", () => undoStamping());
     // Ctrl+wheel: P2 owns it when the pointer is over the selected instance
     // (UI_SPEC §5 V3: the wheel then means apply.scale), otherwise it zooms
     // the view. passive:false keeps preventDefault legal.
@@ -870,16 +915,34 @@
       : `~ ${formatBytes(e.perPageBytes)}/page (raster ${e.dpi} dpi q${e.quality}, page area x${e.areaFactor.toFixed(2)} A4)`;
   }
 
-  // submitSave posts the real /api/pdf/save route. Until P4 registers it the
-  // server answers 404, and the toast shows that verbatim — no faked success.
+  // submitSave posts the real /api/pdf/save route (AGENTS §6). The target has
+  // exactly three channels and the server rejects an ambiguous request, so the
+  // front-end picks one: replaceOriginal for the confirmation modal, otherwise
+  // the native picker's grant while the text box still holds the picked path,
+  // otherwise the typed path itself.
+  //
+  // W1 已确认: an instance that is still only a preview gets baked first, so
+  // 保存 never silently drops what the user is looking at. A failed bake aborts
+  // the save - writing the document without the seal would be worse.
   async function submitSave(replaceOriginal) {
-    const body = {
-      assetId: state.file ? state.file.assetId || "" : "",
-      targetPath: readField("api.save.targetPath") || "",
-      replaceOriginal: Boolean(replaceOriginal),
-    };
+    if (state.instances.some((i) => i.sealId)) {
+      const baked = await stampIntoPDF({ quiet: true });
+      if (!baked) return;
+    }
+    if (!state.file) {
+      toast("error", t("err.apply.noDoc"));
+      return;
+    }
+    const typed = String(readField("api.save.targetPath") || "");
+    const body = { assetId: state.file.assetId, replaceOriginal: Boolean(replaceOriginal) };
+    if (!replaceOriginal) {
+      if (state.saveGrant && typed === state.saveGrantPath) body.pathGrantId = state.saveGrant;
+      else body.targetPath = typed;
+    }
     try {
       const res = await api.request("/api/pdf/save", { method: "POST", body });
+      state.assets.save = res && res.assetId ? res.assetId : state.file.assetId;
+      renderAssetHooks();
       setModal(null);
       setState("opened");
       toast("ok", res && res.message ? res.message : t("ok.saved"));
@@ -1021,25 +1084,51 @@
     if (!res || res.cancelled || !res.picks || !res.picks.length) return;
     const pick = res.picks[0];
     state.saveGrant = pick.pathGrantId;
+    state.saveGrantPath = pick.path;
     state.lastGrant = pick.pathGrantId;
     writeField("api.save.targetPath", pick.path);
     renderAssetHooks();
   }
 
   // adopt is the one document-change funnel: metadata from the server, pixels
-  // from pdf.js, and the state machine in one place.
-  async function adopt(info, pw) {
-    state.file = { assetId: info.assetId, name: info.name, size: info.size, pages: info.pages || [] };
-    state.assets.open = info.assetId;
+  // from pdf.js, and the state machine in one place. `opts.from` tells it
+  // whether this is a fresh open ("open") or a derived swap ("split"/"apply"):
+  // a derived swap keeps the document's title (a split/stamp is the same file)
+  // and drops nothing but the D3 veto chips, whose page numbers just changed.
+  // A fresh open must forget both undo chains, or 撤销 would re-point at a
+  // session asset that belongs to a different document.
+  async function adopt(info, pw, opts) {
+    // "open" is a fresh open, not a swap: only split/apply/export re-point the
+    // preview onto an asset that descends from the current document.
+    const derived = Boolean(opts && opts.from && opts.from !== "open");
+    // The server reports the raw MediaBox plus /Rotate. Everything the UI
+    // measures (pdf.js canvas, overlay frame, strip previews, estimate area)
+    // is the *display* frame, so the page list is normalised once here: swap
+    // the sides when /Rotate is 90 or 270 and forget the rotation, exactly as
+    // internal/pdfcore/stamp.go DisplaySize does on the write side.
+    const pages = normalisePages(info.pages || []);
+    info.pages = pages;
+    const name = derived ? (state.file && state.file.name) || info.name : info.name;
+    state.file = { assetId: info.assetId, name, size: info.size, pages };
+    state.lastInfo = info;
+    if (!derived) {
+      state.assets.open = info.assetId;
+      // A new document invalidates every derived asset id that is still on the
+      // screen; leaving stale ids would let Save point at a dead session file.
+      state.assets.split = "";
+      state.assets.apply = "";
+      state.assets.export = "";
+      state.assets.save = "";
+      state.splitChain = null;
+      state.applyChain = null;
+    } else {
+      state.assets[opts.from] = info.assetId;
+    }
+    state.vetoed = new Set();
     refreshEstimate();
-    // A new document invalidates every derived asset id that is still on the
-    // screen; leaving stale ids would let Save point at a dead session file.
-    state.assets.split = "";
-    state.assets.apply = "";
-    state.assets.export = "";
-    state.assets.save = "";
     renderFileChip();
     renderAssetHooks();
+    renderVetoChips();
     // The state flips *before* the first paint on purpose: #preview-stage is
     // display:none in the empty state (style.css), so pdf.js would otherwise
     // compute its fit-zoom against a zero-size container and the page would
@@ -1052,13 +1141,335 @@
       if (p.setPassword) p.setPassword(pw || "");
       await p.open(info);
     }
-    doc.dispatchEvent(new CustomEvent("autostamp:open", { detail: info }));
+    // The rail (app-pager) rebuilds on this event; a derived swap counts too,
+    // because the page count is what changed (split adds, stamp does not).
+    notify("autostamp:open", info);
+    renderStripPreviews();
     if (info.pages && info.pages.length && !info.pages.some((pg) => pg.hasFonts)) {
       // UI_SPEC 4: a document whose pages are only images has nothing to
       // extract; say so instead of letting the search box look broken.
       toast("warn", t("warn.noText.hint"));
     }
     return info;
+  }
+
+
+  // ---------- P4 write-back: split / stamping / save (AGENTS §6) ----------
+  //
+  // Every write-back route returns a *new* session asset, so undo is plain
+  // bookkeeping: the shell keeps the asset each step came from (plus, for
+  // stamping, the instance list that produced it) and re-points the preview at
+  // it. Nothing is replayed client-side, and tmpstore keeps the old file until
+  // its TTL, so 撤销 after a stamp restores exactly what the user saw.
+
+
+  // normalisePages keeps the UI frame and the write side from disagreeing about
+  // a rotated page: after this, width/height are the extent the user sees and
+  // rotation is 0.
+  function normalisePages(pages) {
+    return pages.map((pg) => {
+      const rot = Math.abs(Number(pg.rotation) || 0) % 180;
+      if (rot === 0) return { ...pg };
+      return { ...pg, width: Number(pg.height) || 0, height: Number(pg.width) || 0, rotation: 0 };
+    });
+  }
+
+  // resolvePages turns the pages vocabulary (UI_SPEC §2.2, shared by
+  // api.apply.pages and api.split.pages) into 1-based page numbers. "none"
+  // resolves to the empty list, which the routes report instead of cutting
+  // everything.
+  function resolvePages(raw, total) {
+    const v = String(raw === undefined || raw === null ? "all" : raw).trim();
+    if (v === "none") return [];
+    if (v === "" || v === "all") {
+      const all = [];
+      for (let i = 1; i <= total; i++) all.push(i);
+      return all;
+    }
+    const out = [];
+    v.split(/[,;\s]+/).forEach((tok) => {
+      if (!tok) return;
+      const m = tok.match(/^(\d+)(?:-(\d+))?$/);
+      if (!m) return;
+      const a = Number(m[1]);
+      const b = m[2] ? Number(m[2]) : a;
+      for (let i = Math.min(a, b); i <= Math.max(a, b); i++) {
+        if (i >= 1 && i <= total && out.indexOf(i) < 0) out.push(i);
+      }
+    });
+    return out;
+  }
+
+  // splitModeOf maps the panel's manual segment (UI_SPEC §2.2 words) onto the
+  // server vocabulary. "off" plus an on/auto checkbox means "let the heuristic
+  // decide"; "off" with auto off means the user's explicit 不切 answer.
+  function splitModeOf() {
+    const manual = readField("ui.split.mode") || "off";
+    if (manual === "v2") return "rows-cols";
+    if (manual === "h2") return "rows-cols";
+    if (manual === "grid") return "rows-cols";
+    return readField("api.split.auto") ? "auto" : "unsplit";
+  }
+
+  // splitGridOf honours the segment: 2-up LR is 1x2, 2-up TB is 2x1, and only
+  // "grid" reads the rows/cols boxes (otherwise those boxes would silently
+  // override what the segment says).
+  function splitGridOf(mode) {
+    if (mode === "v2") return { rows: 1, cols: 2 };
+    if (mode === "h2") return { rows: 2, cols: 1 };
+    return {
+      rows: Number(readField("api.split.rows")) || 1,
+      cols: Number(readField("api.split.cols")) || 1,
+    };
+  }
+
+  function cutsOf() {
+    return String(readField("api.split.cutFractions") || "")
+      .split(/[ ,;]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
+  // vetoedPagesOf is the D3 chip row: the pages the heuristic flagged (spread
+  // ratio) minus the ones the user clicked off. Chip state is keyed by page
+  // number; a page that stopped being a spread simply drops out.
+  function spreadPages() {
+    const out = [];
+    (state.file && state.file.pages ? state.file.pages : []).forEach((pg) => {
+      const w = Number(pg.width) || 0;
+      const h = Number(pg.height) || 0;
+      if (w > h && w / h > 0.7) out.push(Number(pg.number) || out.length + 1);
+    });
+    return out;
+  }
+
+  function renderVetoChips() {
+    const host = q("#split-veto");
+    if (!host) return;
+    host.textContent = "";
+    spreadPages().forEach((n) => {
+      const b = doc.createElement("button");
+      b.type = "button";
+      b.className = "btn ghost";
+      const on = state.vetoed.has(n);
+      b.dataset.vetoPage = String(n);
+      b.setAttribute("aria-pressed", String(on));
+      b.textContent = `#${n}${on ? ` ${t("chip.veto")}` : ""}`;
+      b.addEventListener("click", () => {
+        if (state.vetoed.has(n)) state.vetoed.delete(n);
+        else state.vetoed.add(n);
+        renderVetoChips();
+        notify("autostamp:veto", { page: n, vetoed: state.vetoed.has(n) });
+      });
+      host.appendChild(b);
+    });
+  }
+
+  function splitPagesFor(total) {
+    const picked = resolvePages(readField("api.split.pages"), total);
+    return picked.filter((n) => !state.vetoed.has(n));
+  }
+
+  // splitBodyOf is the /api/pdf/split request body (AGENTS §6). It is its own
+  // function so the button and probe("chain") can never drift apart.
+  function splitBodyOf() {
+    const total = ((state.file && state.file.pages) || []).length;
+    const grid = splitGridOf(readField("ui.split.mode"));
+    return {
+      splitMode: splitModeOf(),
+      rows: grid.rows,
+      cols: grid.cols,
+      customCuts: cutsOf(),
+      vetoPages: [...state.vetoed].sort((a, b) => a - b),
+      splitPages: splitPagesFor(total).join(",") || "none",
+    };
+  }
+  async function runSplit() {
+    if (!state.file) {
+      toast("error", t("err.apply.noDoc"));
+      return null;
+    }
+    const body = { assetId: state.file.assetId, ...splitBodyOf() };
+    let res;
+    try {
+      res = await api.request("/api/pdf/split", { method: "POST", body });
+    } catch (e) {
+      toast("error", `${e.code}: ${e.message}`);
+      return null;
+    }
+    // The cut is a new page set, so the pre-cut document is what 撤销切分
+    // re-opens. The veto chips reset because the page numbers moved.
+    state.splitChain = { info: state.lastInfo, mode: readField("ui.split.mode") };
+    await adopt(res, "", { from: "split" });
+    toast("ok", t("split.ok"));
+    return res;
+  }
+
+  async function undoSplit() {
+    if (!state.splitChain || !state.splitChain.info) {
+      toast("warn", t("err.undo.empty"));
+      return false;
+    }
+    const info = state.splitChain.info;
+    state.splitChain = null;
+    await adopt(info, "", { from: "open" });
+    state.assets.open = info.assetId;
+    state.assets.split = "";
+    toast("ok", t("ok.undoStep"));
+    return true;
+  }
+
+  // stampBodyOf assembles one /api/pdf/apply entry per instance (AGENTS §6).
+  // Geometry follows the instance's mode (decision U1): `pos` sends the page
+  // point and deliberately omits anchor/offset, `anchor` sends the corner +
+  // offset and omits pos. The server's precedence rule is the same.
+  function stampBodyOf() {
+    return state.instances
+      .filter((i) => i.sealId)
+      .map((i) => {
+        const p = i.params || {};
+        const entry = {
+          blend: p["api.apply.blend"] !== undefined ? p["api.apply.blend"] : readField("api.apply.blend"),
+          opacity: numAt(p, "api.apply.opacity", "api.apply.opacity"),
+          scale: numAt(p, "api.apply.scale", "api.apply.scale"),
+          rotation: numAt(p, "api.apply.rotation", "api.apply.rotation"),
+          pages: p["api.apply.pages"] !== undefined ? p["api.apply.pages"] : readField("api.apply.pages"),
+          crossPage: Boolean(p["api.apply.crossPage"]),
+          sealId: i.sealId,
+        };
+        if (Boolean(p["api.apply.crossPage"])) {
+          entry.binding = p["ui.crosspage.binding"] !== undefined ? p["ui.crosspage.binding"] : readField("ui.crosspage.binding");
+          entry.startOffset = numAt(p, "api.apply.startOffset", "api.apply.startOffset");
+        }
+        if (i.geomMode === "pos") entry.pos = p["api.apply.pos"] !== undefined ? p["api.apply.pos"] : readField("api.apply.pos");
+        else {
+          entry.anchor = p["api.apply.anchor"] !== undefined ? p["api.apply.anchor"] : readField("api.apply.anchor");
+          entry.offset = p["api.apply.offset"] !== undefined ? p["api.apply.offset"] : readField("api.apply.offset");
+        }
+        return entry;
+      });
+  }
+
+  function numAt(params, field, fallbackField) {
+    const v = params && params[field] !== undefined ? params[field] : readField(fallbackField);
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // stampIntoPDF bakes the instances into a new asset, then clears them (W2):
+  // the document the user is looking at *is* the stamped one now, so leaving
+  // the instances on screen would double-draw the seal and every later Save
+  // would stamp it a second time.
+  async function stampIntoPDF(opts) {
+    if (!state.file) {
+      if (!(opts && opts.quiet)) toast("error", t("err.apply.noDoc"));
+      return null;
+    }
+    const instances = stampBodyOf();
+    if (!instances.length) {
+      if (!(opts && opts.quiet)) toast("warn", t("err.apply.noSeal"));
+      return null;
+    }
+    let res;
+    try {
+      res = await api.request("/api/pdf/apply", { method: "POST", body: { assetId: state.file.assetId, instances } });
+    } catch (e) {
+      toast("error", `${e.code}: ${e.message}`);
+      return null;
+    }
+    state.applyChain = {
+      info: state.lastInfo,
+      instances: state.instances.map((i) => ({
+        id: i.id, name: i.name, sealId: i.sealId, crossPage: i.crossPage, geomMode: i.geomMode,
+        params: { ...(i.params || {}) },
+      })),
+      selected: state.selected,
+    };
+    state.instances = [];
+    state.selected = null;
+    state.nextInstance = 1;
+    renderInstances();
+    await adopt(res, "", { from: "apply" });
+    if (!(opts && opts.quiet)) toast("ok", t("ok.applied"));
+    return res;
+  }
+
+  async function undoStamping() {
+    if (!state.applyChain || !state.applyChain.info) {
+      toast("warn", t("err.undo.empty"));
+      return false;
+    }
+    const chain = state.applyChain;
+    state.applyChain = null;
+    state.instances = chain.instances;
+    state.selected = chain.selected;
+    state.nextInstance = chain.instances.reduce((m, i) => Math.max(m, Number(i.id) || 0), 0) + 1;
+    renderInstances();
+    await adopt(chain.info, "", { from: "open" });
+    state.assets.open = chain.info.assetId;
+    state.assets.apply = "";
+    toast("ok", t("ok.undoStep"));
+    return true;
+  }
+
+  // renderStripPreviews is CP1's per-page zoom: each page shows the strip slice
+  // it would print, at the binding edge, so `startOffset` and the alternate
+  // sides are visible before anything is written. The source is the seal
+  // bitmap (already fetched by app-seal) plus the page's own aspect.
+  function renderStripPreviews() {
+    const host = q("#strip-previews");
+    if (!host) return;
+    host.textContent = "";
+    const inst = selectedInstance();
+    if (!inst || !inst.params || !inst.params["api.apply.crossPage"]) return;
+    const img = window.__autoStampSeal && window.__autoStampSeal.bitmapOf
+      ? window.__autoStampSeal.bitmapOf(inst.sealId)
+      : null;
+    if (!img) return;
+    const params = inst.params;
+    const pages = state.file && state.file.pages ? state.file.pages : [];
+    const binding = params["ui.crosspage.binding"] || "right";
+    const count = pages.length || 1;
+    pages.forEach((pg, k) => {
+      const useLeft = binding === "alternate" && Number(pg.number) % 2 === 0;
+      const box = doc.createElement("div");
+      box.className = "strip";
+      const cv = doc.createElement("canvas");
+      const dw = displayDims(pg);
+      const zoom = 1.6;
+      const stripW = Math.max(1, Math.round((Number(params["api.apply.scale"]) || 0.2) * dw.width / count * zoom));
+      const stripH = Math.max(1, Math.round(stripW * (img.height / img.width)));
+      cv.width = stripW;
+      cv.height = stripH;
+      const ctx = cv.getContext("2d");
+      // The page side of the strip first, then the seal slice on top: same
+      // blend semantics as the main canvas, so the zoom shows what will print.
+      const src = window.__autoStampPreview && window.__autoStampPreview.sealSnapshot
+        ? window.__autoStampPreview.sealSnapshot(pg.number)
+        : null;
+      if (src) ctx.drawImage(src, 0, 0, stripW, stripH);
+      const sx = (img.width * k) / count;
+      const sw = img.width / count;
+      ctx.globalAlpha = Math.min(1, Math.max(0, Number(params["api.apply.opacity"]) || 1));
+      ctx.globalCompositeOperation = "source-over";
+      const offY = Math.max(0, Math.min(stripH, Number(params["api.apply.startOffset"]) || 0)) * zoom;
+      ctx.drawImage(img, sx, 0, sw, img.height, 0, offY, stripW, stripH);
+      box.appendChild(cv);
+      const label = doc.createElement("span");
+      label.className = "chip";
+      label.textContent = `#${pg.number} ${useLeft ? "l" : "r"}`;
+      box.appendChild(label);
+      host.appendChild(box);
+    });
+  }
+
+  // displayDims mirrors internal/pdfcore/stamp.go DisplaySize: the page extent
+  // the user sees, i.e. MediaBox with /Rotate applied (UI_SPEC §8 C1 frame).
+  function displayDims(pg) {
+    const w = Number(pg.width) || 0;
+    const h = Number(pg.height) || 0;
+    const rot = Math.abs(Number(pg.rotation) || 0) % 180;
+    return rot === 0 ? { width: w, height: h } : { width: h, height: w };
   }
 
   function renderFileChip() {
@@ -1193,6 +1604,44 @@
       case "labels":
         return qa("[data-i18n]").map((el) => ({ key: el.getAttribute("data-i18n"), text: el.textContent.trim() }))
           .filter((x) => x.text);
+      case "chain":
+        // Write-back bookkeeping the verify scripts read: which asset is live,
+        // what each route last produced, and whether an undo step is armed.
+        // Nothing is inferred here - it is exactly what the buttons use.
+        return {
+          current: state.file ? state.file.assetId : "",
+          open: state.assets.open,
+          split: state.assets.split,
+          apply: state.assets.apply,
+          save: state.assets.save,
+          splitUndoArmed: Boolean(state.splitChain && state.splitChain.info),
+          applyUndoArmed: Boolean(state.applyChain && state.applyChain.info),
+          vetoed: [...state.vetoed].sort((a, b) => a - b),
+          spreadPages: spreadPages(),
+          instances: state.instances.map((i) => ({
+            id: i.id, sealId: i.sealId || null,
+            geomMode: i.geomMode || "anchor", crossPage: Boolean(i.crossPage),
+          })),
+          stampBody: stampBodyOf(),
+          splitBody: splitBodyOf(),
+        };
+      case "strips": {
+        const host = q("#strip-previews");
+        const kids = host ? [...host.children] : [];
+        return {
+          count: kids.length,
+          strips: kids.map((c) => {
+            const cv = c.querySelector ? c.querySelector("canvas") : null;
+            return cv ? { w: cv.width, h: cv.height } : null;
+          }),
+        };
+      }
+      case "pageMeta":
+        return (state.file && state.file.pages)
+          ? state.file.pages.map((pg) => ({
+            number: pg.number, width: pg.width, height: pg.height, rotation: pg.rotation,
+          }))
+          : [];
       default:
         throw new Error(`unknown probe: ${name}`);
     }
@@ -1226,6 +1675,22 @@
     // the chain exercises exactly what a real open does (state flip, asset
     // bookkeeping, preview.open) instead of poking the preview module directly.
     setParam, setSealForSelected, notify, adopt,
+    // P4: the write-back channel + the D3 chip row, so the verify scripts drive
+    // the same buttons the user clicks.
+    runSplit, undoSplit, stampIntoPDF, undoStamping, stampBodyOf, splitBodyOf,
+    vetoPage: (n) => {
+      if (state.vetoed.has(n)) state.vetoed.delete(n);
+      else state.vetoed.add(n);
+      renderVetoChips();
+      return [...state.vetoed];
+    },
+    setGeomMode: (id, mode) => {
+      const inst = instanceById(id);
+      if (!inst) return null;
+      inst.geomMode = mode === "pos" ? "pos" : "anchor";
+      if (inst.geomMode === "anchor") syncPosBox(inst);
+      return inst.geomMode;
+    },
   };
 
   if (doc.readyState === "loading") doc.addEventListener("DOMContentLoaded", boot);

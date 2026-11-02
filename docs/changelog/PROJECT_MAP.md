@@ -3,6 +3,20 @@
 > `PROJECT_MAP.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-11-02 — P4 落盘：api 三行 + pdfcore 六行 + 前端两行续 + apply-smoke 行
+
+- 顶部「最后核对」改 2026-11-02（P4 绿），并注明 `app-crosspage.js` 从未创建。
+- `internal/api` 新增 `apply.go` / `save.go` / `apply_test.go`+`save_test.go` 三行；
+  `register.go` 行的「未接线的后续路由不注册」注记更新为 P0-P4（apply/save 已注册）。
+- `internal/pdfcore` 新增 `stamp.go`、`apply.go`、`blend.go`、`pages.go`、
+  `pxdims.go`+`validate.go`、`stamp_test.go`+`apply_test.go` 六行；`sealimg.go` 行的
+  「骑缝条带切分未做」注记去掉（条带在 `stamp.go:Strips`）。
+- `internal/tmpstore` 行加 `SetOrigin/OriginOf`（资产来自哪个磁盘文件，split/apply 继承）。
+- `web/static` 加两行续：`app-shell.js` 的 P4 落盘通道（`stampIntoPDF`/`undoRoute`/
+  `submitSave`/`stampBodyOf`/`probe('chain')`）、`app-overlay.js` 的 P4 快照身份
+  （`state.surface` 按画布元素，见 AGENTS §5.18 / FACTS §1.9）。
+- `tools/verify` 新增 `apply-smoke.mjs` 行（分段令牌见 AGENTS §8）。
+
 ## 2026-10-30 — P2 叠加预览：新增 app-seal.js / app-overlay.js 两行，tools 表补三个脚本
 
 - 顶部「最后核对」改为 2026-10-30：P0/P0.5/P1 绿 + **P2 叠加预览**绿。

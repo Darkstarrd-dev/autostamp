@@ -428,6 +428,11 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
             <button type="button" id="instance-duplicate" class="btn" data-i18n="instances.duplicate.btn" data-i18n-cn="复制">Duplicate</button>
             <button type="button" id="instance-delete" class="btn danger" data-i18n="instances.delete.btn" data-i18n-cn="删除">Delete</button>
           </div>
+          <div class="row">
+            <button type="button" id="apply-write" class="btn primary" data-i18n="apply.write.btn" data-i18n-cn="盖到 PDF">Stamp into PDF</button>
+            <button type="button" id="apply-undo" class="btn ghost" data-i18n="apply.undo.btn" data-i18n-cn="撤销盖章">Undo stamping</button>
+          </div>
+          <div class="hintline" data-i18n="apply.write.hint" data-i18n-cn="把实例烘焙成新的会话 asset（原文件不动）；保存时若仍有未落盘实例会自动先盖章。">Bakes the instances into a new session asset; the original file is untouched. Saving stamps first if anything is still unbaked.</div>
         </div>
       </details>
       <details class="section" id="panel-overlay" open>
@@ -589,6 +594,7 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
             <div class="row">
               <input data-field="api.split.cutFractions" type="text" size="12" value="0.5" aria-label="cutFractions">
               <button type="button" id="split-apply" class="btn" data-i18n="split.apply.btn" data-i18n-cn="切分预览">Split preview</button>
+              <button type="button" id="split-undo" class="btn ghost" data-i18n="split.undo.btn" data-i18n-cn="撤销切分">Undo split</button>
             </div>
             <div class="hintline" data-i18n="api.split.cutFractions.hint" data-i18n-cn="0..1 的相对分数，可多个（逗号分隔）；>1 或 >=1 会被拒绝（pdfcpu 实测）。">Relative fractions 0..1, comma separated; pdfcpu rejects >= 1.</div>
           </div>
@@ -1113,6 +1119,12 @@ window.__autoStampMock = (function () {
       inp.addEventListener("focus", function () { selectInstance(k); });
       var badge = mk("span", "chip");
       badge.textContent = inst.mode === "crosspage" ? "cross-page" : "normal";
+      if (inst.baked) {
+        var bk = mk("span", "chip");
+        bk.dataset.i18n = "apply.write.btn"; bk.dataset.i18nCn = "盖到 PDF";
+        bk.textContent = "baked";
+        li.appendChild(bk);
+      }
       var rm = mk("button", "btn danger");
       rm.dataset.i18n = "instances.delete.btn"; rm.dataset.i18nCn = "删除";
       rm.textContent = "x";
@@ -1458,6 +1470,32 @@ window.__autoStampMock = (function () {
         toast("split.ok", "split preview ready: " + S.pages.length + " pages (result page set replaces the original once trimmed)", "ok");
         layout(); draw(); readouts();
       }
+    });
+    q("#apply-write").addEventListener("click", function () {
+      var need = S.instances.filter(function (i) { return !i.baked; });
+      if (!need.length) { toast("err.apply.noSeal", "the selected instance has no seal yet", "err"); return; }
+      need.forEach(function (i) { i.baked = true; });
+      S.p["apply.assetId"] = "a-" + Math.random().toString(36).slice(2, 8);
+      toast("ok.applied", "stamped " + need.length + " instance(s) into " + S.p["apply.assetId"], "ok");
+      buildInstances(); readouts();
+    });
+    q("#apply-undo").addEventListener("click", function () {
+      var any = S.instances.filter(function (i) { return i.baked; });
+      if (!any.length) { toast("err.undo.empty", "nothing to undo", "err"); return; }
+      any.forEach(function (i) { i.baked = false; });
+      toast("ok.undoStep", "reverted to the previous step", "ok");
+      buildInstances(); readouts();
+    });
+    q("#split-undo").addEventListener("click", function () {
+      if (!S.splitOn) { toast("err.undo.newer", "undo the newer step first", "err"); return; }
+      S.splitOn = false; S.pages = mkPages(5);
+      toast("ok.undoStep", "reverted to the previous step", "ok");
+      layout(); draw();
+    });
+    q("#save-confirm").addEventListener("click", function () {
+      if (!S.p["open.assetId"]) { toast("err.apply.noDoc", "no document is open", "err"); return; }
+      var pending = S.instances.filter(function (i) { return !i.baked; });
+      if (pending.length) toast("ok.applied", "stamp first: " + pending.length + " instance(s) are baked before the write", "ok");
     });
     q("#pos-center").addEventListener("click", function () {
       var vb = viewBox(), g = S.geo[S.selId];

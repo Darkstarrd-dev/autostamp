@@ -2,6 +2,26 @@
 
 > `docs/FACTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-02 — P4 实测：新增 §1.9（回读一致性）与 §2.6（落盘几何）
+
+- 新增 **§2.6**（落盘几何，2026-11-02 重跑）：`model.Watermark` 的 `Pos:BottomLeft` +
+  `Dx/Dy` 写在 MediaBox 空间（y 向上），换算只有 `Dy = dispH - box.Y - box.H`，
+  **不加旋转量**（pdfcpu 自己用 `PageRot` + `ContentBytesForPageRotation` 包掉 `/Rotate`）；
+  条带框的**纵横比必须取自整枚印章**（`SealAspect`），否则切条后会把半枚印成 1:1。
+  实测写进内容流的 `cm` 数字：普通实例 `150.0/452.75`，骑缝条带 `535.5/742.5`。
+- 新增 **§1.9**（回读一致性）：applied 资产重新喂 pdf.js，同一对颜色在 pdf.js 里独立
+  blend 与真实落盘像素一致 → 16 模式 ×{1.0,0.6,0.3} 的 48 组**最大 Δ = 2**
+  （@ hard-light ×0.6，阈值 ≤2；取印章框中部避开抗锯齿）。
+- §2.2 补记：pdfcpu v0.16.3 写出的 GS 确实带 `/BM` + `/ca`（注入是 `/BM` 的唯一出口）；
+  页自身的 ExtGState 不得重写（`TestStampDoesNotTouchPageOwnStates`）；内容流里 GS 标签
+  紧贴 `>>`（`/GS0 <<BDC` 无空格），token 扫描器按此实测。
+- §6.1 新增两行 UNVERIFIED：400 dpi 印章位图回读、A4 面积页 300 dpi 预估（矩阵样本非 A4）；
+  既有 `/Rotate 90` 盖章页项保留。
+- §5.1 登记 `tools/verify/apply-smoke.mjs`（分段令牌 `--only=<matrix|strip|chain|undo>`）。
+- §4.1 加「重跑（2026-11-02，P4 全量）」表：WebView2 strip **20,059,648 B**、控制台未
+  strip 25,159,168 B、`web/static` 5,725,434 B；相对 P0 骨架净增 12,714,496 B，并说明
+  §2 的 11.06 MB 是「整包 `pkg/api`」上界（本项目只 import 用到的子集）。P1 的 8.4/9.9 MB
+  预估值标注为「已被实测取代」。
 
 ## 2026-10-30 — P2 实测：新增 §1.8、§4 预估重跑、§5.1 加脚本、§6 加两条 UNVERIFIED
 

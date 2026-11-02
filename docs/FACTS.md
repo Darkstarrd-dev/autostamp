@@ -1,9 +1,9 @@
 # docs/FACTS.md — 实测事实（依赖与浏览器）
 
-> 最后核对：2026-10-30（本机 Windows + Go 1.26.5 + Chrome 151 + WebView2 Runtime）。
+> 最后核对：2026-11-02（本机 Windows + Go 1.26.5 + Chrome 151 + WebView2 Runtime）。
 > §1.2/§1.3/§1.4 由 `tools/verify/pixel-matrix.mjs`（2026-10-29）与
 > `tools/verify/overlay-smoke.mjs`（2026-10-30）在仓库内重跑；§1.7 P1、§1.8 P2、
-> §2.3 切分、§4 导出体积表（预估断言，见 §4 末）均可就地重跑，命令见 §5.1。
+> §1.9 P4 回读、§2.3 切分、§2.6 落盘几何、§4 导出体积表（预估断言，见 §4 末）均可就地重跑，命令见 §5.1。
 > 本文只记录**已执行验证**得到的事实；决策引用本文编号，不得凭记忆改写。
 > 未验证项一律标 `UNVERIFIED`。复现方式见 §5。
 
@@ -160,6 +160,32 @@
   MediaBox 面积 / A4 面积缩放；`vector` 完全忽略 DPI/质量；离表 DPI 在相邻两行间
   按对数插值（200 dpi 落在 150/300 行之间 ✓）。
 
+### 1.9 P4 落盘回读与快照身份（实测 2026-11-02，`tools/verify/apply-smoke.mjs`，分段 `--only=`）
+
+- **回读像素矩阵 48 组全过**：`盖到 PDF` 后把 applied 资产交给 pdf.js 重渲染，取样像素
+  等于同一对颜色在同族渲染器里独立 blend 的参考值。实测最大 Δ = **2**（@ hard-light × 0.6），
+  阈值 ≤ 2；样本底 (217,230,255)、印章 `#c8181c` (200,24,28)。
+- **叠加层的快照必须按「画布元素」识别**（不是按 page/scale/size）。`app-preview.js:renderCurrent`
+  每次渲染都新建 `canvas.page-canvas` 并 `stage.replaceChildren(frame)`，所以画布元素身份
+  = 文档身份的信号。旧的 key（`page|scale|dpr|canvas.width|canvas.height`）看不到「文档换了」：
+  盖章前后同一页、同一 zoom、同一尺寸 → key 不变 → `repaint()` 把**上一份文档的位图**
+  重新画回新画布。实测（改前）落盘后的画布**整页 0 命中**印章色（6 pt 步长扫全页），
+  而同一份 applied 字节在独立 pdf.js 里渲染命中 7,921 px、首个印章像素在 (150,300)；
+  改成按元素识别后：DOM 画布命中 21,904 px、首个像素 (251,502) = pt(150,300) × 1.67 ✓。
+- 因此验收脚本取样前必须 `preview.redraw()` 一次（它才是「换画布」的事件）；不 redraw
+  读到的是旧文档的位图。`sample(..., 'page')` = 快照（未叠加），`'composite'` = 画布。
+- **pdf.js 三种读法一致**：`data:` 直喂字节 / `url:` + `httpHeaders`（会话令牌）/ 真 UI 画布，
+  三者像素相同（同一份 applied 文件）→ 落盘产物与预览所见等同（需求 4 的落盘面）。
+- **骑缝落盘**（两页样本 + 水平双色印章）：页 1 条带 = 印章**左**半 (24,190,70)、
+  页 2 = 右半 (210,40,90)，Δ 0；条带 59.50 × 59.50 pt，x ∈ [535.5, 595.0]，y ∈ [40, 99.5]，
+  四边误差 ≤ 1 pt（框内是印章、框外 2 pt 是底）。
+- 落盘文件字节数（样本）：单页 applied 2,267 B；两页（切分+盖章）applied 3,240 B。
+- **落盘后的 PDF 里印章是 `/Artifact <</Subtype /Watermark /Type /Pagination >>BDC … EMC`**，
+  pdf.js 正常渲染该标记内容（上面 48 组就是证据）。但 pdfcpu 写文件默认用 object stream +
+  FlateDecode：直接对原始字节 grep `/Watermark`、`/Fm0`、`cm /GS0` 全部**找不到**
+  （`objstm=true`、`flate=true` 实测），要读内容只能用 pdfcpu 自己的路径
+  （`ctx.PageContent` / `pdfcpu.ExtractPageContent`），别用字节文本搜索下结论。
+
 ## 2. 后端库：`github.com/pdfcpu/pdfcpu v0.16.3`（2026-10-19，Apache-2.0，纯 Go）
 
 `go.mod` 依赖：`spf13/cobra`、`google/jsonschema-go`、`hhrutter/tiff`、
@@ -243,6 +269,28 @@
   引入 `pkg/api`（`ImageWatermark`+`AddWatermarks`+`Validate`+`Cut`+`Merge`）探针
   strip 后 12,254,720 B → **净 +11.06 MB**（未 strip 17,147,392 B）。
 
+### 2.6 落盘几何与放置语义（实测 2026-11-02，`internal/pdfcore/apply.go` + `apply_test.go`）
+
+- `model.Watermark{Pos: types.BottomLeft, Dx, Dy, Scale, ScaleAbs: true, InpUnit: types.POINTS}`
+  写出的内容流是 `q 1 0 0 1 Dx Dy cm /GS0 gs /Fm0 Do Q`：`Dx/Dy` = **MediaBox 空间**（y 向上）
+  里 Form 的左下角。把 UI 的「左上原点、y 向下」换算过去只需要一次 y 翻转：
+  `Dy = dispH - box.Y - box.H`，**不含任何旋转量**（实测见下条）。
+- 实测（595x842 一页、`scale .15`、`anchor tl`、`offset 150,300`）：写入
+  `150.00000 452.75000` → 按 `dispH - 300 - 89.25` 计算 ✓；pdf.js 独立渲染后印章框落在
+  display (150,300)-(239,389)，首个印章像素在 (150,300) ✓（scale 1 渲染，命中 7,921 px）。
+- **条带框的纵横比来自「整枚印章」，不是切片**：595x842、`scale .2`、`startOffset 40`、
+  整枚 60x30（比 0.5 → 切片 30x30，比 1）→ 正确写入 `535.50000 742.50000`
+  （= `595 - 119/2`、`842 - 40 - 119*0.5`）；若按切片的比算，框高变成 119，写入变成
+  `535.5 683`（低了一整个条带高）—— 断言 `TestStampStripBoxUsesWholeSealAspect` 钉死，
+  变异试验（把切片比塞回去）实测 FAIL。
+- `OnTop: true` + `Mode: WMImage`：印章在页面内容之上；pdfcpu 会把整页内容
+  （含印章的 Artifact 块）包进 `/Rotate` 归一包装（`model.Watermark.PageRot` +
+  `ContentBytesForPageRotation`，源码实测），所以 `Dx/Dy` 说的是**显示空间**的数，
+  旋转只是那层包装的事。**印章落在 `/Rotate 90` 页面上的落盘实测仍 `UNVERIFIED`（§6）**。
+- 一次 pass 的约束（已登记 AGENTS §5.16）：pdfcpu 的 `AddWatermarksSliceMap` 对同一页
+  要求外观一致（`Opacity` 不同会拒绝：实测报 “inconsistent Opacity: got 1, want 0.6”），
+  所以按 `(blend, opacity)` 分组多次 pass；每组各得自己的 GS 字典 ✓（`apply_test.go` 断言）。
+
 ## 3. 前端资产体积（`pdfjs-dist@6.4.299` tarball 实测）
 
 获取方式（本机实测 2026-10-28，node v24.18.0 / npm 11.16.0）：
@@ -293,9 +341,22 @@
 
 - P0 阶段 `web/static` 只有壳(100 KB,无 PDF 资产),所以上面就是「Go + 壳 + WebView2
   绑定」的下界;P1 塞进 pdf.js 最小集(§3:core+worker+cmaps ≈ 2.8 MB)后,
-  预计控制台构建 ≈ 8.4 MB、WebView2 构建 ≈ 9.9 MB。
+  曾**预估**控制台构建 ≈ 8.4 MB、WebView2 构建 ≈ 9.9 MB —— 该预估已被下面的实测取代。
 - 复现:`powershell -NoProfile -File build.ps1`(带/不带 `-Tag webview`,带版本戳 +
   `winres` 图标资源)。
+
+**重跑(2026-11-02,P4 全量:pdfcpu + pdf.js 全量资产 + P2/P4 前端)**:
+
+|东西|命令|实测|
+|---|---|---|
+|WebView2 strip 二进制|`build.ps1 -Task stripped`(`-tags webview -trimpath -ldflags "-s -w"`)|**20,059,648 B**(≈19.1 MiB)|
+|控制台二进制(未 strip)|`go build -o dist/autostamp.exe .`|25,159,168 B|
+|`web/static` 全量|`Get-ChildItem -Recurse web\static \| Measure-Object -Sum`|5,725,434 B|
+
+- 相对 P0 骨架(7,345,152 B)的**净增 12,714,496 B**,其中内嵌前端资产 5,725,434 B、
+  其余 ≈6.99 MB 是 pdfcpu 子集 + `pdfcore` + P2/P4 后端。§2 的「整包 `pkg/api` 净增
+  11.06 MB」是**上界**(探针拉了全部子包),本项目只 import 用得到的子集,实测更低。
+- 复现:`powershell -NoProfile -File build.ps1`(末尾 `sizes` 段直接列 `dist` 体积)。
 
 ### 4.2 版本戳与身份(实测 2026-10-29)
 
@@ -319,10 +380,13 @@
 |`node tools/verify/preview-smoke.mjs`|§1.1 §1.7|真 exe + headless：四类样本渲染、中文 CID 文本层、分页 chip/缩略图、`/api/pdf/raw` 会话边界 + Range|
 |`node tools/verify/pixel-matrix.mjs`|§1.3 §1.4|混合模式 × 透明度像素矩阵 + filter 污染断言（P2 重跑来源；本机 Chrome 151）|
 |`node tools/verify/overlay-smoke.mjs [--only=<open\|geometry\|despill\|drag\|strip\|filter\|export>]`|§1.3 §1.8|真 exe + 真 UI：上传印章→16 模式×{1.0,0.6,0.3}（页内独立重算比对）、去背 meta 计数、几何/拖拽/四角/旋转/滚轮、骑缝条带、`ctx.filter` 复位、导出体积预估 == §4|
-|`go test ./internal/api -run 'Seal'`|§2.6|`/api/pdf/seal/prepare` 词表 + `/api/pdf/seal/raw` 只发印章资产（owner 绑定）|
-|`go test ./internal/pdfcore -run 'PrepareSeal'`|§2.6|`PrepareSeal`/`SealMeta`/`SealBox`（去背/裁剪/重采样的后端等价实现，供对照）|
+|`go test ./internal/api -run 'Seal'`|§2.1 §1.8|`/api/pdf/seal/prepare` 词表 + `/api/pdf/seal/raw` 只发印章资产（owner 绑定）|
+|`go test ./internal/pdfcore -run 'PrepareSeal'`|§2.1|`PrepareSeal`/`SealMeta`/`SealBox`（去背/裁剪/重采样的后端等价实现，供对照）|
 |`go test ./internal/pdfcore -run 'Split'`|§2.3|切分词表 + 页尺寸断言（A4→297.5x842；`/Rotate 90`→421x595）|
 |`go test ./internal/api -run 'Split'`|AGENTS §6/§8.2|`/api/pdf/split` 的响应形状、词表 400、owner 边界、原资产仍可读|
+|`node tools/verify/apply-smoke.mjs [--only=<matrix\|strip\|chain\|undo>]`|§1.9 §2.6|真 exe + 真 UI：`盖到 PDF` → applied 资产重渲染的 48 组像素矩阵、骑缝落盘逐页半枚 + 条带 bbox 四边、切分→盖章→保存链（磁盘文件再 open）、撤销盖章/撤销切分|
+|`go test ./internal/pdfcore -run 'Stamp'`|§2.2 §2.6|落盘写 `/BM`+`/ca`、多外观分 pass 各得自己的 GS、页面自己的 GS 不被污染、条带框比来自整枚印章（`TestStampStripBoxUsesWholeSealAspect`）、非法请求拒绝|
+|`go test ./internal/api -run 'Apply\|Save'`|AGENTS §6|`/api/pdf/apply` 词表 + owner 边界 + 400 分类；`/api/pdf/save` 目标三选一、`Origin` 继承、原子写|
 
 ### 5.2 尚未搬进仓库的历史探针
 
@@ -331,9 +395,10 @@
   + `sample.pdf`/`cmap.pdf`/`cn.pdf`/`image3.pdf` + `go.mod`，`go run .` 可直接跑）。
   仓库内对应断言进度：§1.1-§1.4 → `pixel-matrix.mjs` / `preview-smoke.mjs` /
   `overlay-smoke.mjs`（P2 全绿，§1.3/§1.4 标注重跑日期）；§2.3 切分几何 →
-  `internal/pdfcore/split_test.go`；§2.6 印章 prepare/raw → `internal/api` +
+  `internal/pdfcore/split_test.go`；§2.1 印章 prepare/raw → `internal/api` +
   `internal/pdfcore` 测试；§4 的**缩放规则**由 `overlay-smoke --only=export` 钉住
-  （字节表本身仍是探针数值）；§2 的 `/BM` 注入仍未搬进仓库（P4）。
+  （字节表本身仍是探针数值）；§2 的 `/BM` 注入 + 落盘几何已搬进仓库（§2.6 +
+  `internal/pdfcore/apply_test.go`，2026-11-02）。
 - 浏览器采样方式(历史):omp 托管 headless Chromium + jsdelivr 动态 `import()` +
   base64 内存喂入 PDF + `ctx.getImageData` 采样;现行做法改为
   `tools/verify/cdp.mjs`(直连本机 Chrome 的 CDP,无 npm 依赖)。
@@ -350,3 +415,7 @@
 - `UNVERIFIED`:去背规则（§1.8）对**白底照片类印章**会把整图判为白→丢弃；三种红印章
   情形（98%/100%/90%）已实测通过，照片类只有「关掉 `seal.prepare.despill`」这条出路，
   是否需要按色相分档尚未评审。
+
+- `UNVERIFIED`:印章落在 `/Rotate 90` 页面上的落盘几何 —— pdfcpu 的 `PageRot` +
+  `ContentBytesForPageRotation` 旋转包装是源码读过的，但没有跑过「旋转页 + 印章 →
+  pdf.js 回读」的像素断言（P4 的矩阵样本全是 `rot=0` 页）。

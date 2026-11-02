@@ -3,6 +3,44 @@
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-11-02 — P4 落盘契约：§5 加决策 17/18，§6 加两行路由，§11 加两行速查
+
+- §5 新增决策 17（落盘坐标 = 显示空间 + 一次 y 翻转；条带框纵横比取整枚印章）与
+  决策 18（**快照按画布元素拥有**：`app-overlay` 的 `state.surface = info.canvas`，
+  不按 page/scale/尺寸判断归属，否则换文档后快照永不重抓）。
+- §6 表内 `POST /api/pdf/apply`（实例数组、按外观分 pass、注册前 `Validate`）与
+  `POST /api/pdf/save`（`targetPath`/`pathGrantId`/`replaceOriginal` 三选一）两行改「已实现」。
+- §11 速查加「改落盘/撤销/保存」行；「改叠加层/印章通道」行加 §1.9 与快照引用。
+- §8 的 P4 验收：`node tools/verify/apply-smoke.mjs`（48 组回读矩阵 + 骑缝落盘 +
+  保存链 + 撤销）；`build.ps1 -Task verify` 的脚本清单随之加 `apply-smoke.mjs`（八项）。
+- 本轮修掉两处 P4 前端回归：`adopt` 的派生旗标把 `from:"open"` 误判成派生
+  （换文档不清 undo 链、不记 open 资产），以及被吞掉的 `autostamp:open` 事件
+  （分页 rail 因此 0 chip，`preview-smoke` 16 项失败）；`shell-smoke` 的 save 断言改成
+  「客户端守卫（`err.apply.noDoc`，不发请求）+ Node 侧 envelope（`bad_session`/`bad_body`）」。
+
+
+## 2026-10-30 — build.ps1 修 stderr 升级异常；P4 半截改动修绿（vet/test/全量）
+
+- `build.ps1` 停在 `go vet` 行的根因：PS5.1 下脚本顶部的 `$ErrorActionPreference='Stop'` 会把
+  `& go ... 2>&1` 合并进错误流的原生 stderr 升级为终止异常 `NativeCommandError`——脚本死在
+  `Invoke-Native` 调用处，后续任务全部消失。修复：`Invoke-Native` 与 `go version -m` 探针内部
+  临时把首选项放宽为 `Continue`（`finally` 还原），原生命令成败只由 `$LASTEXITCODE` 判定；
+  UTF-8 BOM 保持不变。
+- P4 半截改动（工作区未提交）的编译/vet 错误修绿：
+  - `blend.go` `BlendApply` 还在调旧签名 `stampGraphicStates(content)`（已改为
+    `(ctx,pageDict)→(map,error)`）→ `used, err := stampGraphicStates(ctx, pageDict)`；
+  - `appendContent` 断言的 `types.IndirectObject` 在 pdfcpu v0.16.3 不存在
+    （`types.go:554` 实名为 `IndirectRef`）→ `types.IndirectRef`；
+  - `ParseBlend` 格式串写串成 `...%16 模式词表之一...%q`（vet 报 `%16` unknown verb、join 参数
+    未绑）→ `16 种混合模式之一（%s）...%q` 并传入词表与原始输入；
+  - `save.go:175` `return` 行尾多一个 `)`（syntax error: unexpected )）。
+- 过时契约断言更新（AGENTS §7 要求，不 re-pin）：`/api/pdf/save` 已接线（P4），
+  `register_test.TestUnimplementedRouteKeepsRouterReply` 仍钉在它上面（POST 得 400 不是 405）
+  → 探针改钉未接线的 `/api/pdf/apply`（POST→405、GET→404）；`shell-smoke` 的 save 断言由
+  「router 405 文本」改为断言信封错误码 `bad_body`（无 opened 文档时的真错误，仍不是假成功）。
+- 实测：`go vet ./...` 无输出；`go test ./...` 全绿（api/app/config/console/fsx/pdfcore/tmpstore/web ok）；
+  `node tools/verify/shell-smoke.mjs` OK；全量 `build.ps1` 退出码 0，整份日志 0 个 FAIL 行。
+
 ## 2026-10-30 — P2 叠加预览落地：§5 新增 12-15 / §6 seal 行改实测 / §8 新增第 10 项 / §3 §11 修正
 
 - §3 目录：`web/static` 补 `app-seal.js`、`app-overlay.js`（此前只列 P1 那几个文件）。

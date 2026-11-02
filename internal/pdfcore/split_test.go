@@ -165,6 +165,56 @@ func TestSplitAutoVetoKeepsPages(t *testing.T) {
 	}
 }
 
+// 逐页否决（D3）：只有被点掉的页不切，其余判定页照旧切分。
+func TestSplitAutoVetoByPageKeepsOnlyThatPage(t *testing.T) {
+	got := runSplit(t, buildTestPDF(t), SplitSpec{Mode: SplitAuto, VetoPages: []int{3}})
+	if got.PageCount != 3 {
+		t.Fatalf("pageCount = %d, want 3（否决第 3 页后不应切分）", got.PageCount)
+	}
+	for i, d := range dims(got) {
+		if d == [2]float64{210.5, 595} || d == [2]float64{421.5, 595} {
+			t.Errorf("page %d was cut (%v) although it was vetoed", i, d)
+		}
+	}
+	if d := dims(got)[2]; d[0] != 595 || d[1] != 842 {
+		t.Errorf("vetoed page dims = %v, want the untouched 595x842 spread (rotated)", d)
+	}
+	if got.Pages[2].Rotation != 90 {
+		t.Errorf("vetoed page rotation = %d, want 90（否决不应改动页的旋转）", got.Pages[2].Rotation)
+	}
+
+	// 否决一个没有被判定为 2 拼的页：切分结果不变。
+	kept := runSplit(t, buildTestPDF(t), SplitSpec{Mode: SplitAuto, VetoPages: []int{1}})
+	if kept.PageCount != 4 {
+		t.Errorf("pageCount = %d, want 4（第 1 页本来就不切，否决它不改变结果）", kept.PageCount)
+	}
+}
+
+// 切分页范围（api.split.pages）：只有所在页参与切分，其余页原样进入结果。
+func TestSplitPagesSelectsCuttablePages(t *testing.T) {
+	got := runSplit(t, buildTestPDF(t), SplitSpec{Mode: SplitRowsCols, Rows: 2, Cols: 1, Pages: []int{1}})
+	d := dims(got)
+	if len(d) != 4 { // page 1 -> 2 halves, pages 2+3 whole
+		t.Fatalf("pageCount = %d, want 4: %v", len(d), d)
+	}
+	for _, piece := range d[:2] {
+		if piece[0] != 595 || piece[1] != 421 {
+			t.Errorf("page-1 half = %v, want [595 421]", piece)
+		}
+	}
+	for _, piece := range d[2:] {
+		if piece != [2]float64{595, 842} {
+			t.Errorf("untouched page = %v, want [595 842]", piece)
+		}
+	}
+
+	// auto 的选择范围不含 2 拼页时：完全不切。
+	kept := runSplit(t, buildTestPDF(t), SplitSpec{Mode: SplitAuto, Pages: []int{1, 2}})
+	if kept.PageCount != 3 {
+		t.Errorf("pageCount = %d, want 3（2 拼页不在选择范围就不切）", kept.PageCount)
+	}
+}
+
 func TestSplitRejectsUnknownMode(t *testing.T) {
 	in, doc := writeFixture(t, buildTestPDF(t))
 	out := filepath.Join(t.TempDir(), "split.pdf")

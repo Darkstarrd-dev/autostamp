@@ -260,7 +260,7 @@ func TestSettingsWriteIsAtomic(t *testing.T) {
 func TestUnimplementedRouteKeepsRouterReply(t *testing.T) {
 	mux, _, _ := newTestMux(t)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/pdf/save", strings.NewReader(`{"assetId":"a"}`)))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/pdf/export", strings.NewReader(`{"assetId":"a"}`)))
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405 from the static pattern", rec.Code)
 	}
@@ -271,7 +271,7 @@ func TestUnimplementedRouteKeepsRouterReply(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/pdf/save", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/pdf/export", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("GET on the same path = %d, want 404", rec.Code)
 	}

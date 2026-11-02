@@ -16,8 +16,9 @@
 //   * 1280x720 and 1440x900 stay free of horizontal overflow
 //   * settings round-trip: the shell's PATCH is visible in GET /api/settings,
 //     an out-of-range value is clamped and echoed back as a toast warning
-//   * the unimplemented /api/pdf/save route surfaces the router's status reply
-//     (no fake success), and the toast is announced to AT (role=status)
+//   * the wired /api/pdf/save route surfaces a real JSON envelope error when
+//     there is no opened asset (no fake success), and the toast is announced
+//     to AT (role=status)
 //
 // Usage: node tools/verify/shell-smoke.mjs [--reuse-build] [--keep-profile]
 // Exit: 0 = pass.
@@ -380,7 +381,13 @@ async function main() {
   if (instData.one !== 1) bad("last instance must survive deletion: " + inst);
   if (instData.lastDelete !== null) bad("deleting the last instance must be refused, got " + instData.lastDelete);
 
-  // ---------- routes that do not exist yet must not fake success ----------
+  // ---------- a wired route must not fake success ----------
+  // /api/pdf/save is implemented (P4). Two separate truths:
+  //  * the shell refuses to save when no document is open (client-side guard,
+  //    err.apply.noDoc) — it must not send a request with no assetId, and it
+  //    must not pretend it succeeded;
+  //  * a request that *does* reach the server without an assetId answers the
+  //    JSON envelope error (bad_body), not the old router 405 text.
   const saveFail = await pageErr(`(function(){
     var s = window.__autoStampShell;
     s.setParams({"api.save.targetPath": "C:/nope/x.pdf"});
@@ -390,8 +397,20 @@ async function main() {
   await evaluate(`document.querySelector("#save-confirm").click()`);
   await new Promise((r) => setTimeout(r, 600));
   const saveToast = await json("window.__autoStampShell.probe('toast')");
-  if (!saveToast.open || saveToast.level !== "error") bad("/api/pdf/save must surface a real error toast: " + JSON.stringify(saveToast));
-  if (!/405/.test(saveToast.text)) bad("the save toast must carry the router's status reply verbatim, got: " + saveToast.text);
+  if (!saveToast.open || saveToast.level !== "error") bad("/api/pdf/save with no document must surface an error toast: " + JSON.stringify(saveToast));
+  // The guard is the UI_SPEC §4 state error (err.apply.noDoc), not a code
+  // string and not a fake success: the shell refuses to send assetId-less JSON.
+  if (!/no document is open|未打开文档/.test(saveToast.text)) bad("the save guard must carry err.apply.noDoc, got: " + saveToast.text);
+  // The route answers the envelope (never the old router 405 text) and never
+  // fakes success: no session header -> bad_session, valid session but no
+  // assetId -> bad_body. Both are read from Node so the page network log stays
+  // empty (the guard above must not issue any request at all).
+  const sessionTok = await pageErr("sessionStorage.getItem('autostamp.session')");
+  const saveNoSession = await fetch(url + "/api/pdf/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  cmp("POST /api/pdf/save without a session token is refused", { status: saveNoSession.status, code: (await saveNoSession.json()).code }, { status: 400, code: "bad_session" });
+  const saveNoAsset = await fetch(url + "/api/pdf/save", { method: "POST", headers: { "Content-Type": "application/json", "X-AutoStamp-Session": sessionTok }, body: "{}" });
+  const saveNoAssetBody = await saveNoAsset.json();
+  cmp("POST /api/pdf/save without an assetId answers bad_body", { status: saveNoAsset.status, ok: saveNoAssetBody.ok, code: saveNoAssetBody.code }, { status: 400, ok: false, code: "bad_body" });
   const toastSemantics = await json(`(function(){
     var t = document.querySelector("#error-toast");
     return { role: t.getAttribute("role"), live: t.getAttribute("aria-live") };
@@ -446,14 +465,14 @@ async function main() {
   const version = await pageErr("window.__autoStampShell.probe('version')");
   truthy("topbar shows the health version", /autostamp/.test(version));
 
-  // The save click below is deliberate: /api/pdf/save is unwired until P4, so
-  // its non-2xx reply is the behaviour asserted above, not an incidental error.
+  // The save click above is deliberate: with no document open the shell must
+  // refuse locally, so *nothing* may reach the network (asserted below).
   const deliberate = (e) => /\/api\/pdf\/save/.test(e);
   const unexpectedErrors = chrome.errors.filter((e) => !deliberate(e));
   const unexpectedFailures = chrome.failures.filter((e) => !deliberate(e));
   if (unexpectedErrors.length) bad("console errors: " + unexpectedErrors.join(" | "));
   if (unexpectedFailures.length) bad("resource failures: " + unexpectedFailures.join(" | "));
-  if (!chrome.failures.some(deliberate)) bad("the deliberate POST /api/pdf/save never reached the network");
+  if (chrome.failures.length) bad("no page request may hit /api/pdf/save without a document, got: " + chrome.failures.join(" | "));
 
   await chrome.close(process.argv.includes("--keep-profile"));
   child.kill();

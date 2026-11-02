@@ -68,7 +68,10 @@
     meta: null,
     page: 0,
     snapshot: null,
-    surfaceKey: "",
+    // The canvas element the snapshot belongs to: renderCurrent swaps in a new
+    // canvas for every render, so element identity is the signal that the page
+    // content itself may be different (a stamp, an undo, a different asset).
+    surface: null,
     nodes: new Map(), // instanceId -> { wrap, canvas, box, handles }
     rects: new Map(), // instanceId -> page-space rect of the painted box
     strips: new Map(), // instanceId -> strip context of the current page
@@ -176,14 +179,20 @@
     state.meta = info.meta;
     state.page = info.page;
 
-    const key = [info.page, info.scale.toFixed(4), state.dpr, info.canvas.width, info.canvas.height].join("|");
-    if (state.surfaceKey !== key || !state.snapshot) {
+    // Re-capture whenever the preview hands over a different canvas element.
+    // The old key (page/scale/dpr/size) cannot see a document swap: after
+    // `盖到 PDF` the same page at the same zoom has the same size, and the
+    // previous document's bitmap got painted straight back over the fresh
+    // render - measured 2026-11-02, where the read-back canvas kept showing
+    // the pre-stamp page (0 ink anywhere) while the applied asset rendered
+    // fine in a fresh pdf.js document.
+    if (state.surface !== info.canvas || !state.snapshot) {
       const snap = doc.createElement("canvas");
       snap.width = info.canvas.width;
       snap.height = info.canvas.height;
       snap.getContext("2d").drawImage(info.canvas, 0, 0);
       state.snapshot = snap;
-      state.surfaceKey = key;
+      state.surface = info.canvas;
     }
     layoutNodes();
     repaint();
@@ -667,7 +676,15 @@
         });
       }
       case "snapshot":
-        return state.snapshot ? { w: state.snapshot.width, h: state.snapshot.height, key: state.surfaceKey } : null;
+        return state.snapshot
+          ? {
+              w: state.snapshot.width,
+              h: state.snapshot.height,
+              page: state.page,
+              scale: +state.scale.toFixed(4),
+              dpr: state.dpr,
+            }
+          : null;
       case "canvasRect": {
         if (!state.canvas) return null;
         const r = state.canvas.getBoundingClientRect();

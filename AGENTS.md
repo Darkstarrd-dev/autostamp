@@ -174,6 +174,26 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
    选中实例内**时改 `apply.scale`，且事件必须 `stopPropagation`（FACTS §1.8 V3）。
 15. **导出体积预估是前端派生值，不发请求**：按 FACTS §4 实测表 × MediaBox 面积/A4 面积
    缩放，离表 DPI 按对数插值（E1：导出段内联显示 `#estimate-total` / `#estimate-per-page`）。
+16. **落盘按实例数组 + ExtGState 归属判定**。`POST /api/pdf/apply` 一次写完所有实例：
+    `internal/pdfcore` 按 `(blend, opacity)` 相邻分组，每组走**一次** `AddWatermarksSliceMap`
+    （pdfcpu 要求同批外观一致，实测 2026-10-30）。`/BM` 只注入本 pass **新建**的 ExtGState：
+    pass 前后的资源名差集 ∩ 章图层引用名（`Artifact/Watermark` 块里的 `/Name gs`），
+    绝不写页自身已有的状态；多个页共享同一 ExtGState 对象时第二页不再重写入；
+    已有 `/BM` 且不是要求的模式 → 直接报错，不改写别人的模式。
+    预览与落盘共用同一几何：`pdfcore.StampGeom.Box` == `app-overlay.rectFor`
+    （`pos` 通道 = 实例左上角；`anchor` 通道 = 页角/页中 + `offset`）。
+
+17. **落盘坐标 = 显示空间 + 一次 y 翻转**：`model.Watermark` 的 `Pos:BottomLeft` +
+    `Dx/Dy` 写进内容流是 MediaBox 空间（y 向上）的 Form 左下角，换算只有
+    `Dy = dispH - box.Y - box.H`，**不加任何旋转量**（pdfcpu 自己用 `PageRot` +
+    `ContentBytesForPageRotation` 包掉 `/Rotate`）。条带框的**纵横比必须取自整枚印章**
+    （用切片自己的比会把每条做成 `count` 倍高）—— 实测数值见 FACTS §2.6，断言
+    `TestStampStripBoxUsesWholeSealAspect`。
+18. **叠加层的快照按「画布元素」识别，不按尺寸**：`app-preview.renderCurrent` 每次渲染
+    都新建 `canvas.page-canvas`（`stage.replaceChildren`），换文档必然换元素。快照若按
+    `page|scale|dpr|尺寸` 识别，盖章前后同一页同一 zoom 完全相同 → `repaint()` 把上一份
+    文档的位图画回新画布，落盘后的回读整页 0 命中印章色。实测与断言见 FACTS §1.9
+    （验收脚本取样前必须 `preview.redraw()`）。
 
 ## 6. HTTP 契约（`/api/*`，全部 JSON；字段在 **P0.5 与用户确认后**才冻结，改动必须同步本文、`docs/UI_SPEC.md` 与前端）
 
@@ -183,11 +203,11 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
 |`POST /api/fs/pick`|原生文件选择器（`{filter,multi,startDir}`）或 `{"filePath":…}` 直开授权，返回 `pathGrantId`（owner 绑定，TTL）；取消回 `{cancelled:true, picks:[]}`，无选择器的平台回 501 `pick_unsupported`|
 |`POST /api/pdf/open`|按 `pathGrantId` 或 multipart 上传打开 PDF → `assetId` + 页元数据（页数、每页 pt 尺寸、rotation、是否含文字）|
 |`GET /api/pdf/raw?id=`|原始 PDF 字节（支持 Range/ETag），供 pdf.js 直接取|
-|`POST /api/pdf/split`|**已实现**:切分词表 `{assetId, splitMode, rows, cols, customCuts[], splitVeto}`（词表 = `UI_SPEC §2.2`；`splitVeto` 是指针,`false` 是真答案）→ 新 `assetId`（kind `split`）+ 同一形状的页元数据;原资产保留即「撤销切分」的实现|
+|`POST /api/pdf/split`|**已实现**:切分词表 `{assetId, splitMode, rows, cols, customCuts[], splitVeto, vetoPages[], splitPages}`（词表 = `UI_SPEC §2.2`；`splitVeto` 是指针,`false` 是真答案；`vetoPages` = D3 逐页否决；`splitPages` 用 pages 词表限定可切页）→ 新 `assetId`（kind `split`）+ 同形状页元数据;原资产保留即「撤销切分」的实现|
 |`POST /api/pdf/seal/prepare`|**已实现**:multipart 上传印章 PNG/生成 → `sealId` + alpha 元数据（`seal.prepare.despill/alphaTrim/resampleDpi` 词表见 `UI_SPEC §2.2`；**去背在前端**，见 §5.12 与 FACTS §1.8）。配套 `GET /api/pdf/seal/raw?id=` 只回印章字节给合成|
-|`POST /api/pdf/apply`|矢量路径落盘：`{assetId, sealId, blend, opacity, scale, pos, offset, rotation, pages, crossPage}` → 新 `assetId`|
+|`POST /api/pdf/apply`|**已实现**:矢量落盘词表 `{assetId, instances[]}`，实例字段 `sealId/blend/opacity/scale/pos/anchor/offset/rotation/pages/crossPage/binding/startOffset`（`brightness/saturate` 仅预览，**不发送**；发送即 400）→ 新 `assetId`（kind `applied`）。实例数组是关键：一条请求写完全部实例，同一 `(blend,opacity)` 组走一次 pdfcpu pass|
 |`POST /api/pdf/export`|光栅路径：`{assetId, dpi, quality, mode}` → 新 `assetId`（页位图由前端回传）|
-|`POST /api/pdf/save`|`{assetId, targetPath|pathGrantId, replaceOriginal}` → 原子写盘|
+|`POST /api/pdf/save`|**已实现**:`{assetId, targetPath|pathGrantId|replaceOriginal}`（三选一，必须且只能给一个）→ `fsx.AtomicWriteFunc` 原子写盘；`replaceOriginal` 用 `tmpstore.Asset.Origin`（open/split/apply 都向前继承）|
 |`GET /api/settings` / `PATCH /api/settings`|读全量设置；`PATCH` 走 `{"patch":{...}}` 信封（嵌套指针字段按需合并）|
 |`GET /api/seal/preset` 等|印章预设 list/save/delete|
 
@@ -195,7 +215,10 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
 
 - 统一信封（`internal/webx/json.go`，**扁平**字段）：成功
   `{"ok":true,"data":{…}}`；失败 `{"ok":false,"code":"…","error":"…"}`。
-  已注册错误码：`bad_body`(400) `bad_host`(421) `bad_origin`(403) `internal_error`(500)。
+  已注册错误码：`bad_body`(400) `bad_host`(421) `bad_origin`(403) `internal_error`(500)、
+  `bad_session` `bad_id` `not_found` `kind_denied` `path_denied` `password_required` `password_invalid`
+  `unreadable_pdf` `payload_too_large` `split_failed` `apply_failed` `validate_failed` `not_pdf` `save_failed`
+  `pick_failed` `pick_unsupported` `http_<status>`。
   新增码必须同时登记进本节 + `UI_SPEC §4` + 前端 i18n 文案表。
 - 请求体：`/api/settings` 的 body 是 `{"patch":{…}}`；未知字段一律 400
   （`webx.DecodeJSON` 用 `DisallowUnknownFields`），空体也算 400；
@@ -261,7 +284,14 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
       **真链路桥**：`fs/pick` 直开 → `pdf/open` → `seal/prepare` → 实例 → 叠加层取样，
       断言叠加层像素 == 同一对颜色在同族渲染器里的独立 blend（±2，取印章框中部避开 AA）。
       「必须与底不同」不是断言：lighten/saturation 与这块实心底组合本来就可能等于底。
-  12. 以上全部由 `build.ps1` 串成一条命令（`-Task verify` / `go vet` / `go test`），
+  12. P4 落盘回读（P4 起常驻）：`node tools/verify/apply-smoke.mjs`（分段令牌
+      `--only=<matrix|strip|chain|undo>`）—— `盖到 PDF` 之后用 applied 资产重新渲染：
+      48 组（16 模式 ×{1.0,0.6,0.3}）与「同一对颜色在同族渲染器里的独立 blend」比对，
+      阈值 ≤2、取印章框中部避开抗锯齿（FACTS §1.9）；骑缝落盘断逐页一条、按切分顺序
+      对应印章左右半、条带 bbox 四边 ≤1 pt；保存链断「写盘后磁盘文件再 `fs/pick`+`open`
+      页数 = 切分后的页数」；撤销盖章/撤销切分断 asset 换回 + 实例恢复。取样前必须
+      `preview.redraw()`（换文档后快照才重抓，见 §5.18 + FACTS §1.9 —— 这是踩过的坑）。
+  13. 以上全部由 `build.ps1` 串成一条命令（`-Task verify` / `go vet` / `go test`），
       任一失败退出码 1。
 - `go test ./...` 全绿；`go vet ./...` 无输出。
 - UI 阶段用真实窗口（WebView2）+ headless 各跑一次，console 必须 0 error。
@@ -295,8 +325,9 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
 
 |任务|先读|涉及文件|
 |---|---|---|
-|改切分/骑缝几何|`docs/FACTS.md` §2.3 + §1.8|`internal/pdfcore/split.go`、`sealimg.go`（落盘条带）、`web/static/app-preview.js`（`drawSplitMarks` 切点预览）、`web/static/app-overlay.js`（`stripGeometryFor/stripRectsFor` 条带）、`web/static/app-shell.js`（`#split-veto` 逐页否决）|
-|改叠加层/印章通道|`docs/FACTS.md` §1.8 + §1.3|`web/static/app-overlay.js`（合成/affordance/滚轮）、`web/static/app-seal.js`（上传/去背/撤销）、`web/static/app-shell.js`（`sealIdFor`/`restoreInstanceSeals`）、`internal/api/seal.go`|
+|改切分/骑缝几何|`docs/FACTS.md` §2.3 + §1.8|`internal/pdfcore/split.go`（词表含 `vetoPages`/`splitPages`）、`sealimg.go`（落盘条带）、`web/static/app-preview.js`（`drawSplitMarks` 切点预览）、`web/static/app-overlay.js`（`stripGeometryFor/stripRectsFor` 条带）、`web/static/app-shell.js`（`#split-veto` 逐页否决、`#split-undo`）|
+|改叠加层/印章通道|`docs/FACTS.md` §1.8 + §1.3 + §1.9|`web/static/app-overlay.js`（合成/affordance/滚轮/快照 `state.surface`）、`web/static/app-seal.js`（上传/去背/撤销）、`web/static/app-shell.js`（`sealIdFor`/`restoreInstanceSeals`）、`internal/api/seal.go`|
+|改落盘/撤销/保存|`UI_SPEC §8` W1-W4 + 本文件 §5.16/§5.17 + FACTS §1.9 §2.6|`internal/api/apply.go`、`internal/api/save.go`、`internal/pdfcore/{apply,stamp,blend,validate,pxdims,pages}.go`、`web/static/app-shell.js`（`stampIntoPDF`/`undoRoute`/`submitSave`）、`tools/verify/apply-smoke.mjs`|
 |改导出体积预估|`docs/FACTS.md` §4|`web/static/app-shell.js`（`computeEstimate/refreshEstimate`、`probe('estimate')`）|
 |改混合模式/透明度|`docs/FACTS.md` §1.2/§1.3/§2.2|`internal/pdfcore/blend.go`、`web/static/app-overlay.js`|
 |改导出 DPI/质量|`docs/FACTS.md` §4|`internal/pdfcore/raster.go`、`internal/api/export.go`|

@@ -61,6 +61,7 @@ type Asset struct {
 	Kind    Kind      `json:"kind"`
 	Owner   string    `json:"owner"`
 	Path    string    `json:"path"`
+	Origin  string    `json:"origin,omitempty"`
 	Size    int64     `json:"size"`
 	Created time.Time `json:"created"`
 	TTL     string    `json:"ttl,omitempty"`
@@ -264,6 +265,34 @@ func (s *Store) Path(id, owner string) (string, error) {
 		return "", err
 	}
 	return a.Path, nil
+}
+
+// SetOrigin records which disk file an asset descends from. Derived assets
+// (split, apply, export) carry their parent's origin forward, so
+// replaceOriginal keeps working after any number of intermediate steps. An
+// empty origin means "there is no disk original" (a drag/drop upload), which
+// the save route reports instead of guessing a path.
+func (s *Store) SetOrigin(id, origin string) error {
+	s.mu.Lock()
+	a, ok := s.assets[id]
+	if !ok {
+		s.mu.Unlock()
+		return fmt.Errorf("%w: %s", ErrNotFound, id)
+	}
+	a.Origin = origin
+	errIdx := s.writeIndexLocked()
+	s.mu.Unlock()
+	return errIdx
+}
+
+// OriginOf returns the disk path an asset descends from after the owner check
+// ("" = no disk original).
+func (s *Store) OriginOf(id, owner string) (string, error) {
+	a, err := s.Get(id, owner)
+	if err != nil {
+		return "", err
+	}
+	return a.Origin, nil
 }
 
 // Delete removes an asset from the store and the filesystem. Assets registered

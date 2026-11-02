@@ -46,11 +46,16 @@ function Invoke-Native {
     param([string]$file, [string[]]$argv, [string]$cwd)
     $argv = @($argv) + @($script:goExtra)
     $prev = Get-Location
+    # PS5.1 下若首选项是 Stop，`2>&1` 把原生命令 stderr 并进错误流后会升级为
+    # NativeCommandError 终止异常——脚本会停在 & 这一行，后续任务全部消失。
+    # 原生命令成败只看 $LASTEXITCODE，故本地临时放宽为 Continue（finally 还原）。
+    $prevEA = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     try {
         if ($cwd) { Set-Location $cwd }
         & $file @argv 2>&1 | ForEach-Object { Write-Log ('' + $_) }
         return $LASTEXITCODE
-    } finally { Set-Location $prev }
+    } finally { Set-Location $prev; $ErrorActionPreference = $prevEA }
 }
 
 function Start-Clean {
@@ -121,7 +126,10 @@ function Start-Build {
     if ($code -ne 0) { Write-Bad ('go build ' + $Kind); return }
     $item = Get-Item $out
     $rev = ''
+    $prevEA = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'   # 2>$null 重定向在 Stop 下同样会升级报错
     & go version -m $out 2>$null | ForEach-Object { if ($_ -match 'vcs\.revision\s+([0-9a-f]+)') { $rev = $Matches[1].Substring(0, 7) } }
+    $ErrorActionPreference = $prevEA
     if (-not $rev) { $rev = 'n/a' }
     Write-Ok ('{0}  {1,8:N0} KB  commit {2}' -f $item.Name, ($item.Length / 1KB), $rev)
 }
@@ -129,9 +137,9 @@ function Start-Build {
 function Start-Verify {
     Write-Head 'verify (tools/verify)'
     if (-not (Test-Tool 'node')) { Write-Bad 'node 未安装/不在 PATH'; return }
-    # 契约/壳/查看链路/叠加预览/像素矩阵/真窗口六个脚本按 AGENTS §8 串成一条命令;
-    # 前五个不需要 GUI,webview-launch 依赖 -tags webview 的 exe(由 all/`-Task webview` 先建好)。
-    foreach ($s in @('ui-contract.mjs', 'ui-smoke.mjs', 'shell-smoke.mjs', 'preview-smoke.mjs', 'overlay-smoke.mjs', 'pixel-matrix.mjs', 'webview-launch.mjs')) {
+    # 契约/壳/查看链路/叠加预览/落盘回读/像素矩阵/真窗口八个脚本按 AGENTS §8 串成一条命令;
+    # 前七个不需要 GUI,webview-launch 依赖 -tags webview 的 exe(由 all/`-Task webview` 先建好)。
+    foreach ($s in @('ui-contract.mjs', 'ui-smoke.mjs', 'shell-smoke.mjs', 'preview-smoke.mjs', 'overlay-smoke.mjs', 'apply-smoke.mjs', 'pixel-matrix.mjs', 'webview-launch.mjs')) {
         $p = Join-Path $root ('tools\verify\' + $s)
         if (-not (Test-Path $p)) { Write-SkipMsg ('缺 tools/verify/' + $s); continue }
         $code = Invoke-Native -file 'node' -argv @($p)

@@ -2,6 +2,19 @@
 
 > `docs/IMPLEMENTATION_PLAN.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-02 — P4 勾 `[x]`，P3 补骑缝落盘后勾 `[x]`
+
+- §10 的 P4 行填实测（apply/save 两路由、回读矩阵 48 组最大 Δ = 2、落盘几何实测数字、
+  保存链与撤销断言、顺带修掉前端快照身份 bug → FACTS §1.9）。
+- §10 的 P3 行改 `[x]`：2026-10-29 只有切分半边，2026-11-02 补骑缝落盘
+  （`apply-smoke --only=strip`：逐页半枚色 Δ 0、条带 bbox 四边 ≤1 pt）。
+- P3 正文：「待办（与 P4 同批）」换成真实形态说明（骑缝预览在 `app-overlay.js`、
+  词表接线在 `app-shell.js`，**没有** `app-crosspage.js` 这个文件）；验收三行全部打勾。
+- P4 正文加 engine.go 的**偏离说明**：不写第二套服务端状态机；链的状态由 `tmpstore`
+  资产 + 前端路由表达，失败回滚 = 每条路由先写完/验完再注册 + 删临时文件。
+- 验收命令写实：`node tools/verify/apply-smoke.mjs`（分段 `--only=`）+
+  `powershell -NoProfile -File build.ps1 -Task vet,test,verify` → 失败 0 / 跳过 0。
+
 ## 2026-10-30 — P2 勾 `[x]` + 实测数据回填（前端半边补齐）
 
 - §10 的 P2 行改 `[x]`：上一轮缺的前端半边（`app-seal.js` 上传/去背/撤销、
