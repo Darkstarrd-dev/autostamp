@@ -2,6 +2,19 @@
 
 > `docs/UI_SPEC.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-02 — P5 决策 W5/W6 + §4 加两键 + mock 镜像
+
+- §8 决策表加 **W5**（光栅化何时触发：保存时自动，不加新控件；`mode=vector` 不发请求）与
+  **W6**（90 MB/页：前端按体积预估提交前拦截 + 服务端硬限 400 `page_too_large`），
+  来源 = 第 5 轮 `ask`（2026-11-02），轮次说明同步登记。
+- W5 行追加实现决定(2026-11-02):同一份 raster 参数第二次保存**不再**光栅化(复用已光栅化
+  asset),只有 `dpi/质量/pages` 变了才重光栅化一次 —— 不新增控件、不改字段词表。
+- §4 加 `ok.exported`（带 `%d` 占位）与 `warn.export.tooBig`，键数 198 → **208**
+  （`gen-i18n.mjs` 重生成 `app-i18n.js`）。
+- `docs/ui/mockup.html` 同步镜像：导出段 `warn.export.tooBig` 的 note 上屏 +
+  `#save-confirm` 里的 W5/W6 链（`ok.exported`、`warn.export.tooBig` toast）——
+  只改 §4 不上 mock 会被 `ui-contract` 判 `E-I18N-UNUSED`（本轮实测踩到）。
+
 ## 2026-10-30 — P2 接线：§2.2 词表补全 / §4 加 2 键 / §6 修 fence / §7.1 探针表 / §8 C1+V3 / §11 令牌记录
 
 - §2.2 补 P2 用到的词表行：`seal.prepare.despill/alphaTrim/resampleDpi`（含默认值与

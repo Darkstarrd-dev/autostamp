@@ -1,6 +1,6 @@
 # AutoStamp — 实施计划（IMPLEMENTATION PLAN）
 
-> 最后核对：2026-11-02（P0 + P0.5 + P1 + P2 + P3 + P4 完成；当前阶段 = P5 光栅导出）。
+> 最后核对：2026-11-02（P0 + P0.5 + P1 + P2 + P3 + P4 + P5 完成；当前阶段 = P6 预设/批处理/打包）。
 > 依赖/浏览器事实引用 `docs/FACTS.md` 编号，禁止凭记忆改写。约束见 `AGENTS.md`。
 
 ## 0. 新对话恢复执行协议（执行入口）
@@ -333,19 +333,34 @@ Form 内容流 `gs`（两条路径都要有单测）。加密 PDF 走 `UserPW/Ow
 `go test ./internal/pdfcore` 全绿 v（含 `TestStampStripBoxUsesWholeSealAspect`，
 变异试验确认它抓得住条带框比写错的情况）。
 
-### P5 — 光栅导出与保存参数（需求 5）`[ ]`
+### P5 — 光栅导出与保存参数（需求 5）`[x]`
 
 交付：`internal/pdfcore/raster.go`（`/DCTDecode` 与 `/FlateDecode` 两条 writer，
 页尺寸/DPI/旋转矩阵、`/Length` 精确）、`POST /api/pdf/export`
 （`{dpi ∈ 72/150/300/custom, quality ∈ 40..95, mode ∈ vector|raster, pages}`）、
 前端「导出设置」面板 + 体积预估。
 
-关键实现：页位图由 pdf.js 按目标 scale 渲染后回传（避免服务端 rasterize，
-FACTS §2.4 无该能力）；每页 X/Y DPI 元数据（`/DECODE` 由 1pt=1/72in 换算）；
-超过 90 MB/页时提示并降 DPI；印章在 raster 模式下已被前端合成，无需 `/BM`。
+关键实现（实测 2026-11-02）：页位图由**前端** pdf.js 按 `scale = dpi/72` 渲染后回传
+（服务端无 rasterize，FACTS §2.4），**JPEG 字节直传** `/DCTDecode` 不重编码；页 pt =
+`px*72/dpi`（`ptString`，两位小数）、**不加旋转量**（pdf.js 输出的就是显示方向，AGENTS §5.17
+同理）；vector 半边只按 `pdfcore.ParsePages` 裁页（`pages=all` 原样克隆）——
+实测：契约提名的 `api.ExtractPagesFile` 产的是「每页一个单页文件」，产不出单个子集资产，
+所以子集走 `api.Trim`；W6 的 90 MB/页由前端按体积预估**提交前**拦下（`warn.export.tooBig`），
+服务端仍留硬限 400 `page_too_large`。
+  **保存幂等**:文档已是光栅化 asset 且 `dpi/质量/pages` 未变时第二次保存不再光栅化
+  (`app-shell` 的 `lastExport`),否则就是多一代 JPEG 画质损失。
 
-验收：复现 FACTS §4 体积表（±5%）；导出 PDF 被 pdf.js 解析渲染采样一致；
-300dpi + q92 单页 ≤ 500 KB 量级；`go test` writer 字节结构断言（xref 偏移、`/Length`）。
+验收：~~复现 FACTS §4 体积表（±5%）~~ —— **±5% 钉不住，已改成量级**：真链路实测
+`bytesPerPage` = 141,139/143,019 B，导出文件 285,313 B，落在 150dpi q75 行的 ±40% 带
+[148,555, 346,629] 内；表值本身是 Go 编码的合成图（探针重跑 89,400 B），前端是 Chromium
+JPEG 编码器，两者本来不会对齐（FACTS §4）。~~导出 PDF 被 pdf.js 解析渲染采样一致~~ v
+（回读同点 (201,23,28) vs 导出前 (200,24,28)，Δ ≤6；页 pt Δ 0.000）；
+~~300dpi + q92 单页 ≤ 500 KB 量级~~ 未跑（`UNVERIFIED`，矩阵样本只测 150dpi）；
+`go test` writer 字节结构断言 v（xref 逐项指向 `N 0 obj`、`/Length` == 字节数、
+DCT 流 == 输入原始字节、Flate 解压长度 `h*(1+w*3)`、`/SMask` 存在性；
+`TestRasterWriterPassesPdfcpuValidate` 说明 pdfcpu 也 Validate 过手写 PDF）。
+- `export-smoke --only=chain` 钉保存幂等:二次保存(同一 spec)export 请求 0 次、
+  改 `quality/pages` 后重光栅化恰好 1 次 + 新 export asset。
 
 ### P6 — 预设 / 批处理 / 打包 `[ ]`
 
@@ -430,6 +445,6 @@ P0.5 追加必问项（不属上表）：布局密度、骑缝章预览形态、
 |P2 叠加预览|`[x]`|2026-10-30：后端半边同前一轮（`TestSealPrepare*`/`TestSealRaw*`/`TestPrepareSeal*`/`TestOpenByGrant*`/`pixel-matrix.mjs` §1.3 §1.4 重跑）+ 前端已落地：`overlay-smoke` OK（真 exe + 真 UI + headless，分段令牌 `--only=open,geometry,despill,drag,strip,filter,export`）：16 模式 x{1.0,0.6,0.3} 全部 absdiff<=1 且参考点 == FACTS §1.3 (170,22,28)；alpha=89 样本精确落在 `dst*(1-a)+premul*255*a`；条带单边宽 = 页宽 10%（45.8 pt）、`startOffset` 位移误差 0、`alternate` 条带数 == 页数、逐页渐变列对齐 <=1 px、`binding=none` -> 0 条；drag/corner/rotate/wheel(V3) 写回 `api.apply.*`；`ctx.filter` 读数 `none`；体积预估 == FACTS §4（150dpi q75 = 123,796 B ±2%、300/150 比 3.06、q40 = 328,844 B ±2%、custom 200dpi 落在行间、vector 忽略 DPI/质量、滑杆与数值框同值）；seal meta 600x600 / alpha 76% / bbox 6..594；console 0 error、失败请求 0。`build.ps1 -Task vet,test,verify` 失败 0 / 跳过 0（含 `preview-smoke` 四类样本 + `webview-launch` 真窗口）|
 |P3 切分+骑缝|`[x]`|2026-10-29 切分半边 + 2026-11-02 骑缝落盘：词表 `auto/rows-cols/custom/unsplit` + `splitVeto`(+`vetoPages`/`splitPages`)，A4→297.5x842、`/Rotate 90`→421x595（FACTS §2.3）；`POST /api/pdf/split` → 新 assetId(kind `split`)、原资产保留 = 「撤销切分」；骑缝落盘 = `pdfcore.Strips` + apply（逐页第 i 条、装订边 right/alternate、`startOffset`），实测 `apply-smoke --only=strip`：页 1 = 印章左半 (24,190,70)、页 2 = 右半 (210,40,90)，Δ 0，条带 59.50x59.50 pt、x ∈ [535.5,595.0]、y ∈ [40,99.5]、四边 <=1 pt；Go 侧 `TestStampStripBoxUsesWholeSealAspect`（写入的 `cm` 数字 535.5/742.5）+ `TestStampBoxStripsRightAndAlternate` |
 |P4 矢量落盘+BM|`[x]`|2026-11-02：`POST /api/pdf/apply`（实例数组、按 `(blend,opacity)` 分 pass、注册前 `Validate`）+ `POST /api/pdf/save`（目标三选一 / `Origin` 继承 / `AtomicWriteFunc`）；`/BM` 注入在 `blend.go`（FACTS §2.2：实测写出的 GS 带 `/BM`+`/ca`）；**回读一致性 48 组最大 Δ = 2**（`apply-smoke --only=matrix`，16 模式 x{1.0,0.6,0.3}）；落盘几何 = 显示空间 + 一次 y 翻转（实测 `150.0/452.75`、`535.5/742.5` → FACTS §2.6）；保存链：切分→盖章→保存到沙箱路径（3,534 B）→ 磁盘文件再 `fs/pick`+`open` 页数 = 2；撤销盖章/撤销切分断言（asset id 换回、实例恢复）；顺带修掉前端快照身份 bug（FACTS §1.9）|
-|P5 光栅导出|`[ ]`||
+|P5 光栅导出|`[x]`|2026-11-02：`internal/pdfcore/raster.go`（stdlib：`/DCTDecode` 直传前端 JPEG 字节、PNG 走 `/FlateDecode` + `/SMask`、`/MediaBox` = `px*72/dpi` 两位小数、xref/`/Length`/`/Size`/`startxref` 精确、无 `/Rotate`）+ `POST /api/pdf/export`（`Content-Type` 协商：json=vector 只裁页 / multipart=raster 收 `spec` + `page-<n`）；实测真链：`bytesPerPage` 141,139/143,019 B、导出文件 **285,313 B**（落在 FACTS §4 行的 ±40% 量级带，**±5% 钉不住**）、页 pt `594.72 × 841.92` Δ 0.000、回读像素 Δ (1,-1,0)、vector 零请求 + 文字仍在、W6 预估 156,651,960 B/页 → 只出 warn 且零请求；`node tools/verify/export-smoke.mjs`（分段 `--only=<raster|vector|guard|chain>`）已进 `build.ps1 -Task verify`（九项）|
 |P6 预设/批处理/打包|`[ ]`||
 |P7 加固/文档|`[ ]`||

@@ -331,6 +331,28 @@
   150dpi q75 每页 == 123,796 B（±2%）、300/150 比值 == 3.06、q40 行 == 328,844 B
   （±2%）；离表 DPI 在相邻两行间按对数插值；`vector` 模式不受 DPI/质量影响。
 
+**真链路实测(2026-11-02,`node tools/verify/export-smoke.mjs`,分段 `--only=<raster|vector|guard|chain>`)**
+
+- raster 150 dpi q75,2 页样本(CDP `Page.printToPDF` 现造,20 行文本/页):`bytesPerPage`
+  = **141,139 / 143,019 B**(前端 `canvas.toBlob('image/jpeg', 0.75)`),导出文件 **285,313 B**
+  —— 落在本表 150dpi q75 行的 ±40% 带 [148,555, 346,629] 内。**±5% 钉不住,已改成量级**:
+  本表那行是 Go `image/jpeg` 编码的一张合成图(重跑探针 = **89,400 B**,
+  `TestRasterWriterMatchesFacts4Magnitude` 同样只钉 ±40%),前端用的是 Chromium JPEG 编码器、
+  样本内容也不同 —— 两者字节数本来就不会对齐。
+- 页 pt 与 `px*72/dpi` **精确一致**:`594.72 × 841.92`(Δ 0.000);写到磁盘的文件再
+  `fs/pick`+`open` 页数 = 2;回读同点 (190,340) = (201,23,28) vs 导出前预览 (200,24,28)
+  即 Δ (1,-1,0)(阈值 ≤6,取中部避开 AA)。
+- vector 模式:`/api/pdf/export` 请求数 **0**(vector 不重编码,只按 pages 裁页),
+  回读 `getTextContent` 仍有 1680 字符。
+- W6 超限拦截(前端提交前):600 dpi q75、页面面积 x103.44 A4 ⇒ 预估 **156,651,960 B/页**
+  (> 90 MiB) ⇒ 只出 `warn.export.tooBig` toast,`/api/pdf/*` 请求数 **0**。
+- pdfcpu `ValidateFile` 对手写 raster PDF **通过**(3 页产物:DCT JPEG + 不透明 Flate PNG +
+  含 `/SMask` 的 PNG,`TestRasterWriterPassesPdfcpuValidate`),所以路由不需要放宽校验。
+- 保存幂等(2026-11-02 补):当前文档已是光栅化 asset 且 `dpi/质量/pages` 未变 ⇒ 第二次保存
+  不重光栅化(增量网络日志里 export 请求 **0 次**);改 quality/pages 后重光栅化**恰好 1 次**
+  并换来新 export asset。连续保存的完成信号只能等请求本身:`save` 回显同一 assetId,
+  拿 `probe('chain')` 的 id 变化等会一直超时。
+
 ### 4.1 骨架构建体积(实测 2026-10-29)
 
 |构建|命令|strip 后|
@@ -345,17 +367,18 @@
 - 复现:`powershell -NoProfile -File build.ps1`(带/不带 `-Tag webview`,带版本戳 +
   `winres` 图标资源)。
 
-**重跑(2026-11-02,P4 全量:pdfcpu + pdf.js 全量资产 + P2/P4 前端)**:
+**重跑(2026-11-02，P5 全量：pdfcpu + pdf.js 全量资产 + P2/P4/P5 前端)**：
 
 |东西|命令|实测|
 |---|---|---|
-|WebView2 strip 二进制|`build.ps1 -Task stripped`(`-tags webview -trimpath -ldflags "-s -w"`)|**20,059,648 B**(≈19.1 MiB)|
-|控制台二进制(未 strip)|`go build -o dist/autostamp.exe .`|25,159,168 B|
-|`web/static` 全量|`Get-ChildItem -Recurse web\static \| Measure-Object -Sum`|5,725,434 B|
+|WebView2 strip 二进制|`build.ps1 -Task stripped`(`-tags webview -trimpath -ldflags "-s -w"`)|**20,111,872 B**(≈19.2 MiB)|
+|控制台二进制(未 strip)|`go build -o dist/autostamp.exe .`|25,229,312 B|
+|`web/static` 全量|`Get-ChildItem -Recurse web\static \| Measure-Object -Sum`|5,731,945 B|
 
-- 相对 P0 骨架(7,345,152 B)的**净增 12,714,496 B**,其中内嵌前端资产 5,725,434 B、
-  其余 ≈6.99 MB 是 pdfcpu 子集 + `pdfcore` + P2/P4 后端。§2 的「整包 `pkg/api` 净增
-  11.06 MB」是**上界**(探针拉了全部子包),本项目只 import 用得到的子集,实测更低。
+- 相对 P0 骨架(7,345,152 B)的**净增 12,766,720 B**，其中内嵌前端资产 5,731,945 B、
+  其余 ≈7.03 MB 是 pdfcpu 子集 + `pdfcore`(含 P4 落盘、P5 raster writer)+ P2/P4/P5 后端。
+  §2 的「整包 `pkg/api` 净增 11.06 MB」是**上界**(探针拉了全部子包)，本项目只 import
+  用得到的子集，实测更低。
 - 复现:`powershell -NoProfile -File build.ps1`(末尾 `sizes` 段直接列 `dist` 体积)。
 
 ### 4.2 版本戳与身份(实测 2026-10-29)

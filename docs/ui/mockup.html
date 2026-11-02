@@ -652,6 +652,7 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
             <div class="row"><span data-i18n="export.estimate.label" data-i18n-cn="体积预估">Estimate</span><span class="big" id="estimate-total">356 KB</span></div>
             <div class="hintline" id="estimate-per-page" data-i18n="export.estimate.hint" data-i18n-cn="每页约 124 KB（150dpi q75，A4 单页）。">about 124 KB/page (150dpi q75, A4).</div>
             <div class="note" data-i18n="export.estimate.note" data-i18n-cn="预估值由 FACTS §4 实测表按页面积与页数缩放；raster 才受 DPI/质量影响。">Estimate scales the FACTS 4 measured table by page area and count.</div>
+            <div class="note" data-i18n="warn.export.tooBig" data-i18n-cn="单页位图超过 90 MB 上限：请把 DPI 降到 300 或少选几页。">page bitmap exceeds the 90 MB cap: lower DPI to 300 or fewer pages</div>
           </div>
         </div>
       </details>
@@ -1496,6 +1497,12 @@ window.__autoStampMock = (function () {
       if (!S.p["open.assetId"]) { toast("err.apply.noDoc", "no document is open", "err"); return; }
       var pending = S.instances.filter(function (i) { return !i.baked; });
       if (pending.length) toast("ok.applied", "stamp first: " + pending.length + " instance(s) are baked before the write", "ok");
+      // W5/W6 (UI_SPEC §8): raster mode bakes pages before the write, and the
+      // 90 MB/page cap is caught from the estimate *before* any request goes out.
+      if (S.p["export.mode"] !== "raster") return;
+      var est = estimateBytes();
+      if (est.warn) { toast("warn.export.tooBig", "page bitmap exceeds the 90 MB cap: lower DPI to 300 or fewer pages", "warn"); return; }
+      toast("ok.exported", "rasterised " + S.pages.length + " page(s) at " + S.p["export.dpi"] + " dpi q" + S.p["export.quality"], "ok");
     });
     q("#pos-center").addEventListener("click", function () {
       var vb = viewBox(), g = S.geo[S.selId];

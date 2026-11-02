@@ -2,6 +2,14 @@
 
 > `PROJECT_MAP.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-02 — P5 光栅导出：api 两行 + pdfcore 两行 + 前端两行续 + export-smoke 行
+
+- 顶部「最后核对」改 P0-P5。
+- `internal/api` 加 `export.go` / `export_test.go` 两行；`register.go` 行改 P0-P5。
+- `internal/pdfcore` 加 `raster.go` / `raster_test.go`（writer 字节结构 + pdfcpu Validate）。
+- `web/static` 加两行续：`app-shell` 的 P5 光栅通道（W5/W6 链 + `probe('exportBody')`）、
+  `app-api` 的 `uploadMultipart`（唯一 multipart 出口）。
+- `tools/verify` 加 `export-smoke.mjs` 行；`app-i18n.js` 行改 208 键。
 
 ## 2026-11-02 — P4 落盘：api 三行 + pdfcore 六行 + 前端两行续 + apply-smoke 行
 

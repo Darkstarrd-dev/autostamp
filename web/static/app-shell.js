@@ -842,6 +842,19 @@
     });
     return n;
   }
+  // exportDpiOf/exportQualityOf resolve the export vocabulary to the numbers
+  // the export request sends; computeEstimate reads the same two, so the
+  // estimate and the wire can never disagree (UI_SPEC §E1: the estimate IS the
+  // FACTS §4 table). dpi comes out already parsed (customDpi expanded) because
+  // the export route takes a number, not the panel's 72/150/300/custom word.
+  function exportDpiOf() {
+    const sel = readField("api.export.dpi");
+    return sel === "custom" ? Number(readField("api.export.customDpi")) || 150 : Number(sel) || 150;
+  }
+
+  function exportQualityOf() {
+    return Math.min(95, Math.max(40, Number(readField("api.export.quality")) || 75));
+  }
 
   function computeEstimate() {
     if (!state.file || !state.file.pages || !state.file.pages.length) return null;
@@ -859,9 +872,8 @@
     pages.forEach((pg) => { area += (Number(pg.width) || 0) * (Number(pg.height) || 0); });
     const areaFactor = pages.length ? area / pages.length / A4_PT_AREA : 1;
 
-    const dpiSel = readField("api.export.dpi");
-    const dpi = dpiSel === "custom" ? Number(readField("api.export.customDpi")) || 150 : Number(dpiSel) || 150;
-    const quality = Math.min(95, Math.max(40, Number(readField("api.export.quality")) || 75));
+    const dpi = exportDpiOf();
+    const quality = exportQualityOf();
 
     const atQ = (row) => {
       const pts = [[40, row.q40], [75, row.q75], [92, row.q92]];
@@ -915,6 +927,120 @@
       : `~ ${formatBytes(e.perPageBytes)}/page (raster ${e.dpi} dpi q${e.quality}, page area x${e.areaFactor.toFixed(2)} A4)`;
   }
 
+
+  // ---------- P5 raster channel (UI_SPEC §8 W5/W6) ----------
+  //
+  // W5: 保存时自动光栅化 — when the export panel says raster, submitSave bakes
+  // the selected pages into a full-page-bitmap asset, adopts it, and only then
+  // writes to disk; mode=vector never sends /api/pdf/export (源资产直接写).
+  // W6: a per-page FACTS-§4 estimate over 90 MiB blocks the submit BEFORE any
+  // request goes out; the server keeps its own hard limit (400 page_too_large),
+  // but the front-end refuses to spool that much in the first place.
+  const MAX_EXPORT_PAGE_BYTES = 90 * 1024 * 1024; // the server's cap (PLAN P5, W6)
+
+  // exportUpload is the multipart shape the export contract defines: a `spec`
+  // field (the JSON string) plus one `page-<n>` file per selected page,
+  // ascending (AGENTS §6 P5). It rides app-api's single multipart channel, so
+  // the session header and the envelope error handling stay in one place.
+  async function exportUpload(spec, parts) {
+    return api.uploadMultipart(
+      "/api/pdf/export",
+      { spec: JSON.stringify(spec) },
+      parts.map((p) => ({ name: `page-${p.n}`, blob: p.blob, filename: `page-${p.n}` })),
+    );
+  }
+
+  // lastExportBody records the last raster submission for probe("exportBody"):
+  // the exact spec JSON, the page numbers, each blob's byte size and the pixel
+  // box each canvas produced. It is filled before the request goes out, so a
+  // refused route still pins what the front-end would have sent.
+  let lastExportBody = null;
+  // lastExport records *which* asset was produced by which bake. The re-save
+  // guard in submitSave uses it to refuse a second /api/pdf/export on an
+  // already-flattened document: one more JPEG generation per save would be
+  // visible quality loss, and the panel parameters alone cannot tell the two
+  // cases apart.
+  let lastExport = null;
+
+  // exportSpecOf resolves the panel fields into the contract spec (AGENTS §6).
+  // exportRaster and the guard share it, so the guard can never drift away
+  // from what would actually be sent.
+  function exportSpecOf() {
+    const rawPages = String(readField("api.export.pages") || "all").trim() || "all";
+    return {
+      assetId: state.file ? state.file.assetId : "",
+      mode: "raster",
+      dpi: exportDpiOf(),
+      quality: exportQualityOf(),
+      pages: rawPages,
+    };
+  }
+
+  // exportKeyOf is the identity of a bake: same dpi/quality/pages on the same
+  // asset means the document on screen already is what the user wants written.
+  function exportKeyOf(spec) {
+    return `${spec.dpi}|${spec.quality}|${spec.pages}`;
+  }
+
+  // exportRaster renders the selected pages at scale = dpi/72 into offscreen
+  // canvases and posts them as JPEG. The bitmap is the page in its DISPLAY
+  // orientation: pdf.js' getViewport applies /Rotate itself (AGENTS §5.17 - the
+  // same reason the write side adds no rotation), so no rotation compensation
+  // happens here, and the pixel box is exactly what the raster writer turns
+  // back into pt (MediaBox = px*72/dpi).
+  async function exportRaster() {
+    const preview = window.__autoStampPreview;
+    if (!preview || !preview.getPage) {
+      toast("error", t("err.apply.noDoc"));
+      return null;
+    }
+    const spec = exportSpecOf();
+    const numbers = resolvePages(spec.pages, state.file.pages.length);
+    const parts = [];
+    try {
+      for (const n of numbers) {
+        const pageObj = await preview.getPage(n);
+        const vp = pageObj.getViewport({ scale: spec.dpi / 72 });
+        const canvas = doc.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(vp.width));
+        canvas.height = Math.max(1, Math.round(vp.height));
+        const ctx = canvas.getContext("2d", { alpha: false });
+        // JPEG has no alpha: start from an opaque white ground so transparent
+        // page areas never turn black in the DCT stream.
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await pageObj.render({ canvasContext: ctx, viewport: vp, background: "#ffffff" }).promise;
+        const blob = await new Promise((ok, no) => {
+          canvas.toBlob((b) => (b ? ok(b) : no(new Error("canvas.toBlob 返回空"))), "image/jpeg", spec.quality / 100);
+        });
+        parts.push({ n, blob, width: canvas.width, height: canvas.height });
+      }
+    } catch (e) {
+      toast("error", `export: ${e.message}`);
+      return null;
+    }
+    lastExportBody = {
+      spec,
+      pages: parts.map((p) => p.n),
+      bytesPerPage: parts.map((p) => p.blob.size),
+      px: parts.map((p) => [p.width, p.height]),
+    };
+    let res;
+    try {
+      res = await exportUpload(spec, parts);
+    } catch (e) {
+      toast("error", `${e.code}: ${e.message}`);
+      return null;
+    }
+    // The export is a derived swap (like split/apply): adopt re-points the
+    // preview at the raster asset, so the following save writes the document
+    // the user is looking at. state.assets.export carries the id (asset hooks).
+    await adopt(res, "", { from: "export" });
+    lastExport = { assetId: res.assetId, key: exportKeyOf(spec) };
+    toast("ok", t("ok.exported").replace("%d", String(parts.length)).replace("%d", String(spec.dpi)).replace("%d", String(spec.quality)));
+    return res;
+  }
+
   // submitSave posts the real /api/pdf/save route (AGENTS §6). The target has
   // exactly three channels and the server rejects an ambiguous request, so the
   // front-end picks one: replaceOriginal for the confirmation modal, otherwise
@@ -932,6 +1058,30 @@
     if (!state.file) {
       toast("error", t("err.apply.noDoc"));
       return;
+    }
+    // W5: raster save chain. mode=vector never sends /api/pdf/export (源资产
+    // 直接写); mode=raster bakes the selected pages first, so the file on disk
+    // IS the flattened document. A failed export aborts the save - writing the
+    // non-rasterised document behind the user's back would be worse.
+    if ((readField("api.export.mode") || "vector") === "raster") {
+      // W6: block on the per-page estimate BEFORE anything goes out; the
+      // network log must stay empty when this fires.
+      const est = computeEstimate();
+      if (est && est.perPageBytes > MAX_EXPORT_PAGE_BYTES) {
+        toast("warn", t("warn.export.tooBig"));
+        return;
+      }
+      // A second 保存 of an already-flattened document must not re-bake: the
+      // extra JPEG generation is visible quality loss. It re-bakes only when
+      // the document is not the export asset (undo, a new seal, a new open) or
+      // when the user changed dpi/quality/pages — that is a new write intent.
+      const spec = exportSpecOf();
+      const rebake =
+        !lastExport || lastExport.assetId !== state.file.assetId || lastExport.key !== exportKeyOf(spec);
+      if (rebake) {
+        const exported = await exportRaster();
+        if (!exported) return;
+      }
     }
     const typed = String(readField("api.save.targetPath") || "");
     const body = { assetId: state.file.assetId, replaceOriginal: Boolean(replaceOriginal) };
@@ -1613,6 +1763,7 @@
           open: state.assets.open,
           split: state.assets.split,
           apply: state.assets.apply,
+          export: state.assets.export,
           save: state.assets.save,
           splitUndoArmed: Boolean(state.splitChain && state.splitChain.info),
           applyUndoArmed: Boolean(state.applyChain && state.applyChain.info),
@@ -1636,6 +1787,11 @@
           }),
         };
       }
+      case "exportBody":
+        // The last raster submission (P5): the exact spec JSON plus the page
+        // numbers, per-page blob sizes and pixel boxes, so tools/verify can pin
+        // the wire shape without a private test hook. null until raster ran.
+        return lastExportBody;
       case "pageMeta":
         return (state.file && state.file.pages)
           ? state.file.pages.map((pg) => ({

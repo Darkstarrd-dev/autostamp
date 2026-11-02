@@ -194,6 +194,13 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
     `page|scale|dpr|尺寸` 识别，盖章前后同一页同一 zoom 完全相同 → `repaint()` 把上一份
     文档的位图画回新画布，落盘后的回读整页 0 命中印章色。实测与断言见 FACTS §1.9
     （验收脚本取样前必须 `preview.redraw()`）。
+19. **光栅导出 = 前端渲染回传，服务端只写字节**：`POST /api/pdf/export` 的 raster 半边只吃
+    前端回传的页位图（pdfcpu 无 rasterize，FACTS §2.4），JPEG 字节**直传** `/DCTDecode`
+    （不重编码，否则质量二次损失）；页 pt = `px*72/dpi`（两位小数）、**不加旋转量**
+    （pdf.js 输出的就是显示方向，同 §5.17）；单页 >90 MiB ⇒ 400 `page_too_large`，前端按
+    体积预估在发请求前拦下（`UI_SPEC` W6）。vector 走 JSON、只裁页。**保存幂等**：当前文档
+    已是光栅化资产且 `dpi/质量/pages` 没变 ⇒ 第二次保存不再光栅化（`app-shell` 的
+    `lastExport`），否则就是多一代 JPEG 画质损失；改了参数才重光栅化一次。
 
 ## 6. HTTP 契约（`/api/*`，全部 JSON；字段在 **P0.5 与用户确认后**才冻结，改动必须同步本文、`docs/UI_SPEC.md` 与前端）
 
@@ -206,7 +213,7 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
 |`POST /api/pdf/split`|**已实现**:切分词表 `{assetId, splitMode, rows, cols, customCuts[], splitVeto, vetoPages[], splitPages}`（词表 = `UI_SPEC §2.2`；`splitVeto` 是指针,`false` 是真答案；`vetoPages` = D3 逐页否决；`splitPages` 用 pages 词表限定可切页）→ 新 `assetId`（kind `split`）+ 同形状页元数据;原资产保留即「撤销切分」的实现|
 |`POST /api/pdf/seal/prepare`|**已实现**:multipart 上传印章 PNG/生成 → `sealId` + alpha 元数据（`seal.prepare.despill/alphaTrim/resampleDpi` 词表见 `UI_SPEC §2.2`；**去背在前端**，见 §5.12 与 FACTS §1.8）。配套 `GET /api/pdf/seal/raw?id=` 只回印章字节给合成|
 |`POST /api/pdf/apply`|**已实现**:矢量落盘词表 `{assetId, instances[]}`，实例字段 `sealId/blend/opacity/scale/pos/anchor/offset/rotation/pages/crossPage/binding/startOffset`（`brightness/saturate` 仅预览，**不发送**；发送即 400）→ 新 `assetId`（kind `applied`）。实例数组是关键：一条请求写完全部实例，同一 `(blend,opacity)` 组走一次 pdfcpu pass|
-|`POST /api/pdf/export`|光栅路径：`{assetId, dpi, quality, mode}` → 新 `assetId`（页位图由前端回传）|
+|`POST /api/pdf/export`|**已实现（P5）**：两形态靠 `Content-Type` 协商。`application/json` = vector：`{assetId, mode:"vector", pages}`，只按 pages 词表**裁页**（`all` 时原样克隆），不重编码；带 `dpi/quality` 即 400。`multipart/form-data` = raster：表单字段 `spec` 是 JSON（`{assetId, mode:"raster", dpi, quality, pages}`），每页一个文件 `page-<n>`（JPEG/PNG 字节，**页位图由前端 pdf.js 渲染回传**，服务端不 rasterize、不重编码 JPEG）→ 新 `assetId`（kind `exported`）+ `bytesPerPage`。单页图像 > 90 MiB ⇒ 400 `page_too_large`；前端按体积预估**提交前拦截**（`UI_SPEC` W6）|
 |`POST /api/pdf/save`|**已实现**:`{assetId, targetPath|pathGrantId|replaceOriginal}`（三选一，必须且只能给一个）→ `fsx.AtomicWriteFunc` 原子写盘；`replaceOriginal` 用 `tmpstore.Asset.Origin`（open/split/apply 都向前继承）|
 |`GET /api/settings` / `PATCH /api/settings`|读全量设置；`PATCH` 走 `{"patch":{...}}` 信封（嵌套指针字段按需合并）|
 |`GET /api/seal/preset` 等|印章预设 list/save/delete|
@@ -218,7 +225,7 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
   已注册错误码：`bad_body`(400) `bad_host`(421) `bad_origin`(403) `internal_error`(500)、
   `bad_session` `bad_id` `not_found` `kind_denied` `path_denied` `password_required` `password_invalid`
   `unreadable_pdf` `payload_too_large` `split_failed` `apply_failed` `validate_failed` `not_pdf` `save_failed`
-  `pick_failed` `pick_unsupported` `http_<status>`。
+  `pick_failed` `pick_unsupported` `page_too_large` `http_<status>`。
   新增码必须同时登记进本节 + `UI_SPEC §4` + 前端 i18n 文案表。
 - 请求体：`/api/settings` 的 body 是 `{"patch":{…}}`；未知字段一律 400
   （`webx.DecodeJSON` 用 `DisallowUnknownFields`），空体也算 400；
@@ -291,7 +298,15 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
       对应印章左右半、条带 bbox 四边 ≤1 pt；保存链断「写盘后磁盘文件再 `fs/pick`+`open`
       页数 = 切分后的页数」；撤销盖章/撤销切分断 asset 换回 + 实例恢复。取样前必须
       `preview.redraw()`（换文档后快照才重抓，见 §5.18 + FACTS §1.9 —— 这是踩过的坑）。
-  13. 以上全部由 `build.ps1` 串成一条命令（`-Task verify` / `go vet` / `go test`），
+  13. P5 光栅导出（P5 起常驻）：`node tools/verify/export-smoke.mjs`（分段令牌
+      `--only=<raster|vector|guard|chain>`）—— 真 exe + 真 UI 走完「保存」链：断言每页
+      pt == `px*72/dpi`（±1 pt）、导出文件字节落在 FACTS §4 行的 ±40% 量级带内（±5%
+      钉不住，理由见 FACTS §4）、回读同点像素与导出前预览一致（Δ ≤6，取中部避开 AA）、
+      `mode=vector` 的增量网络日志里 `/api/pdf/export` 请求数 0 且回读仍有文字、W6 超限
+      只出 warn 且 `/api/pdf/*` 请求数 0、二次保存不重光栅化（export 请求 0 次）/改参数
+      后重光栅化恰好一次 + 换来新 export asset。连续保存时完成信号只能等**请求本身**
+      （`save` 回显同一 assetId，拿 probe 的 asset id 变化等会一直超时 —— 踩过的坑）。
+  14. 以上全部由 `build.ps1` 串成一条命令（`-Task verify` / `go vet` / `go test`），
       任一失败退出码 1。
 - `go test ./...` 全绿；`go vet ./...` 无输出。
 - UI 阶段用真实窗口（WebView2）+ headless 各跑一次，console 必须 0 error。
@@ -330,7 +345,7 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
 |改落盘/撤销/保存|`UI_SPEC §8` W1-W4 + 本文件 §5.16/§5.17 + FACTS §1.9 §2.6|`internal/api/apply.go`、`internal/api/save.go`、`internal/pdfcore/{apply,stamp,blend,validate,pxdims,pages}.go`、`web/static/app-shell.js`（`stampIntoPDF`/`undoRoute`/`submitSave`）、`tools/verify/apply-smoke.mjs`|
 |改导出体积预估|`docs/FACTS.md` §4|`web/static/app-shell.js`（`computeEstimate/refreshEstimate`、`probe('estimate')`）|
 |改混合模式/透明度|`docs/FACTS.md` §1.2/§1.3/§2.2|`internal/pdfcore/blend.go`、`web/static/app-overlay.js`|
-|改导出 DPI/质量|`docs/FACTS.md` §4|`internal/pdfcore/raster.go`、`internal/api/export.go`|
+|改导出 DPI/质量|`docs/FACTS.md` §4 + `UI_SPEC §8` W5/W6|`internal/pdfcore/raster.go`（writer 字节结构）、`internal/api/export.go`（协商两形态 + 硬限）、`web/static/app-shell.js`（保存内的 raster 通道 + `MAX_EXPORT_PAGE_BYTES` 拦截 + `exportDpiOf/exportQualityOf` + `lastExport` 幂等）、`tools/verify/export-smoke.mjs`|
 |改预览渲染|`docs/FACTS.md` §1|`web/static/app-preview.js`、`web/static/vendor/pdfjs/`|
 |新增路由|本文件 §6|`internal/api/register.go`、`web/static/app-api.js`|
 |窗口/端口/浏览器回退|本文件 §5|`host_webview_windows.go`、`internal/app/`|

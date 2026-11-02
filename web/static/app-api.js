@@ -95,34 +95,15 @@
     return envelopeOf(res, path);
   }
 
-  // uploadPDF is the drag/drop and file-input channel: multipart/form-data with
-  // a `file` field. The route is wrapped in MaxBytesHandler (256 MiB,
-  // AGENTS §5.11), so an oversized drop is refused before it ever lands.
-  async function uploadPDF(file, pw) {
+  // uploadMultipart is the single multipart channel every upload route shares:
+  // any number of string fields plus file parts (name, blob, filename). It is
+  // the place the session header, the same-origin credentials and the envelope
+  // unwrapping live — every other upload route is a shape over it, so an upload
+  // cannot fork a second copy of the error handling.
+  async function uploadMultipart(path, fields, files) {
     const fd = new FormData();
-    fd.append("file", file, file.name);
-    if (pw) fd.append("pw", pw);
-    const init = {
-      method: "POST",
-      body: fd,
-      credentials: "same-origin",
-      headers: { [SESSION_HEADER]: sessionToken() },
-    };
-    let res;
-    try {
-      res = await fetch("/api/pdf/open", init);
-    } catch (e) {
-      throw new ApiError(0, "network", `/api/pdf/open: ${e.message}`);
-    }
-    return envelopeOf(res, "/api/pdf/open");
-  }
-
-  // uploadPOST is the multipart channel for the seal image: the same shape as
-  // uploadPDF (a `file` field plus the option fields the route understands).
-  async function uploadPOST(path, file, fields) {
-    const fd = new FormData();
-    fd.append("file", file, file.name);
     for (const [k, v] of Object.entries(fields || {})) fd.append(k, String(v));
+    for (const f of files || []) fd.append(f.name, f.blob, f.filename || f.name);
     const init = {
       method: "POST",
       body: fd,
@@ -136,6 +117,21 @@
       throw new ApiError(0, "network", `${path}: ${e.message}`);
     }
     return envelopeOf(res, path);
+  }
+
+  // uploadPDF is the drag/drop and file-input channel: multipart/form-data with
+  // a `file` field. The route is wrapped in MaxBytesHandler (256 MiB,
+  // AGENTS §5.11), so an oversized drop is refused before it ever lands.
+  async function uploadPDF(file, pw) {
+    const fields = {};
+    if (pw) fields.pw = pw;
+    return uploadMultipart("/api/pdf/open", fields, [{ name: "file", blob: file, filename: file.name }]);
+  }
+
+  // uploadPOST is the single-`file` multipart shape the seal route speaks
+  // (a `file` field plus the option fields it understands).
+  async function uploadPOST(path, file, fields) {
+    return uploadMultipart(path, fields, [{ name: "file", blob: file, filename: file.name }]);
   }
 
   window.__autoStampApi = {
@@ -178,6 +174,7 @@
     // it; the response carries sealId + the alpha metadata the panel shows.
     sealPrepare: (file, options) => uploadPOST("/api/pdf/seal/prepare", file, options || {}),
     uploadPOST,
+    uploadMultipart,
     // sealURL is the prepared byte channel. The session token cannot ride an
     // <img>, so app-seal.js fetches it as a blob and keeps an ImageBitmap.
     sealURL: (sealId) => `/api/pdf/seal/raw?id=${encodeURIComponent(sealId)}`,

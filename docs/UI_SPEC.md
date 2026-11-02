@@ -169,7 +169,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 滑杆 + 数值必须**双向绑定**（同一 `data-field` 复用两次，mock 已实现 `bindPair`）；
 隐藏 `type=file` input 只作选择器触发器，不占字段。
 
-## 4. i18n 清单（key | en | cn；共 198 键，全部由 mock + 状态文案生成；`node tools/verify/gen-i18n.mjs` 打印同数）
+## 4. i18n 清单（key | en | cn；共 208 键，全部由 mock + 状态文案生成；`node tools/verify/gen-i18n.mjs` 打印同数）
 
 规则（AGENTS §7）：每个可见控件/文案必须有 `data-i18n` key，en/cn 两值非空；
 `data-i18n-cn`（及 `-placeholder`、`-title`）提供中文值，en 取元素自身文本或 `class="tag"` 的字段名。
@@ -312,6 +312,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |nudge.hint|move 1pt (Shift: 10pt)|移动 1pt（Shift = 10pt）|
 |ok.saved|saved (atomic temp+rename, ValidateFile passed)|已保存（原子 temp+rename，ValidateFile 通过）|
 |ok.applied|stamped（已盖章，新 asset 已就绪）|已盖章（新 asset 就绪）|
+|ok.exported|rasterised %d page(s) at %d dpi q%d|已光栅化 %d 页（%d dpi，质量 %d）|
 |ok.undoStep|reverted to the previous step|已回退到上一步|
 |open.hint|open a PDF|打开 PDF|
 |overlay.filter.note|ctx.filter is context state: reset to none per layer (FACTS §1.4).|注意：ctx.filter 是上下文状态，每层叠加前必须置 none（FACTS §1.4）。|
@@ -384,6 +385,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |ui.split.vetoedPages.hint|Click a page to veto its auto-split.|点击某页即否决其自动切分；否决页保持原样不切。|
 |warn.noText.hint|No extractable text layer: this file has only scanned images|无可抽取文字层：该文件只有扫描图像|
 |warn.render.hint|Page 3 has 33 MP: rendered at reduced scale|第 3 页 33 MP：已按缩略尺寸渲染|
+|warn.export.tooBig|page bitmap exceeds the 90 MB cap: lower DPI to 300 or fewer pages|单页位图超过 90 MB 上限：请把 DPI 降到 300 或少选几页|
 
 ## 5. 快捷键（mock 已注册，P1/P2 起在真实 UI 里同样注册）
 
@@ -504,9 +506,13 @@ FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 |W2|盖章后实例叠加层的处理|切到已盖章 asset、清空已落盘实例（推荐）/ 保留可继续微调 / 保留但禁用编辑|已确认：切到已盖章 asset 并清空已落盘实例（预览显示 PDF 里已有的章，不会二次叠加）|2026-10-30|ask 第 4 轮 after-apply|
 |W3|撤销盖章入口|顶栏「撤销盖章」按钮（推荐）/ 实例行撤销 / 无撤销按钮|已确认：`#apply-undo`（另配 `#split-undo` 撤销切分；逐级回到上一个 asset）|2026-10-30|ask 第 4 轮 undo-entry|
 |W4|实例 pages 的落盘语义|按实例 pages 词表逐页写（推荐）/ 只写当前可见页|已确认：按实例 `pages` 词表逐页落章（与 P2 预览按 pages 绘制一致）|2026-10-30|ask 第 4 轮 pages-semantics|
+|W5|光栅导出（raster）何时真正触发|保存弹窗「保存」时按导出段参数自动光栅化（推荐，不加新控件）/ 导出段新增「光栅化并导出」按钮（新契约 id）/ 顶栏「导出」+ 独立弹窗|已确认：保存时自动光栅化 —— `mode=raster` 则先渲染页位图 → `POST /api/pdf/export` → adopt 新 asset → 写盘；`mode=vector` 不发该请求（源资产直接写）。实现决定（2026-11-02，不新增控件、不改词表）：同一份 raster 参数第二次保存**不再**光栅化，复用已光栅化的 asset；只有 `dpi/质量/pages` 变了才重光栅化一次|2026-11-02|ask P5 轮 raster-trigger|
+|W6|单页位图超过 90 MB 上限（PLAN P5）时的行为|提交前拦截 + 提示降 DPI（推荐）/ 服务端只告警不拒绝 / 前端自动降到 300 dpi|已确认：提交前拦截 —— 前端按体积预估（§E1，FACTS §4 换算）在发请求前挡住并提示降 DPI（i18n `warn.export.tooBig`）；服务端仍留硬限，超 90 MB/页回 400 `page_too_large`|2026-11-02|ask P5 轮 raster-limit|
 
 
 D2–D4、L1、CP1 已在 P0.5 第 1 轮确认（2026-10-29）；D1、I1、S1、E1 在第 2 轮确认（同日）。
+
+W5、W6 是 P5（光栅导出）开工前的落盘/保存语义，用第 5 轮确认（2026-11-02）。
 V1–V3 是 P1 开工前的形态问题，用第 3 轮确认（同日），因为它们改的是预览区/分页条的可见形态而非字段词表。
 B1/D5 属 `IMPLEMENTATION_PLAN` §9 的「不阻塞 P0.5」，按 §9 默认实现并在此登记。
 C1 是 P2 叠加层落地的坐标语义，本轮未评审：先按默认实现，落盘一致性（预览==落盘）靠 P4 的

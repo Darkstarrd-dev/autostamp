@@ -389,7 +389,7 @@ func TestStampStripBoxUsesWholeSealAspect(t *testing.T) {
 	out := stampBytes(t, buildTestPDF(t), []StampInstance{
 		{
 			SealID: "wide", PNG: sealPNG(t, 60, 30), Opacity: 1,
-			Geom: StampGeom{Scale: scale, CrossPage: true, Binding: BindingRight, StartOffset: startOffset},
+			Geom:  StampGeom{Scale: scale, CrossPage: true, Binding: BindingRight, StartOffset: startOffset},
 			Pages: []int{1, 2},
 		},
 	})

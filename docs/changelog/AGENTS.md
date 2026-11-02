@@ -2,6 +2,21 @@
 
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-02 — P5 契约：§5 决策 19、§6 export 行改写、§8 加第 13 项、§11 导出行
+
+- §5 决策 19：光栅导出 = 前端渲染回传、服务端只写字节（JPEG 直传不重编码、
+  页 pt = `px*72/dpi`、无旋转量、90 MiB 硬限 + 前端提交前拦截）。
+- §6 的 `POST /api/pdf/export` 行由占位符改成实现契约：按 `Content-Type` 协商两形态
+  （json = vector 只裁页 / multipart = raster 送 `spec` + `page-<n`）；错误码表加
+  `page_too_large`。
+- §8 加第 13 项（`export-smoke.mjs` 的断言清单），`build.ps1 -Task verify` 变九项。
+- 补记:§8 的第 13 项在本轮后半才真正落到正文(此前只有 §11 行提到脚本),内容 = export-smoke
+  的断言清单;原第 13 项(build.ps1 串命令)改号为 14。
+- §5 决策 19 追加**保存幂等**(已光栅化 + 参数未变 ⇒ 第二次保存不再光栅化),§11 导出行同步。
+- §11「改导出 DPI/质量」行补上 `app-shell` 的保存内 raster 通道与 verify 脚本。
+- 顺带 cutover：`app-api.js` 的 `uploadMultipart` 是全仓唯一 multipart 出口，
+  `uploadPDF`/`uploadPOST` 退化为它的「单 `file` 形状」包装 —— 前端不再各自复制
+  fetch 语义与信封错误处理。
 
 ## 2026-11-02 — P4 落盘契约：§5 加决策 17/18，§6 加两行路由，§11 加两行速查
 

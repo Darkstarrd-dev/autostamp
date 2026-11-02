@@ -24,7 +24,7 @@ type Deps struct {
 	Assets   *tmpstore.Store
 }
 
-// NewMux builds the P0/P1/P4 route set. Method patterns come from Go 1.22
+// NewMux builds the P0–P5 route set. Method patterns come from Go 1.22
 // ServeMux, so a wrong verb returns 405 for free.
 func NewMux(d Deps) *http.ServeMux {
 	mux := http.NewServeMux()
@@ -58,6 +58,13 @@ func NewMux(d Deps) *http.ServeMux {
 	// P4 write-back (AGENTS §6): the asset lands on the user's disk through
 	// fsx.AtomicWriteFunc, so a save is either complete or absent.
 	mux.HandleFunc("POST /api/pdf/save", handleSave(d.Assets, d.Log))
+	// P5: the export channel. application/json = vector (source bytes are
+	// cloned or page-trimmed, never re-encoded); multipart/form-data = raster
+	// (one page bitmap per part, `page-<n>`). The body cap is deliberately
+	// generous — one page up to maxPageImageBytes, maxExportPages of them —
+	// because a whole document can arrive as bitmaps; MaxBytesHandler turns a
+	// runaway body into a plain 413 like the upload route does.
+	mux.Handle("POST /api/pdf/export", http.MaxBytesHandler(handleExport(d.Assets, d.Log), maxExportBody))
 	// Routes no later stage has implemented still match the static pattern, so
 	// they reply 405 (empty body) or 404 (static handler). The front-end
 	// reports those as http_405 / http_404 with the status text instead of a
