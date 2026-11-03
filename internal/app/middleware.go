@@ -13,12 +13,13 @@ import (
 
 // middleware chains the request pipeline in one place:
 //
-//	recoverLog -> requestLog -> host/origin guard -> gzip
+//	recoverLog -> requestLog -> host/origin guard -> security headers -> gzip
 //
-// The Host check is always on (that alone blocks DNS-rebinding, AGENTS §5.11);
-// the Origin check runs only when strict is true, because P7 finishes that
-// enforcement and the front-end must first learn to send the right Origin
-// ("先埋开关" in the plan).
+// The Host check is always on (that alone blocks DNS-rebinding, AGENTS §5.11).
+// The Origin check runs when strict is true — P7 made that the shipped
+// default (config defaults `strictOrigin: true`); it stays patchable so a
+// third-party caller can opt out, and the front-end always sends the same
+// loopback Origin, so the strict path is what the smoke suite exercises.
 func middleware(next http.Handler, log *slog.Logger, allowedHost []string, strict bool) http.Handler {
 	allowed := make(map[string]bool, len(allowedHost))
 	for _, h := range allowedHost {
@@ -28,8 +29,21 @@ func middleware(next http.Handler, log *slog.Logger, allowedHost []string, stric
 	h = recoverLog(h, log)
 	h = requestLog(h, log)
 	h = hostGuard(h, log, allowed, strict)
+	h = securityHeaders(h)
 	h = gzipMiddleware(h)
 	return h
+}
+
+// securityHeaders sets the response hardening headers every route owes, in one
+// place so the static handler cannot be the only one wearing them. The CSP
+// stays on the static responses (web/embed.go) because that is where inline
+// styles and blob: workers are needed; API payloads only owe nosniff — they
+// are JSON or plain text, and a sniffed HTML body is the whole risk here.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func recoverLog(next http.Handler, log *slog.Logger) http.Handler {

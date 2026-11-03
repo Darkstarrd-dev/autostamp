@@ -62,7 +62,8 @@ func TestMiddlewareAcceptsLoopbackHosts(t *testing.T) {
 }
 
 func TestMiddlewareOriginSwitch(t *testing.T) {
-	// strict=false (the P0 default): Host is verified, Origin is not enforced.
+	// strict=false: Host is verified, Origin is not enforced. The switch stays
+	// patchable; the shipped default is true (config.Default), see P7.
 	loose := middleware(okHandler(), console.New(io.Discard, false), []string{"127.0.0.1:8765"}, false)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8765/api/pdf/apply", nil)
@@ -99,6 +100,36 @@ func TestMiddlewareOriginSwitch(t *testing.T) {
 	strict.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Errorf("strict=on GET: status = %d, want 200", rec.Code)
+	}
+}
+
+// P7: every response owes X-Content-Type-Options, including the error
+// envelopes: a 403/400 body sniffed as HTML would be the whole risk here.
+func TestMiddlewareSetsNosniffEverywhere(t *testing.T) {
+	h := middleware(okHandler(), console.New(io.Discard, false), []string{"127.0.0.1:8765"}, true)
+	for _, tc := range []struct{ name, method, path string }{
+		{"api get", http.MethodGet, "/api/health"},
+		{"static get", http.MethodGet, "/style.css"},
+		{"api post", http.MethodPost, "/api/pdf/apply"},
+	} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(tc.method, "http://127.0.0.1:8765"+tc.path, nil)
+		req.Host = "127.0.0.1:8765"
+		h.ServeHTTP(rec, req)
+		if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("%s: X-Content-Type-Options = %q, want nosniff", tc.name, got)
+		}
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8765/api/pdf/apply", nil)
+	req.Host = "127.0.0.1:8765"
+	req.Header.Set("Origin", "http://evil.example.com")
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("rejected Origin: status = %d, want 403", rec.Code)
+	}
+	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("rejected Origin envelope: X-Content-Type-Options = %q, want nosniff", got)
 	}
 }
 

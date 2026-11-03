@@ -260,8 +260,14 @@ powershell -NoProfile -File build.ps1 -Task stripped,package  # 出货件 + win6
   未注册 verb 的 `/api/...` 命中 `GET /` → **405 纯文本**（不是信封），
   前端按 `http_<status>` 上报（FACTS §1.5）。
 - `Host` 必须等于本机监听地址（`127.0.0.1:port` / `localhost:port`），否则 421
-  `bad_host`（防 DNS-rebinding）。`Origin` 校验在 `strict` 开关后面（P7 打开），
-  不匹配 → 403 `bad_origin`。见 `internal/app/middleware.go:hostGuard`。
+  `bad_host`（防 DNS-rebinding）。`Origin` 校验随 **P7 默认开启**（`security.strictOrigin`
+  默认 `true`，可 `PATCH` 关）：非 `GET`/`HEAD` 且 Origin 非空又不是本机 → 403
+  `bad_origin`；不带 `Origin` 的调用者（curl、Go 测试）不受影响。读动词不查 Origin，
+  CSRF 风险只在写。见 `internal/app/middleware.go:hostGuard`。
+- 每个响应都带 `X-Content-Type-Options: nosniff`（中间件一处，含 4xx/5xx 信封）。
+  静态资产的 CSP 在 `web/embed.go`（`script-src 'self'` = 根本不放内联 JS，
+  `style-src` 才带 `'unsafe-inline'`，`frame-ancestors 'none'`、`object-src 'none'`；
+  实测见 FACTS §1.5）——**原计划的「内联 hash 策略」不需要**：没有内联脚本可放行。
 - gzip 中间件只压白名单扩展（`.html .js .mjs .css .json .txt .map .svg`），
   cmaps/wasm/PDF/PNG 一类已压缩或二进制资产**不重压缩**；响应带 `Vary: Accept-Encoding`。
 

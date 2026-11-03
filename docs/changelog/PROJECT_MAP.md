@@ -3,6 +3,15 @@
 > `PROJECT_MAP.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-11-03 — P7：middleware/defaults 行改写 + `middleware_test` 行
+
+- 头「最后核对」= **P0–P7 全绿**（含 P6/P7 增量清单 + 出货 zip）。
+- `middleware.go` 行：链改成 `recoverLog → requestLog → hostGuard → securityHeaders → gzip`，
+  登记 `nosniff` 与 `strict` 默认 `true`；`defaults.go` 行登记 `strictOrigin` 默认开；
+  新增 `middleware_test.go` 行（Host 421 / Origin 403 两档 / `nosniff` 三处 / gzip /
+  panic 恢复 / 日志级别 / `LoopbackListener` / 优雅关服）。
+- `types.go` 行的「六组」纠正为实际分组（含 `security`/`batch`）。
+
 ## 2026-11-03 — P6 完成：地图补 app-batch / preset / batch-smoke / encfx / 密码测试 / package
 
 - 头「最后核对」改成 **P0–P6 全绿**；`web/static/app-batch.js` 行（预设 UI + 前端跑链 +

@@ -7,7 +7,11 @@ func Default() Settings {
 	return Settings{
 		Version:  SchemaVersion,
 		UI:       UI{Lang: "en", Theme: "light", Density: "two-col"},
-		Security: Security{StrictOrigin: false},
+		// P7: Origin enforcement ships on. The front-end is same-origin, so the
+		// only callers this rejects are cross-site POSTs from another page
+		// (AGENTS §5.11). Still patchable — a non-browser caller (curl, tests)
+		// that sends no Origin at all is unaffected either way.
+		Security: Security{StrictOrigin: true},
 		Session: Session{
 			TTLMinutes:      120, // AGENTS §4: TTL 2h
 			MaxFileMB:       256,

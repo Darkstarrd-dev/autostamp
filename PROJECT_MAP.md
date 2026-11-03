@@ -1,9 +1,11 @@
 # PROJECT_MAP.md — AutoStamp 代码地图
 
-> 最后核对：2026-11-03（**P0–P6 全绿**；当前阶段 = P7）。P6 交付：`internal/presetstore` 预设库 +
-> `internal/api/seal_preset.go` 四条预设路由 + `fsx` 的 `PickDirs`/`ListMatching` +
-> `POST /api/fs/pick{dir:true}` + `POST /api/pdf/save{mkdirs:true}` + 前端批处理跑链
-> （AGENTS §5.21 BM1，**没有后端作业路由/SSE**）+ `build.ps1 -Task package` 的 win64 zip。
+> 最后核对：2026-11-03（**P0–P7 全绿**，阶段计划做完；出货件 = `build.ps1 -Task stripped,package`
+> 的 `dist\autostamp-<rev>-win64.zip`）。P6/P7 的增量：`internal/presetstore` 预设库、
+> `internal/api/seal_preset.go` 四条预设路由、`fsx` 的 `PickDirs`/`ListMatching`、
+> `POST /api/fs/pick{dir:true}`、`POST /api/pdf/save{mkdirs:true}`、前端批处理跑链
+> （AGENTS §5.21 BM1，**没有后端作业路由/SSE**）、`build.ps1 -Task package`；
+> P7：`security.strictOrigin` 默认开 + `securityHeaders`（`nosniff`）。
 > `app-crosspage.js` 这个计划名从未创建，真实形态在 `app-overlay.js`+`app-shell.js`。
 >
 > 新增/删除包必须同步本文件（AGENTS §10.1）。阶段状态见 `docs/IMPLEMENTATION_PLAN.md §10`。
@@ -22,9 +24,10 @@
 |---|---|---|---|
 |`internal/app`|`net.go`|`LoopbackListener()`：只绑 `127.0.0.1:0`，返回 `host:port`|P0|
 |(续)|`server.go`|`Server`（`http.Server` + `Graceful` 关闭 + 超时）|P0|
-|(续)|`middleware.go`|中间链 `recoverLog → requestLog → hostGuard → gzip`；`hostGuard` 拒外部 `Host`（421 `bad_host`）、`strict` 时拒外部 `Origin`（403 `bad_origin`）；`gzipExt` 白名单（跳过 cmaps/wasm/PDF/PNG）|P0|
+|(续)|`middleware.go`|中间链 `recoverLog → requestLog → hostGuard → securityHeaders → gzip`；`hostGuard` 拒外部 `Host`（421 `bad_host`）、**P7 起 `strict` 默认 true** 时拒外部 `Origin`（403 `bad_origin`，读动词不查）；`securityHeaders` 给每个响应加 `X-Content-Type-Options: nosniff`（含错误信封）；`gzipExt` 白名单（跳过 cmaps/wasm/PDF/PNG）|P0+P7|
 |(续)|`browser.go`|`Browse(url)`：`rundll32 url.dll,FileProtocolHandler`（Windows）/ `xdg-open` 回退|P0|
 |(续)|`version.go`|`BuildInfo`（`debug.ReadBuildInfo` 的 VCS 戳：version/commit/go/os/arch）|P0|
+|(续)|`middleware_test.go`|Host 421 / Origin 403（`strict` 两档：外部 Origin 拒、本机 Origin 通、跨站 GET 放行）、`nosniff` 在 API/静态/403 信封上都在、gzip 只压白名单、panic 恢复、日志级别、`LoopbackListener`、优雅关服|P0+P7|
 |`internal/api`|`register.go`|`Deps`（含 **P6 `Presets *presetstore.Store`**）、`NewMux`（注册静态资产 + `GET /api/health`、`GET/POST /api/settings`、P1 的 `POST /api/fs/pick`、`POST /api/pdf/open`、`GET /api/pdf/raw`、P3 的 `POST /api/pdf/split`、P2 的 `POST /api/pdf/seal/prepare` + `GET /api/pdf/seal/raw`、P4 的 `POST /api/pdf/apply` + `POST /api/pdf/save`、P5 的 `POST /api/pdf/export`、**P6 的 `GET/POST/DELETE /api/seal/preset` + `GET /api/seal/preset/raw`**；未接线的后续路由**不注册**，保留 `ServeMux` 的 405/404，FACTS §1.5）|P0-P6|
 |（续）|`pdf.go`|P1 本地文件通道：`handlePick`（原生选择器 + `filePath` 直开授权）、`handleOpen`（grant/multipart 两形态 + 密码两错误码 + `SetRecent`）、`handleRaw`（`http.ServeContent` 的 Range/ETag + owner 绑定 404）、`pdfcore` 密码错误映射|P1|
 |（续）|`apply.go`|**P4 矢量落盘**：`handleApply`（`{assetId, instances[]}` → `pdfcore.Stamp` → 先 `Validate` 再注册，kind `applied`，失败删临时文件）、`resolveInstance`（词表逐项解析 + 400 分类：`bad_body`/`not_found`/`kind_denied`）、`(blend,opacity)` 分组、`Origin` 向前继承、`openResult` 复用 open 的响应形状|P4|
@@ -34,8 +37,8 @@
 |（续）|`export.go`|**P5 光栅导出**：`handleExport` 按 `Content-Type` 协商 —— `handleExportVector`（json：`{assetId,mode,pages}`，`all` 原样克隆、子集 `TrimPages`、`none`/越界 400）/ `handleExportRaster`（multipart：`spec` JSON + `page-<n` 逐页字节）；`maxPageImageBytes`（90 MiB，包级 var）→ 400 `page_too_large`、页数上限 200、`maxExportBody` 的 `MaxBytesHandler`、dpi/quality 越界 clamp + `warning`、`carryOrigin`、先写临时文件 → `Validate` → 注册，失败删临时文件|P5|
 |（续）|`export_test.go`|vector 克隆（字节相等 + `kind:exported` + Origin 继承）、子集/`none`/越界页数、vector body 带 `dpi/quality/customDpi` ⇒ 400、raster multipart 正常（`bytesPerPage`、页 pt `12x16.8`）、owner/`kind_denied`/无 session、`page_too_large`（把上限临时改小）、200 页上限、clamp 落 `warning`、坏 spec 七例|P5|
 |（续）|`apply_test.go` / `save_test.go`|apply 词表 400 分类、owner 边界、未知字段拒绝、空 instances 拒绝、响应 `kind:applied` + 页元数据；save 目标三选一/互斥、`Origin` 继承链（open→split→apply）、磁盘文件内容 == applied 字节、拒绝写会话目录|P4|
-|`internal/config`|`types.go`|`Settings`（`ui`/`overlay`/`split`/`crosspage`/`export`/`recent` 六组，字段名 = UI_SPEC 词表）|P0|
-|�|`defaults.go`|`Defaults()`（与 UI_SPEC §2 默认值一致，测试断言）|P0|
+|`internal/config`|`types.go`|`Settings` 分组（`ui`/`security`/`session`/`seal`/`apply`/`split`/`crosspage`/`export`/`batch`/`recent`，字段名 = UI_SPEC 词表）|P0-P6|
+|(续)|`defaults.go`|`Default()`（与 UI_SPEC §2 默认值一致，测试断言）；**P7 起 `security.strictOrigin` 默认 `true`**（Origin 校验出货默认开）|P0+P7|
 |�|`sanitize.go`|枚举/范围校验 + clamp（越界修正并回报 warning；词表 = `allowedBlend`/`allowedDPI`/…）|P0|
 |�|`patch.go`|`Patch`（指针字段，只合并送来的部分）|P0|
 |�|`store.go`|`Store`：首启写默认、损坏文件备份 + 重置、加载时 clamp、`Apply`、`SetRecent`（去重 + 截断）|P0|

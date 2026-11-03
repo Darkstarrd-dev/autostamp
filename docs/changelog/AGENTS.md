@@ -3,6 +3,18 @@
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-11-03 — P7：§6 Origin 默认开 + `nosniff` 契约化
+
+- §6 的 `Host` 那条改成：Origin 校验**随 P7 默认开启**（`security.strictOrigin: true`，
+  仍可 `PATCH` 关；非 GET/HEAD 且 Origin 非本机 → 403 `bad_origin`；不带 Origin 的
+  curl / Go 测试不受影响；读动词不查 Origin）。
+- 新增一条：每个响应带 `X-Content-Type-Options: nosniff`（中间件一处，含错误信封）；
+  CSP 归 `web/embed.go` + FACTS §1.5，并登记「原计划的内联 hash 策略不需要，因为前端
+  没有内联脚本可放行」。
+- 代码同步：`internal/app/middleware.go` 加 `securityHeaders`；`internal/config/defaults.go`
+  的 `StrictOrigin` 默认翻成 `true`；测试 `TestMiddlewareSetsNosniffEverywhere`。
+- 实测：`build.ps1 -Task vet,test,verify` 失败 0 / 跳过 0（十脚本，真窗口冷启动 531 ms）。
+
 ## 2026-11-03 — P6 收尾：BM5、§8.15 实测重写、§11 真实文件、§4 package、§6 `splitPages` 补登记
 
 - **BM5 新增**（§5.21）：预设的 `pages:"all"` 对批处理无效 —— `pagesForDoc()` 逐文档求交集

@@ -1,6 +1,6 @@
 # AutoStamp — 实施计划（IMPLEMENTATION PLAN）
 
-> 最后核对：2026-11-03（P0 + P0.5 + P1 + P2 + P3 + P4 + P5 + **P6** 完成；当前阶段 = P7 加固/文档）。
+> 最后核对：2026-11-03（**P0–P7 全部完成**；产品需求 1–6 全在真窗口里可用，出货 = `build.ps1 -Task stripped,package` 的 win64 zip）。
 > 依赖/浏览器事实引用 `docs/FACTS.md` 编号，禁止凭记忆改写。约束见 `AGENTS.md`。
 
 ## 0. 新对话恢复执行协议（执行入口）
@@ -398,12 +398,34 @@ DCT 流 == 输入原始字节、Flate 解压长度 `h*(1+w*3)`、`/SMask` 存在
   `webview window opened` **514 ms**、首个 `/api/health` **555 ms**（判据 ≤ 1.5 s ✓）。
   口径 = 进程 spawn → 窗口创建并导航 + 首个 HTTP 应答，不是「肉眼双击到首屏」的计时。
 
-### P7 — 加固与文档核对 `[ ]`
+### P7 — 加固与文档核对 `[x]`
 
-`Host`/`Origin` 强制校验、`X-Content-Type-Options`、`CSP`（仅 self + 内联 hash 策略）；
-上传/渲染内存预算与大图分块；加密 PDF 口令弹窗与失败提示；
-崩溃恢复（tmpstore scavenge、崩溃后重启清空）；i18n 全覆盖；
-`PROJECT_MAP.md`/`docs/*` 核对与 `docs/changelog/` 建立。
+实测（2026-11-03，`build.ps1 -Task vet,test,verify` = **失败 0 / 跳过 0**，十脚本 + 真窗口）：
+
+- **Origin 出货默认开**：`config.Default().Security.StrictOrigin = true`（仍可 `PATCH` 关）。
+  非 `GET`/`HEAD` 且 Origin 非本机 → 403 `bad_origin`；不带 Origin（curl / Go 测试）不受影响；
+  读动词不查 Origin。**关键证据**：十脚本真 UI 全链仍在默认开的情况下跑通（浏览器同源
+  `fetch` 都带正确 Origin ⇒ 出货口径没有打断真实链路）。断言 `TestMiddlewareOriginSwitch`。
+- **每个响应带 `X-Content-Type-Options: nosniff`**（含 4xx/5xx 信封）：新增中间件
+  `securityHeaders` + `TestMiddlewareSetsNosniffEverywhere`（API / 静态 / 403 三种都钉）。
+- **CSP**（`web/embed.go`，`web/embed_test.go` 逐条断言 + 「壳无内联 `<script>`」）：
+  `script-src 'self'`、`style-src 'self' 'unsafe-inline'`（CSSOM 实测 FACTS §1.5）、
+  `frame-ancestors 'none'`、`object-src 'none'`、`base-uri 'none'`、`form-action 'self'`。
+  **原计划的「内联 hash 策略」不成立**：前端根本没有内联脚本可放行，`'self'` 已经更强。
+- **内存预算**：上传口 `MaxBytesHandler`（open 256 MiB / seal 20 MiB / export body
+  = 90 MiB × 200 页，单页位图硬上限 90 MiB ⇒ 超了 400 `page_too_large`，前端 W6 先拦）；
+  光栅词表 dpi 96..600、quality 40..95、页数 ≤ 200、`exportTimeout` 5 min；
+  pdfcpu 护栏显式收紧 `MaxImageBytes = 64 MB`、`MaxImagePixels = 50 MP`（`pdfcore.DefaultLimits`）；
+  会话存储自己的单文件/总量配额（256 MiB / 2 GiB）。
+  「大图分块」= 前端逐页渲染回传（无服务端 rasterize，FACTS §2.4）+ 上面这些上限。
+- **崩溃恢复**：`tmpstore.New` 启动即 `Scavenge()`（过期资产 + 任何被中断写留下的孤儿
+  temp 文件）；窗口 goroutine panic 转储 `%LOCALAPPDATA%\AutoStamp\crash\`。
+- **i18n 全覆盖**：276 键 en/cn（`ui-contract` 三方 + `ui-smoke` 断言），唯一来源 `UI_SPEC §4`。
+- **加密 PDF 口令**：单文件走链有密码弹窗（`password_required` / `password_invalid`），
+  批处理按 BM4 跳过不弹（FACTS §2.8 实测）。
+- **文档核对**：AGENTS / FACTS / UI_SPEC / PROJECT_MAP / IMPLEMENTATION_PLAN / changelog
+   全部同步；`README.md` 之前还写着「尚未开始 P0，无源码可构建」—— 已重写成当前事实
+  （它是 zip 里的出货说明）。
 
 ## 5. 验证约定
 
@@ -472,4 +494,4 @@ P0.5 追加必问项（不属上表）：布局密度、骑缝章预览形态、
 |P4 矢量落盘+BM|`[x]`|2026-11-02：`POST /api/pdf/apply`（实例数组、按 `(blend,opacity)` 分 pass、注册前 `Validate`）+ `POST /api/pdf/save`（目标三选一 / `Origin` 继承 / `AtomicWriteFunc`）；`/BM` 注入在 `blend.go`（FACTS §2.2：实测写出的 GS 带 `/BM`+`/ca`）；**回读一致性 48 组最大 Δ = 2**（`apply-smoke --only=matrix`，16 模式 x{1.0,0.6,0.3}）；落盘几何 = 显示空间 + 一次 y 翻转（实测 `150.0/452.75`、`535.5/742.5` → FACTS §2.6）；保存链：切分→盖章→保存到沙箱路径（3,534 B）→ 磁盘文件再 `fs/pick`+`open` 页数 = 2；撤销盖章/撤销切分断言（asset id 换回、实例恢复）；顺带修掉前端快照身份 bug（FACTS §1.9）|
 |P5 光栅导出|`[x]`|2026-11-02：`internal/pdfcore/raster.go`（stdlib：`/DCTDecode` 直传前端 JPEG 字节、PNG 走 `/FlateDecode` + `/SMask`、`/MediaBox` = `px*72/dpi` 两位小数、xref/`/Length`/`/Size`/`startxref` 精确、无 `/Rotate`）+ `POST /api/pdf/export`（`Content-Type` 协商：json=vector 只裁页 / multipart=raster 收 `spec` + `page-<n`）；实测真链：`bytesPerPage` 141,139/143,019 B、导出文件 **285,313 B**（落在 FACTS §4 行的 ±40% 量级带，**±5% 钉不住**）、页 pt `594.72 × 841.92` Δ 0.000、回读像素 Δ (1,-1,0)、vector 零请求 + 文字仍在、W6 预估 156,651,960 B/页 → 只出 warn 且零请求；`node tools/verify/export-smoke.mjs`（分段 `--only=<raster|vector|guard|chain>`）已进 `build.ps1 -Task verify`（九项）|
 |P6 预设/批处理/打包|`[x]`|2026-11-03：预设库 `internal/presetstore` + 四条路由（list/save/delete/raw，`{name,sealId,params}`，同名覆盖 PR2）+ 前端存/载/删（真 UI 往返：两个 select 出现、载入写回面板、删除后空）；最近文件入口 RF1（`#empty-recent`/`#recent-open` → `fs/pick{filePath}`）；**批处理 = 前端跑链**（BM1 取代 BC1 的 SSE 作业）`fs/pick{dir:true}`→`open`→(`split`)→`apply`→`export`(raster)→`save{mkdirs}`，`api.batch.*` 进 settings 的 `batch` 段（dpi 150 / customDpi 150 / quality 75 / concurrency 2）；`batch-smoke` 22 份样本（20 可盖 + AES-256 加密 + 故意坏）→ 计数 `[22,20,1,1]`、状态分布 `{ok:20,encrypted:1,fail:1}`、产物 `_batch\b-XX.dpi150.q75.pdf` 页数一致、**源 sha1 不动**、加密/坏件无产物、CSV 22 行 / JSON 22 条（真下载）；AES-256 密码往返 `TestOpenPasswordRoundTrip`（FACTS §2.8）；`build.ps1 -Task package` 出 `autostamp-<rev>-win64.zip` 8,183 KB（exe 19,744 KB ≤ 25 MB ✓）；窗口版冷启动 514 ms（判据 1.5 s ✓，口径 = spawn→窗口导航 + 首个 health）|
-|P7 加固/文档|`[ ]`||
+|P7 加固/文档|`[x]`|2026-11-03：`security.strictOrigin` **出货默认开**（403 `bad_origin`，读动词不查；十脚本真 UI 在默认开之下仍全绿 = 同源链路没被打断）+ 每个响应带 `nosniff`（新增 `securityHeaders`）+ CSP 已钉死（`script-src 'self'` 无内联 JS、`frame-ancestors 'none'`，原计划「内联 hash」不需要）+ 上传/词表上限（open 256 MiB / seal 20 MiB / export 90 MiB×200 页 / dpi 96..600 / quality 40..95 / pdfcpu 64 MB+50 MP / `exportTimeout` 5 min）+ 启动 `Scavenge`（过期资产 + 孤儿 temp）+ i18n 276 键；`build.ps1 -Task vet,test,verify` 失败 0 / 跳过 0，冷启动 531 ms；README 从「尚未 P0」重写成当前事实|
