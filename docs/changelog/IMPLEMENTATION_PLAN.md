@@ -3,6 +3,16 @@
 > `docs/IMPLEMENTATION_PLAN.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-11-03 — 工作模式切换：§10.1 人工端到端验收 + 细节调整 + 功能细化
+
+- 头「最后核对」登记 P0–P7 收官 + 同日 PD1/PD2 装载与 impeccable polish（commit `7d241d3`）。
+- §0 新增第 9 条：全部阶段 `[x]` 后「当前阶段」规则失效，工作按 §10.1 流程走；UI 语义门槛不变。
+- 新增 §10.1：不再新开 P 框；验收发现/细化项逐行登记（项/来源/状态/实测列），验收通道 =
+  `build.ps1 -Task webview -Run` 真窗口或出货 zip；改动后必跑 `vet,test,verify` 且扩展 verify 断言；
+  polish 可用 `.omp/skills/impeccable` 的 `detect`（修后复扫归零）。已登记 PD1/PD2 与 polish 两条
+  已完成项，以及「人工端到端验收轮」待办行。
+- AGENTS §0 文档清单同步指向 §10.1。
+
 ## 2026-11-03 — P7 勾 `[x]`：Origin 出货默认开、nosniff、上限清单、崩溃恢复
 
 - P7 节重写：Origin `strictOrigin` 默认 `true`（十脚本真 UI 在默认开下仍全绿 = 同源链没断）、

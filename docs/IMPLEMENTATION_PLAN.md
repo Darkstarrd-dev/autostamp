@@ -1,6 +1,6 @@
 # AutoStamp — 实施计划（IMPLEMENTATION PLAN）
 
-> 最后核对：2026-11-03（**P0–P7 全部完成**；产品需求 1–6 全在真窗口里可用，出货 = `build.ps1 -Task stripped,package` 的 win64 zip）。
+> 最后核对：2026-11-03（**P0–P7 全部完成**；产品需求 1–6 全在真窗口里可用；同日另加 PD1/PD2 粘贴/拖拽装载 + impeccable polish，commit `7d241d3`。出货 = `build.ps1 -Task stripped,package` 的 win64 zip）。**阶段计划已收官，当前工作模式 = 人工端到端验收 + 细节调整 + 功能细化，走 §0 第 9 条与 §10.1。**
 > 依赖/浏览器事实引用 `docs/FACTS.md` 编号，禁止凭记忆改写。约束见 `AGENTS.md`。
 
 ## 0. 新对话恢复执行协议（执行入口）
@@ -20,6 +20,11 @@
    已确认项**不得重问**；未确认项按 P0.5「与用户的交互协议」用 `ask` 批量提问
    （每轮 2–5 条、选项式），拿到用户答复才写决策表——**禁止把 §9 默认值当作已确认，
    也禁止虚构用户确认**。`UI_SPEC` 不存在时先交付 mock 再问。
+9. 阶段自 2026-11-03 起全部 `[x]`：第 3 条的「当前阶段」不再存在。工作按
+   **人工端到端验收（用户在真窗口操作）+ 细节调整 + 功能细化**进行，登记与流程见 §10.1。
+   每项验收反馈/细化 = 先登记 §10.1 表 → 修复/实现 → 回填验证命令与实测 → 提交
+   （`fix:`/`polish:`/`feat:` + 摘要）。**UI 语义/字段改动仍必须先经 `docs/UI_SPEC.md` §8
+   用户确认决策行（AGENTS §8 UI 语义门槛），不得虚构确认。**
 
 ## 1. 目标 / 非目标
 
@@ -495,3 +500,18 @@ P0.5 追加必问项（不属上表）：布局密度、骑缝章预览形态、
 |P5 光栅导出|`[x]`|2026-11-02：`internal/pdfcore/raster.go`（stdlib：`/DCTDecode` 直传前端 JPEG 字节、PNG 走 `/FlateDecode` + `/SMask`、`/MediaBox` = `px*72/dpi` 两位小数、xref/`/Length`/`/Size`/`startxref` 精确、无 `/Rotate`）+ `POST /api/pdf/export`（`Content-Type` 协商：json=vector 只裁页 / multipart=raster 收 `spec` + `page-<n`）；实测真链：`bytesPerPage` 141,139/143,019 B、导出文件 **285,313 B**（落在 FACTS §4 行的 ±40% 量级带，**±5% 钉不住**）、页 pt `594.72 × 841.92` Δ 0.000、回读像素 Δ (1,-1,0)、vector 零请求 + 文字仍在、W6 预估 156,651,960 B/页 → 只出 warn 且零请求；`node tools/verify/export-smoke.mjs`（分段 `--only=<raster|vector|guard|chain>`）已进 `build.ps1 -Task verify`（九项）|
 |P6 预设/批处理/打包|`[x]`|2026-11-03：预设库 `internal/presetstore` + 四条路由（list/save/delete/raw，`{name,sealId,params}`，同名覆盖 PR2）+ 前端存/载/删（真 UI 往返：两个 select 出现、载入写回面板、删除后空）；最近文件入口 RF1（`#empty-recent`/`#recent-open` → `fs/pick{filePath}`）；**批处理 = 前端跑链**（BM1 取代 BC1 的 SSE 作业）`fs/pick{dir:true}`→`open`→(`split`)→`apply`→`export`(raster)→`save{mkdirs}`，`api.batch.*` 进 settings 的 `batch` 段（dpi 150 / customDpi 150 / quality 75 / concurrency 2）；`batch-smoke` 22 份样本（20 可盖 + AES-256 加密 + 故意坏）→ 计数 `[22,20,1,1]`、状态分布 `{ok:20,encrypted:1,fail:1}`、产物 `_batch\b-XX.dpi150.q75.pdf` 页数一致、**源 sha1 不动**、加密/坏件无产物、CSV 22 行 / JSON 22 条（真下载）；AES-256 密码往返 `TestOpenPasswordRoundTrip`（FACTS §2.8）；`build.ps1 -Task package` 出 `autostamp-<rev>-win64.zip` 8,183 KB（exe 19,744 KB ≤ 25 MB ✓）；窗口版冷启动 514 ms（判据 1.5 s ✓，口径 = spawn→窗口导航 + 首个 health）|
 |P7 加固/文档|`[x]`|2026-11-03：`security.strictOrigin` **出货默认开**（403 `bad_origin`，读动词不查；十脚本真 UI 在默认开之下仍全绿 = 同源链路没被打断）+ 每个响应带 `nosniff`（新增 `securityHeaders`）+ CSP 已钉死（`script-src 'self'` 无内联 JS、`frame-ancestors 'none'`，原计划「内联 hash」不需要）+ 上传/词表上限（open 256 MiB / seal 20 MiB / export 90 MiB×200 页 / dpi 96..600 / quality 40..95 / pdfcpu 64 MB+50 MP / `exportTimeout` 5 min）+ 启动 `Scavenge`（过期资产 + 孤儿 temp）+ i18n 276 键；`build.ps1 -Task vet,test,verify` 失败 0 / 跳过 0，冷启动 531 ms；README 从「尚未 P0」重写成当前事实|
+
+### 10.1 当前工作模式（2026-11-03 起）：人工端到端验收 + 细节调整 + 功能细化
+
+- 上表阶段全部 `[x]`，**不再新开 P 框**；新的验收发现与细化项进入下表，一行一项。
+- 验收通道：`powershell -NoProfile -File build.ps1 -Task webview -Run`（真窗口）或出货
+  zip（`-Task stripped,package`）。用户反馈的复现步骤进入「实测/验证」列，修复后回填。
+- 任何改动后必跑 `build.ps1 -Task vet,test,verify`；改动行为需新增/扩展对应 verify 断言；
+   文档按 AGENTS §10 同步。UI 打磨可用已安装的 `.omp/skills/impeccable`（`detect` 对真链
+   URL 跑，修后复扫归零）。
+
+|项|来源|状态|实测/验证（回填）|
+|---|---|---|---|
+|PD1/PD2 粘贴/拖拽装载|用户任务 2026-11-03|已实现，commit `7d241d3`|`shell-smoke` 装载断言 16 条（reject 词表、单 PDF adopt、图片 I1 语义、输入框放行、`#drop-hint`）；UI_SPEC §8 PD1/PD2|
+|impeccable polish：导出段淡化删除 + `.seg.sm` 内边距|`detect` 扫描 8 findings|已实现，commit `7d241d3`|真链复扫 = 0 findings；`build.ps1 -Task verify` 失败 0 / 跳过 0|
+|人工端到端验收轮（真窗口逐项走产品需求 1–6 + 装载）|用户操作|待验收|发现按行登记本表；触及 UI 语义 → UI_SPEC §8 先补确认行|
