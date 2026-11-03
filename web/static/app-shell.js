@@ -522,6 +522,7 @@
 
   const SHORTCUTS = [
     ["Ctrl+O / Ctrl+S", "open.hint", "save.hint"],
+    ["Ctrl+V / 拖入", "load.paste.hint"],
     ["Ctrl+D / Del", "instances.duplicate.btn", "instances.delete.btn"],
     ["←↑↓→", "nudge.hint"],
     ["+ / −", "scale.hint"],
@@ -763,18 +764,44 @@
       // Reset so picking the same file again after a failed open still fires.
       e.target.value = "";
     });
+    // PD2 (UI_SPEC §8): window-level load gate. Only drags that carry files
+    // are intercepted - pure text drags (the one type that never has "Files")
+    // pass through untouched. The drop is classified with the SAME gate as
+    // paste: single PDF -> open, images -> seal load, everything else warns.
     const stage = q("#preview");
-    stage.addEventListener("dragover", (e) => {
+    const setDrag = (on) => { stage.dataset.drag = on ? "on" : "off"; };
+    const hasFiles = (e) =>
+      Boolean(e.dataTransfer) && Array.prototype.indexOf.call(e.dataTransfer.types || [], "Files") >= 0;
+    let dragDepth = 0;
+    doc.addEventListener("dragenter", (e) => { if (hasFiles(e)) dragDepth += 1; });
+    doc.addEventListener("dragover", (e) => {
+      if (!hasFiles(e)) return;
       e.preventDefault();
-      stage.dataset.drag = "on";
+      setDrag(true);
     });
-    stage.addEventListener("dragleave", () => {
-      stage.dataset.drag = "off";
+    doc.addEventListener("dragleave", () => {
+      if (dragDepth && dragDepth - 1 <= 0) setDrag(false);
+      dragDepth = Math.max(0, dragDepth - 1);
     });
-    stage.addEventListener("drop", (e) => {
+    doc.addEventListener("drop", (e) => {
+      if (!hasFiles(e)) return;
       e.preventDefault();
-      stage.dataset.drag = "off";
-      handleFiles(e.dataTransfer ? e.dataTransfer.files : null);
+      dragDepth = 0;
+      setDrag(false);
+      submitFiles(e.dataTransfer.files);
+    });
+    // PD1 (UI_SPEC §8): clipboard load. The gate only engages when the
+    // clipboard actually carries files; a focused field that also carries
+    // text/plain keeps the text-paste semantics (the typed path box wins).
+    doc.addEventListener("paste", (e) => {
+      const dt = e.clipboardData;
+      if (!dt) return;
+      const files = Array.from(dt.files || []);
+      if (!files.length) return;
+      const inField = /^(INPUT|SELECT|TEXTAREA)$/.test((e.target && e.target.tagName) || "");
+      if (inField && Array.prototype.indexOf.call(dt.types || [], "text/plain") >= 0) return;
+      e.preventDefault();
+      submitFiles(files);
     });
     // P4 write-back. The two split buttons are siblings of the cut-fraction
     // box; 盖到 PDF / 撤销盖章 live in the instance panel (UI_SPEC §7 ids).
@@ -1193,7 +1220,9 @@
     }
   }
 
-  // handleFiles is the drag/drop + upload channel (multipart, no grant needed).
+  // handleFiles is the upload-channel PDF route: it is reached from the
+  // upload buttons (#file-input accepts .pdf only) and from the paste/drop
+  // gate below, which has already rejected everything but a single PDF.
   async function handleFiles(files) {
     const list = Array.from(files || []);
     if (!list.length) return;
@@ -1207,6 +1236,93 @@
     } catch (e) {
       return openFailed(e);
     }
+  }
+
+  // ---------- PD1/PD2: the load gate (UI_SPEC §8) ----------
+  //
+  // submitFiles is the single funnel for paste + drop. classifyLoad encodes
+  // the accepted shapes: "one PDF" (open it) or "images only, one or many"
+  // (load as seals). Any other list (multiple PDFs, PDF+image mix, foreign
+  // files) is refused with a named reason - never silently swallowed, and
+  // never loaded. The upload buttons bypass the gate by design (their input
+  // accepts .pdf only).
+  const IMAGE_EXT = /\.(png|jpe?g|gif|bmp|webp|tiff?)$/i;
+  const isImageFile = (f) => (f.type || "").startsWith("image/") || IMAGE_EXT.test(f.name || "");
+  const isPdfFile = (f) => (f.type || "") === "application/pdf" || /\.pdf$/i.test(f.name || "");
+
+  function classifyLoad(files) {
+    if (!files.length) return "empty";
+    let imgs = 0;
+    let pdfs = 0;
+    for (const f of files) {
+      if (isImageFile(f)) imgs += 1;
+      else if (isPdfFile(f)) pdfs += 1;
+      else return "other";
+    }
+    if (pdfs && imgs) return "mix";
+    if (pdfs) return files.length === 1 ? "pdf" : "multi";
+    if (imgs === files.length) return "seals";
+    return "other";
+  }
+
+  let loadLog = null;
+  function noteLoad(kind, reason, files) {
+    loadLog = { kind, reason: reason || "", names: (files || []).map((f) => f.name), count: (files || []).length };
+  }
+
+  function instanceNameFor(f) {
+    const base = String((f && f.name) || "seal").replace(/\.[^.]+$/, "");
+    return base || "seal";
+  }
+
+  // rollbackInstance is the silent counterpart of deleteSelected: a seal upload
+  // that failed after we already added the instance leaves an empty row behind,
+  // and the last-instance guard would refuse to undo our own rollback.
+  function rollbackInstance(id) {
+    state.instances = state.instances.filter((i) => i.id !== id);
+    if (state.selected === id) state.selected = state.instances.length ? state.instances[0].id : null;
+    renderInstances();
+  }
+
+  async function loadSeals(files) {
+    // seal.upload keeps the exact semantics of the 上传印章 button (type gate,
+    // toast, 撤销 source tracking, setSealForSelected). For several images the
+    // multi-instance decision I1 takes over: first image -> selected instance,
+    // each remaining image -> a fresh instance named after the file. Dropping
+    // N photos stamps N seals instead of quietly loading just one.
+    noteLoad("seals", "", files);
+    const seal = window.__autoStampSeal;
+    if (!seal) {
+      toast("error", "seal module unavailable");
+      return 0;
+    }
+    const canAssign = Boolean(state.file) && state.instances.length > 0;
+    let ok = 0;
+    for (let i = 0; i < files.length; i += 1) {
+      const f = files[i];
+      const instId = canAssign && i > 0 ? addInstance(instanceNameFor(f)) : null;
+      const meta = await seal.upload(f);
+      if (meta) ok += 1;
+      else if (instId !== null) rollbackInstance(instId);
+    }
+    if (files.length > 1) toast("ok", `${t("load.seals.ok")} ×${ok}/${files.length}`);
+    return ok;
+  }
+
+  function submitFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return null;
+    const cls = classifyLoad(files);
+    if (cls === "pdf") {
+      noteLoad("pdf", "", [files[0]]);
+      return handleFiles([files[0]]);
+    }
+    if (cls === "seals") return loadSeals(files);
+    noteLoad("reject", cls, files);
+    const key = cls === "multi" ? "load.reject.multi.hint"
+      : cls === "mix" ? "load.reject.mix.hint" : "load.reject.other.hint";
+    toast("warn", t(key));
+    return null;
   }
 
   // openFailed maps the contract codes onto the states the UI can show. A
@@ -1904,6 +2020,9 @@
             number: pg.number, width: pg.width, height: pg.height, rotation: pg.rotation,
           }))
           : [];
+      case "load":
+        // PD1/PD2 load-gate readout: what the last paste/drop decided.
+        return loadLog;
       default:
         throw new Error(`unknown probe: ${name}`);
     }

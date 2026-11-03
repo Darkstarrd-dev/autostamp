@@ -1,8 +1,9 @@
 # AutoStamp — UI_SPEC（P0.5 UI 契约）
 
-> 最后核对：2026-10-30（P0.5 冻结的 §2 字段表 / §6 契约 id / §8 决策表已定；P2 叠加预览接线：
-> §2.2 补 `seal.prepare.*`/`seal.err.*`/`ui.split.*` 行、§4 加 2 键、§7.1 探针表补齐、
-> §8 C1/V3 记 P2 实测）。本文是 **UI 语义唯一权威**：字段名/取值域/控件绑定/DOM id/状态机
+> 最后核对：2026-11-03（P0.5 冻结的 §2 字段表 / §6 契约 id / §8 决策表已定；P2–P6 接线沿用
+> 2026-10-30/11-02 记录。本轮粘贴/拖拽装载契约：§4 新增 `load.*` 6 键并更新 `empty.hint`、
+> §5 注册 Ctrl+V、§6 新增 `drop-hint` 契约 id、§7.1 壳 probe 加 `load`、§8 PD1/PD2 已确认）。
+> 本文是 **UI 语义唯一权威**：字段名/取值域/控件绑定/DOM id/状态机
 > 在此冻结；P0 起 `web/static/index.html` 必须照 §1 骨架与 §7 id 搭建，P1–P5 只换数据源。
 > 与 `AGENTS.md` §6 路由字段冲突时：先改本文 + §6（同一提交），再改代码。
 > 三方一致性由 `node tools/verify/ui-contract.mjs` 常驻校验；mock 行为 `node tools/verify/ui-smoke.mjs`。
@@ -197,7 +198,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 滑杆 + 数值必须**双向绑定**（同一 `data-field` 复用两次，mock 已实现 `bindPair`）；
 隐藏 `type=file` input 只作选择器触发器，不占字段。
 
-## 4. i18n 清单（key | en | cn；共 276 键，全部由 mock + 状态文案生成；`node tools/verify/gen-i18n.mjs` 打印同数）
+## 4. i18n 清单（key | en | cn；共 282 键，全部由 mock + 状态文案生成；`node tools/verify/gen-i18n.mjs` 打印同数）
 
 规则（AGENTS §7）：每个可见控件/文案必须有 `data-i18n` key，en/cn 两值非空；
 `data-i18n-cn`（及 `-placeholder`、`-title`）提供中文值，en 取元素自身文本或 `class="tag"` 的字段名。
@@ -304,7 +305,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |density.singleCol|Single column|单栏上下|
 |density.twoCol|Preview + panel|左预览右面板|
 |dup.hint|duplicate instance|复制印章实例|
-|empty.hint|Drop a .pdf here, or pick a file / type a path. Text, image and mixed PDFs are supported.|把 .pdf 文件拖到这里，或选择文件 / 直接填写路径。支持文本型、图片型与混合型 PDF。|
+|empty.hint|Drop or paste a PDF here to open it, or drop/paste images to load them as seals. You can also pick a file or type a path.|把这里拖入或粘贴（Ctrl+V）一个 PDF 即打开；拖入/粘贴图片装载为印章。也可以选择文件 / 直接填写路径。|
 |empty.msg|No PDF open|还没有打开 PDF|
 |empty.open.btn|Open|打开|
 |empty.path.placeholder|C:\docs\contract.pdf|C:\docs\contract.pdf|
@@ -333,6 +334,12 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |instances.duplicate.btn|Duplicate|复制|
 |instances.err.last|At least one stamp instance is required|至少需要保留一个印章实例|
 |instances.rename.placeholder|Instance name|实例名称|
+|load.drop.hint|Drop a PDF to open it, or images to load as seals|拖入 PDF 即打开文档；拖入图片装载为印章|
+|load.paste.hint|paste or drop: one PDF opens, images load as seals|粘贴或拖入：单个 PDF 直接打开，图片装载为印章|
+|load.reject.mix.hint|a drop or paste must be one PDF or images only, never mixed|PDF 与图片不能混在一起：要么单个 PDF，要么图片|
+|load.reject.multi.hint|open one PDF at a time; use the batch panel for many files|一次只打开一个 PDF；多个文件请用批处理面板|
+|load.reject.other.hint|only PDF files and images can be loaded here|这里只支持 PDF 文件与图片|
+|load.seals.ok|seal images loaded|图片已装载为印章|
 |lang.cn|中文|中文|
 |lang.en|EN|英文|
 |modal.cancel|Cancel|取消|
@@ -488,6 +495,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |键|动作|字段|
 |---|---|---|
 |Ctrl+O / Ctrl+S|打开 / 保存弹窗|open.* / save.*|
+|Ctrl+V / 拖入窗口|装载：单个 PDF 打开文档；图片（单/多张）装载为印章（PD1/PD2）|load.*|
 |Ctrl+D / Del|复制 / 删除当前实例|instance|
 |左键拖拽 / 拖句柄|移动 / 缩放|pos / scale|
 |旋转句柄拖拽|按中心旋转|rotation|
@@ -503,7 +511,7 @@ P0/P1 的 `index.html` 必须使用下表 id（`ui-ids` 块 = `ui-contract.mjs` 
 新增 id 要先登记，mock 缺该 id 即报错。
 
 ```ui-ids
-app-main  app-root  apply-anchor  apply-blend  asset-hooks  batch-auto-split  batch-binding  batch-cols  batch-cross-page  batch-files  batch-pick-dir  batch-pick-files  batch-progress  batch-queue  batch-rows  batch-split-mode  batch-start  batch-start-offset  btn-export  btn-open  btn-save  btn-shortcuts  btn-upload  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  density-seg  empty-open  empty-path  empty-pick  empty-pick-filter  empty-pick-multi  empty-recent  empty-state  empty-upload  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-add  instance-delete  instance-duplicate  lang-seg  modal-layer  page-pager  panel  panel-actions  panel-batch  panel-crosspage  panel-export  panel-instances  panel-overlay  panel-position  panel-seal  panel-split  password-modal  pixel-readout  pos-center  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  recent-menu  recent-open  right-sidebar  save-cancel  save-confirm  save-modal  file-input  error-toast  save-open  save-pick  save-source  scale-pt  seal-despill-revert  seal-file-input  seal-instances  seal-meta  seal-preset-delete  seal-preset-load  seal-preset-name  seal-preset-save  seal-preset-select  seal-upload  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  split-apply  split-mode  split-veto  strip-previews  theme-seg  top-file  topbar
+app-main  app-root  apply-anchor  apply-blend  asset-hooks  batch-auto-split  batch-binding  batch-cols  batch-cross-page  batch-files  batch-pick-dir  batch-pick-files  batch-progress  batch-queue  batch-rows  batch-split-mode  batch-start  batch-start-offset  btn-export  btn-open  btn-save  btn-shortcuts  btn-upload  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  density-seg  drop-hint  empty-open  empty-path  empty-pick  empty-pick-filter  empty-pick-multi  empty-recent  empty-state  empty-upload  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-add  instance-delete  instance-duplicate  lang-seg  modal-layer  page-pager  panel  panel-actions  panel-batch  panel-crosspage  panel-export  panel-instances  panel-overlay  panel-position  panel-seal  panel-split  password-modal  pixel-readout  pos-center  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  recent-menu  recent-open  right-sidebar  save-cancel  save-confirm  save-modal  file-input  error-toast  save-open  save-pick  save-source  scale-pt  seal-despill-revert  seal-file-input  seal-instances  seal-meta  seal-preset-delete  seal-preset-load  seal-preset-name  seal-preset-save  seal-preset-select  seal-upload  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  split-apply  split-mode  split-veto  strip-previews  theme-seg  top-file  topbar
 
 ```
 
@@ -538,7 +546,8 @@ app-main  app-root  apply-anchor  apply-blend  asset-hooks  batch-auto-split  ba
 `pixel-matrix` 真链路驱动的就是它，而不是直接调预览模块）、
 `q()/qa()`、`t(key)`。
 `probe` 关键字：`state` `overflow` `density` `instances` `instanceCount` `selected`
-`modal` `toast` `lang` `theme` `version` `labels` `estimate`（导出体积预估，见 §7 E1）。
+`modal` `toast` `lang` `theme` `version` `labels` `estimate`（导出体积预估，见 §7 E1）
+`load`（粘贴/拖拽装载读数：`{kind: pdf|seals|reject, reason, names, count}`，见 §8 PD1/PD2）。
 
 `window.__autoStampPreview`（`app-preview.js`）：`open(info)`、`setPassword(pw)`、`reload(pw)`、
 `close()`、`goTo(n)`、`next()`、`prev()`、`zoomBy(step)`、`zoomTo(v)`、`fit()`、`pageCount()`、
@@ -618,6 +627,8 @@ FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 |BM5|预设里的 `pages` 在批处理里怎么作用|原样照抄（可能 400）/ 逐文档求交集|实现决定（2026-11-02，`app-batch.js` 的 `pagesForDoc`）：预设的 pages 词表**对每一份文档**解析 —— 越界页丢弃（1 页文档配 `1-2,5` 预设是正常情况，不是错误），交集为空则回退 `all`。否则「一个预设跑不同页数」的核心场景直接失败。单文档面板不受影响（W4 语义不变）|2026-11-02|实现决定|
 |PC1|交付打包形态|zip：单 exe + README（推荐）/ zip + 带图标 exe / 不做安装包|已确认：`build.ps1 -Task package` 产 `dist\autostamp-<ver>-win64.zip`（webview-stripped exe + README）；不做安装器、不做图标资源（要 .syso 就得引外部工具）|2026-11-02|ask 第 6 轮 packaging|
 |OP1|P6 可选项（页眉页脚 / 多印章）|不做，登记为未采纳（推荐）/ 做页眉页脚|已确认：不做。多印章已由 P2 的多实例覆盖；页眉页脚不在产品需求 1–5 内|2026-11-02|ask 第 7 轮 optional-scope|
+|PD1|剪贴板装载（Ctrl+V）语义|只接受「单个 PDF」或「一张/多张图片」，其余不装载并告警（推荐）/ 任意文件都装 / 只有 PDF 可装|已确认（2026-11-03 用户任务明确请求 + 实现决定）：只接受两类 —— 单个 PDF → multipart 打开（adopt）；一张或多张图片 → 逐个 `seal/prepare`：单张设给选中实例（与「上传印章」同语义），多张时第一张设给选中实例、其余各**新增一个实例**按文件名命名装载；无文档（空态）只 prepare+元数据读数，不指派。焦点在输入框且剪贴板含 text/plain 时放行文本粘贴（路径框语义不受粘贴装载影响）。多个 PDF / PDF+图片混拼 / 其它文件 → toast 告警不装载|2026-11-03|用户任务要求 + 实现决定|
+|PD2|鼠标拖拽装载|窗口级 dragover/drop 与 PD1 同一 gate；`#preview[data-drag]` + `#drop-hint` 可见反馈（推荐）/ 只拖预览区 / 不加反馈|已确认（2026-11-03 用户任务明确请求）：窗口级装载同一 gate；dataTransfer 不含 Files 时不 preventDefault（纯文本拖拽不被劫持）；反馈 = 预览区高亮 + `#drop-hint`（§6 新契约 id）；装载图片走同一 seals 通道，装载 PDF 走 handleFiles（adopt 替换当前文档，与「上传」按钮同语义）|2026-11-03|用户任务要求|
 
 
 D2–D4、L1、CP1 已在 P0.5 第 1 轮确认（2026-10-29）；D1、I1、S1、E1 在第 2 轮确认（同日）。

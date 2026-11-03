@@ -3,6 +3,14 @@
 > `PROJECT_MAP.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-11-03 — PD1/PD2 装载 gate 行 + i18n 282 键 + style.css 行更新
+
+- 新增「（续）`app-shell.js` 的 PD1/PD2 装载 gate」行：窗口级 paste/drag 漏斗（`submitFiles`/`classifyLoad`
+  /`loadSeals`/`rollbackInstance`/`probe('load')`），并记录 `app-seal.js` 的 upload 门按扩展名兜底。
+- `app-i18n.js` 行：276 键 → **282 键**（gen-i18n 重新生成）。
+- `style.css` 行：拖放高亮加 `#drop-hint`；登记 polish 删除 `#panel-export` 的 `opacity:.55` 淡化。
+- 头「最后核对」补同日增量（装载 gate + polish）。
+
 ## 2026-11-03 — P7：middleware/defaults 行改写 + `middleware_test` 行
 
 - 头「最后核对」= **P0–P7 全绿**（含 P6/P7 增量清单 + 出货 zip）。

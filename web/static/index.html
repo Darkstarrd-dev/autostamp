@@ -63,7 +63,7 @@
   <section id="preview">
     <div id="empty-state">
       <div class="msg" data-i18n="empty.msg" data-i18n-cn="还没有打开 PDF">No PDF open</div>
-      <div class="hint" data-i18n="empty.hint" data-i18n-cn="把 .pdf 文件拖到这里，或选择文件 / 直接填写路径。支持文本型、图片型与混合型 PDF。">Drop a .pdf here, or pick a file / type a path. Text, image and mixed PDFs are supported.</div>
+      <div class="hint" data-i18n="empty.hint" data-i18n-cn="把这里拖入或粘贴（Ctrl+V）一个 PDF 即打开；拖入/粘贴图片装载为印章。也可以选择文件 / 直接填写路径。">Drop or paste a PDF here to open it, or drop/paste images to load them as seals. You can also pick a file or type a path.</div>
       <div class="btnrow">
         <button id="empty-pick" class="btn primary" data-i18n="empty.pick.btn" data-i18n-cn="选择文件">Pick file</button>
         <button id="empty-upload" class="btn" data-i18n="empty.upload.btn" data-i18n-cn="上传文件">Upload</button>
@@ -95,6 +95,8 @@
     <!-- The stage is empty by design: app-preview.js renders one page-frame
          (canvas + .textLayer) per opened page, and P2 adds the instance overlay
          inside it. A static placeholder here would be a fake document. -->
+    <div id="drop-hint" aria-hidden="true"><span class="pill" data-i18n="load.drop.hint" data-i18n-cn="拖入 PDF 即打开文档；拖入图片装载为印章">Drop a PDF to open it, or images to load as seals</span></div>
+
     <div id="preview-stage" data-split="off">
       <!-- P2: the selection affordance (dashed box + handles) lives here, so the
            canvas paint stays the seal itself and the handles stay hit-able. -->

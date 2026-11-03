@@ -83,7 +83,7 @@ button { cursor: pointer; color: inherit; }
 .seg button { border: 0; background: var(--surface); padding: 5px 9px; }
 .seg button + button { border-left: 1px solid var(--border); }
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
-.seg.sm button { padding: 3px 7px; font-size: 12px; }
+.seg.sm button { padding: 8px 10px; font-size: 12px; }
 
 .switch { display: inline-flex; align-items: center; gap: var(--gap-sm); }
 .switch input { width: 15px; height: 15px; accent-color: var(--accent); }
@@ -97,7 +97,7 @@ input[type="number"] { width: 74px; font: var(--mono); }
 input[type="text"] { width: 100%; }
 
 /* preview */
-#preview { grid-area: preview; min-width: 0; display: flex; flex-direction: column; background: var(--stage-bg); }
+#preview { grid-area: preview; min-width: 0; position: relative; display: flex; flex-direction: column; background: var(--stage-bg); }
 #empty-state {
   flex: 1; display: none; margin: 24px; border: 2px dashed var(--border);
   border-radius: 8px; background: var(--surface); padding: 28px; text-align: center;
@@ -157,6 +157,19 @@ input[type="text"] { width: 100%; }
    preview has to be visible or the drop target would be invisible. */
 button.chip { cursor: pointer; color: inherit; }
 #preview[data-drag="on"] #empty-state { border-color: var(--accent); background: var(--surface-2); }
+/* PD2: the drop affordance is visible while a file drag is over the window. */
+#drop-hint {
+  position: absolute; inset: 12px; z-index: 6; display: none;
+  align-items: center; justify-content: center; pointer-events: none;
+  border: 2px dashed var(--accent); border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+}
+#preview[data-drag="on"] #drop-hint { display: flex; }
+#drop-hint .pill {
+  padding: 8px 14px; border: 1px solid var(--accent); border-radius: 999px;
+  background: var(--surface); color: var(--fg); font-weight: 600; box-shadow: var(--shadow);
+}
+html:not([data-state="empty"]) #preview[data-drag="on"] .page-frame { outline: 2px dashed var(--accent); }
 
 /* P1 pager: one chip per page, number + downscaled thumbnail inside it. The
    rail is a horizontal strip, so the thumb keeps a fixed height and follows the
@@ -207,7 +220,6 @@ html[data-state="stamp-dragging"] .instance .sel-box,
 html[data-state="stamp-resizing"] .instance .sel-box { display: block; }
 html:not([data-state="crosspage"]) #strip-previews { display: none; }
 html:not([data-state="crosspage"]) #panel-crosspage summary { color: var(--muted); }
-html:not([data-state="export"]) #panel-export .body { opacity: .55; }
 html[data-state="stamp-dragging"] #preview-stage, html[data-state="stamp-resizing"] #preview-stage { cursor: grabbing; }
 html:not([data-state="empty"]) #empty-state { display: none; }
 

@@ -1,11 +1,11 @@
 # PROJECT_MAP.md — AutoStamp 代码地图
 
 > 最后核对：2026-11-03（**P0–P7 全绿**，阶段计划做完；出货件 = `build.ps1 -Task stripped,package`
-> 的 `dist\autostamp-<rev>-win64.zip`）。P6/P7 的增量：`internal/presetstore` 预设库、
-> `internal/api/seal_preset.go` 四条预设路由、`fsx` 的 `PickDirs`/`ListMatching`、
-> `POST /api/fs/pick{dir:true}`、`POST /api/pdf/save{mkdirs:true}`、前端批处理跑链
-> （AGENTS §5.21 BM1，**没有后端作业路由/SSE**）、`build.ps1 -Task package`；
-> P7：`security.strictOrigin` 默认开 + `securityHeaders`（`nosniff`）。
+> 的 `dist\autostamp-<rev>-win64.zip`）。同日的增量：PD1/PD2 粘贴/拖拽装载 gate（AGENTS §5.23，
+> 纯前端漏斗、无新路由/字段）+ impeccable polish（导出段 `opacity:.55` 淡化删除、`.seg.sm` 内边距，
+> 叙述见 `docs/changelog/UI_SPEC.md`）。更早 P6/P7：`internal/presetstore`、`seal_preset.go` 四路由、
+> `fsx` `PickDirs`/`ListMatching`、`fs/pick{dir:true}`、`save{mkdirs:true}`、前端批处理跑链
+> （AGENTS §5.21 BM1，**没有后端作业路由/SSE**）、`package` 打包、`strictOrigin` 默认开 + `nosniff`。
 > `app-crosspage.js` 这个计划名从未创建，真实形态在 `app-overlay.js`+`app-shell.js`。
 >
 > 新增/删除包必须同步本文件（AGENTS §10.1）。阶段状态见 `docs/IMPLEMENTATION_PLAN.md §10`。
@@ -85,9 +85,10 @@
 |（续）|`web/static/app-shell.js` 的 **P5 光栅通道**|`submitSave` 里的 W1/W5 链：`stampIntoPDF` → W6 预估拦截（`MAX_EXPORT_PAGE_BYTES` = 90 MiB，超 ⇒ `warn.export.tooBig` 且**零请求**）→ 前端光栅化（离屏 pdf.js `scale=dpi/72`、显示方向不补偿 → `toBlob('image/jpeg',q/100)`）→ `exportUpload`（multipart）→ `adopt(from:"export")` → `ok.exported`；`exportDpiOf`/`exportQualityOf` 与 `computeEstimate` 共用；`probe('exportBody')` 钉 spec/页号/每页字节/px 框|
 |（续）|`web/static/app-api.js` 的 **P5 multipart 通道**|`uploadMultipart(path, fields, files)` 是全仓**唯一**的 multipart 出口（会话头 + same-origin + `envelopeOf` 只此一处）；`uploadPDF`/`uploadPOST` 是它的「单 `file` 形状」包装，`exportUpload` 用它送 `spec` + `page-<n>`|
 |（续）|`web/static/app-api.js` 的 **P6 预设通道**|`presetList/presetSave/presetDelete/presetRawURL/rawBytes`（会话头 + 信封复用同一处）|
+|（续）|`web/static/app-shell.js` 的 **PD1/PD2 装载 gate**（AGENTS §5.23）|窗口级 `paste` + `dragenter/dragover/dragleave/drop`（`dragDepth` 计数 → `#preview[data-drag]` + `#drop-hint`）经 `submitFiles` 单漏斗：`classifyLoad` = `pdf`/`seals`/`reject(multi|mix|other)`（type 门只认 `Files`，无 type 时按扩展名兜底，`app-seal.js` 的 `upload` 门同步兜底）；单 PDF → `handleFiles` multipart `adopt`；图片 → `loadSeals`：单张设给选中实例、多张第一张设给选中 + 其余 `addInstance` 按文件名命名（失败 `rollbackInstance` 不留空行）；焦点输入框含 `text/plain` 的粘贴放行；`probe('load')` 读 `loadLog`|
 |`web/static/app-batch.js`|P6 印章**预设库 UI** + **批处理队列**：`window.__autoStampBatch`；预设 存/载/删/列表（列表镜像到印章卡与批处理卡的两个 select）；批处理 = **无后端作业路由的前端跑链**（AGENTS §5.21 BM1）`fs/pick{dir:true}`→`open`→（`split`）→`apply`→`export`(raster，离屏 pdf.js `scale=dpi/72` 回传)→`save{mkdirs}`；`batchTarget()` 输出 `_batch\<原名>.dpi<N>.q<Q>.pdf`（BM2，单扩展名）；`pagesForDoc()` = 预设 pages 词表逐文档求交集（BM5）；并发 `api.batch.concurrency`（1..8）+ 停止；加密行 `batch.status.encrypted`（BM4，不弹密码）；报表 CSV/JSON 由 `Blob`+`a[download]` 生成（不发请求）；`probe("queue"｜"report"｜"presets")` 给 verify|
-|`web/static/app-i18n.js`|en/cn 文案表（由 `tools/verify/gen-i18n.mjs` 从 `docs/UI_SPEC.md §4` 生成，276 键，禁止手改）|
-|`web/static/style.css`|壳样式（两列密度 / 折叠态 / 控件表现代码）+ P1：分页条缩略图（`#page-pager canvas.pg-thumb`）、拖放高亮（`#preview[data-drag]`）|
+|`web/static/app-i18n.js`|en/cn 文案表（由 `tools/verify/gen-i18n.mjs` 从 `docs/UI_SPEC.md §4` 生成，282 键，禁止手改）|
+|`web/static/style.css`|壳样式（两列密度 / 折叠态 / 控件表现代码）+ P1：分页条缩略图（`#page-pager canvas.pg-thumb`）、拖放高亮（`#preview[data-drag]` + `#drop-hint` 悬浮胶囊）；polish：`#panel-export` 段不再有 `opacity:.55` 淡化（误导状态 + 低对比，changelog 2026-11-03）|
 |`web/static/favicon.svg`|图标（`<link rel="icon">`，否则 Chromium 自动 404 `/favicon.ico`，FACTS §1.5）|
 |`web/static/vendor/pdfjs/`|pdf.js 6.4.299 资产（P1 已进）：`build/`（只有 ESM，FACTS §1.1）、`cmaps/`、`standard_fonts/`、`wasm/`、`image_decoders/`、`iccs/`、`web/pdf_viewer.css`（文本层 CSS）；205 文件 / 5,486,850 B，`SHA256.txt` + `web/embed_test.go:TestVendorChecksums` 断言；见该目录 `README.md`|
 

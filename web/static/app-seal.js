@@ -81,7 +81,11 @@
 
   async function upload(file) {
     if (!file) return null;
-    if (!(file.type || "").startsWith("image/")) {
+    // Clipboard/drag File objects can carry an empty `type` when the OS
+    // supplies only names (Explorer copies), so the extension is the
+    // fallback of this allowlist - the same vocabulary the load gate uses.
+    const isImage = (file.type || "").startsWith("image/") || /\.(png|jpe?g|gif|bmp|webp|tiff?)$/i.test(file.name || "");
+    if (!isImage) {
       shell().toast("error", shell().t("seal.err.type"));
       return null;
     }

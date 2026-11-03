@@ -221,6 +221,13 @@ powershell -NoProfile -File build.ps1 -Task stripped,package  # 出货件 + win6
     后端；两个入口（启动页 `#empty-recent`、顶栏 `#recent-open` + `#recent-menu`）已接线
     （P6，2026-11-02）：点了走 `fs/pick{filePath}` 直开授权 —— 与手输路径完全同一条链路，
     没有新路由、没有新字段。空列表如实显示（不编造「最近」条目）。
+23. **粘贴/拖拽装载同一 gate（PD1/PD2，2026-11-03）**：前端 `app-shell.js` 的
+    `submitFiles(files, via)` 是唯一装载漏斗 —— 接受条件只有两种：
+    **单个 PDF**（`handleFiles` → multipart `pdf/open` → `adopt`，与「上传」按钮同语义）或
+    **一张/多张图片**（逐个 `seal/prepare`；单张设给选中实例，多张=第一张给选中实例 +
+    其余每张**新增实例**按文件名命名；空态无文档只 prepare 不指派）。多个 PDF、PDF+图片混拼、
+    其它类型一律 toast 告警不装载。粘贴：焦点在输入框且含 `text/plain` 时放行（路径框语义）；
+    拖拽：`dataTransfer` 不含 `Files` 不 `preventDefault`（文本拖拽不被劫持）。无新路由、无新字段。
 
 ## 6. HTTP 契约（`/api/*`，全部 JSON；字段在 **P0.5 与用户确认后**才冻结，改动必须同步本文、`docs/UI_SPEC.md` 与前端）
 
@@ -389,6 +396,7 @@ powershell -NoProfile -File build.ps1 -Task stripped,package  # 出货件 + win6
 |改批处理|`UI_SPEC §8` BM1-BM5 + 本文件 §5.21（**没有后端作业路由、没有 SSE**）|`web/static/app-batch.js`（`runOne` 跑链 + `batchTarget` + `pagesForDoc` + 报表下载）、`web/static/index.html`（批处理段字段）、`web/static/app-api.js`（`fsPickDir`/`exportUpload`）、`internal/api/pdf.go`（`fs/pick` 的 `dir` 分支）、`internal/api/save.go`（`{mkdirs}`）、`internal/fsx/list.go`（`ListPDFs`）、`tools/verify/batch-smoke.mjs --only=batch|
 |改打包/发布物|本文件 §4（PC1）|`build.ps1`（`Start-Package`：`autostamp-<rev>-win64.zip` = strip 窗口版重命名 `autostamp.exe` + `README.md`，25 MB 体积门）、`README.md`（随 zip 一起出货，必须保持准确）|
 |改最近文件|`UI_SPEC §8` RF1|`internal/config/{types.go,sanitize.go,store.go}`（`RecentFiles`/`SetRecent`,P0 已有）、`web/static/app-shell.js`（`renderRecent`/`recentMenu`）、`web/static/index.html`（`#empty-recent`、`#recent-open`）|
+|改粘贴/拖拽装载|`UI_SPEC §8` PD1/PD2 + 本文件 §5.23（无新路由/新字段）|`web/static/app-shell.js`（`submitFiles`/`classifyLoad`/paste/dragover/drop/`state.loadLog`）、`web/static/index.html`（`#drop-hint`）、`web/static/style.css`（`[data-drag]`+`#drop-hint`）、`web/static/app-seal.js`（图片经 `seal/prepare`）、`tools/verify/shell-smoke.mjs`（装载断言）|
 |改预览渲染|`docs/FACTS.md` §1|`web/static/app-preview.js`、`web/static/vendor/pdfjs/`|
 |新增路由|本文件 §6|`internal/api/register.go`、`web/static/app-api.js`|
 |窗口/端口/浏览器回退|本文件 §5|`host_webview_windows.go`、`internal/app/`|

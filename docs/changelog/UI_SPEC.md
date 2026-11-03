@@ -2,6 +2,28 @@
 
 > `docs/UI_SPEC.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-03 — impeccable polish：导出段不再「假失效」+ `.seg.sm` 内边距（真 UI 扫描 8→0）
+
+- 用安装好的 impeccable skill 对真 exe 跑 `detect`（真链 http://127.0.0.1:PORT/，空文档态）得 8 条缺陷证据：
+  `#crosspage-binding` 的 cramped-padding、`#panel-export` 段 5 条 `hintline`/`tag`/label 低对比（2.2:1/4.0:1）。
+- **根因（本地缺陷，不新增决策）**：`html:not([data-state="export"]) #panel-export .body { opacity: .55 }`
+  把「导出设置」侧栏段整段压到 55% —— 而这些字段就是保存/预估的输入（`exportDpiOf/exportQualityOf` + E1 预估行），
+  平时必须能操作。视觉「淡化」与可操作矛盾（误导状态）且文字对比降到 2.2:1（WCAG 不适用豁免）。
+  修复 = **删掉该淡化规则**（真 style.css 与 mock 同步删）；状态本身由导出弹窗表达，不需要整段变暗。
+  真值探针（CDP getComputedStyle）确认淡化链只有 `.body@op0.55` 一处，其余 `opacity` 仅剩 `.btn:disabled`（disabled 豁免合法）。
+- `.seg.sm` 内边距 3px→8px（cramped-padding 缺陷：分段控件文字贴容器边框）；真/动 mock 同步。
+- 复扫同一真链 = 0 findings；full verify 链（`build.ps1 -Task verify`）重跑全绿（失败 0 / 跳过 0）。
+
+
+## 2026-11-03 — 粘贴/拖拽装载契约（PD1/PD2）：§4 load.* + §6 drop-hint + §7.1 `load` 读数
+
+- §8 决策表新增 PD1（剪贴板装载语义）与 PD2（鼠标拖拽装载）两行，确认来源 = 用户任务明确请求（2026-11-03）：
+  只接受「单个 PDF」或「单张/复数图片」；多个 PDF、PDF+图片混拼、其它文件 → toast 告警且不装载；
+  焦点在输入框且剪贴板含 `text/plain` 时放行文本粘贴（路径框语义不受劫持）。
+- §4 新增 6 个 `load.*` 键（`load.paste.hint` / `load.drop.hint` / `load.reject.multi|mix|other.hint` / `load.seals.ok`），并更新 `empty.hint` 文案提到粘贴/拖入。
+- §5 快捷键表新增「Ctrl+V / 拖入窗口」行；§6 契约 id 新增 `drop-hint`（预览区拖拽反馈 `#drop-hint` + `#preview[data-drag]`）；§7.1 壳 probe 关键字新增 `load`（`loadLog = {kind, reason, names, count}`）。
+- 全部是前端装载 gate（`app-shell.js` 的 `submitFiles`/`classifyLoad`/窗口级 paste/drag 处理），无新路由、无新字段；AGENTS §5.23 记录同一决策。
+
 ## 2026-11-02 — P6 决策表补齐（PR/BR/BM/RF 22 行）+ §2/§3/§4 加预设与批处理
 
 - **P6 决策表补齐**：此前 §8 从来没有 P6 的用户确认记录，只有 `IMPLEMENTATION_PLAN` 里的

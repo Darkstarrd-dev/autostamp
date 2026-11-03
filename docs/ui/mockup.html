@@ -114,7 +114,7 @@ button { cursor: pointer; color: inherit; }
 .seg button { border: 0; background: var(--surface); padding: 5px 9px; }
 .seg button + button { border-left: 1px solid var(--border); }
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
-.seg.sm button { padding: 3px 7px; font-size: 12px; }
+.seg.sm button { padding: 8px 10px; font-size: 12px; }
 .switch { display: inline-flex; align-items: center; gap: var(--gap-sm); }
 .switch input { width: 15px; height: 15px; accent-color: var(--accent); }
 input[type="text"], input[type="number"], input[type="password"], select {
@@ -126,7 +126,7 @@ input[type="number"] { width: 74px; font: var(--mono); }
 input[type="text"] { width: 100%; }
 
 /* ---- preview ---- */
-#preview { grid-area: preview; min-width: 0; display: flex; flex-direction: column; background: var(--stage-bg); }
+#preview { grid-area: preview; min-width: 0; position: relative; display: flex; flex-direction: column; background: var(--stage-bg); }
 #empty-state {
   flex: 1; display: none; margin: 24px; border: 2px dashed var(--border);
   border-radius: 8px; background: var(--surface); padding: 28px; text-align: center;
@@ -142,11 +142,23 @@ html[data-state="empty"] .btn, html[data-state="empty"] #preview-ruler, html[dat
 html:not([data-state="stamp-selected"]):not([data-state="stamp-dragging"]):not([data-state="stamp-resizing"]) .instance .sel-box { display: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 html:not([data-state="crosspage"]) #panel-crosspage .body, html:not([data-state="crosspage"]) #strip-previews { display: none; }
-html[data-state="opened"] #panel-crosspage, html[data-state="opened"] #panel-split .field[data-mode] { opacity: 1; }
 html:not([data-state="crosspage"]):not([data-state="split-preview"]) #panel-crosspage summary { color: var(--muted); }
-html:not([data-state="export"]) #panel-export .body { opacity: .55; }
 html[data-state="stamp-dragging"] #preview-stage, html[data-state="stamp-resizing"] #preview-stage { cursor: grabbing; }
 html:not([data-state="empty"]) #empty-state { display: none; }
+
+/* PD2: the drop affordance must be visible while dragging (window-level gate) */
+#drop-hint {
+  position: absolute; inset: 12px; z-index: 6; display: none;
+  align-items: center; justify-content: center; pointer-events: none;
+  border: 2px dashed var(--accent); border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+}
+#preview[data-drag="on"] #drop-hint { display: flex; }
+#drop-hint .pill {
+  padding: 8px 14px; border: 1px solid var(--accent); border-radius: 999px;
+  background: var(--surface); color: var(--fg); font-weight: 600; box-shadow: var(--shadow);
+}
+html:not([data-state="empty"]) #preview[data-drag="on"] .page-frame { outline: 2px dashed var(--accent); }
 
 #preview-stage {
   position: relative; flex: 1; min-height: 0; overflow: auto;
@@ -323,7 +335,7 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
   <section id="preview">
     <div id="empty-state">
       <div class="msg" data-i18n="empty.msg" data-i18n-cn="还没有打开 PDF">No PDF open</div>
-      <div class="hint" data-i18n="empty.hint" data-i18n-cn="把 .pdf 文件拖到这里，或选择文件 / 直接填写路径。支持文本型、图片型与混合型 PDF。">Drop a .pdf here, or pick a file / type a path. Text, image and mixed PDFs are supported.</div>
+      <div class="hint" data-i18n="empty.hint" data-i18n-cn="把这里拖入或粘贴（Ctrl+V）一个 PDF 即打开；拖入/粘贴图片装载为印章。也可以选择文件 / 直接填写路径。">Drop or paste a PDF here to open it, or drop/paste images to load them as seals. You can also pick a file or type a path.</div>
       <div class="btnrow">
         <button id="empty-pick" class="btn primary" data-i18n="empty.pick.btn" data-i18n-cn="选择文件">Pick file</button>
         <button id="empty-upload" class="btn" data-i18n="empty.upload.btn" data-i18n-cn="上传文件">Upload</button>
@@ -354,6 +366,7 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
       </div>
     </div>
 
+    <div id="drop-hint" aria-hidden="true"><span class="pill" data-i18n="load.drop.hint" data-i18n-cn="拖入 PDF 即打开文档；拖入图片装载为印章">Drop a PDF to open it, or images to load as seals</span></div>
     <div id="preview-stage" data-split="off"><div id="stamp-layer" aria-hidden="true"></div>
       <div class="page-frame" data-page="1">
         <canvas class="page-canvas" width="744" height="1052"></canvas>
@@ -1772,8 +1785,55 @@ window.__autoStampMock = (function () {
     q("#empty-upload").addEventListener("click", function () { setState("opened"); });
     q("#btn-upload").addEventListener("click", function () { q("#file-input").click(); });
     q("#file-input").addEventListener("change", function () { setState("opened"); });
-    q("#preview").addEventListener("dragover", function (e) { e.preventDefault(); });
-    q("#preview").addEventListener("drop", function (e) { e.preventDefault(); setState("opened"); });
+    // PD1/PD2 load gate (mirrors app-shell.js): only "one PDF" or "images only".
+    function loadClassify(files) {
+      var isImg = function (f) { return (f.type || "").indexOf("image/") === 0 || /\.(png|jpe?g|gif|bmp|webp|tiff?)$/i.test(f.name || ""); };
+      var isPdf = function (f) { return (f.type || "") === "application/pdf" || /\.pdf$/i.test(f.name || ""); };
+      if (!files.length) return "empty";
+      var imgs = 0, pdfs = 0;
+      for (var i = 0; i < files.length; i++) {
+        if (isImg(files[i])) imgs++; else if (isPdf(files[i])) pdfs++; else return "other";
+      }
+      if (pdfs && imgs) return "mix";
+      if (pdfs) return files.length === 1 ? "pdf" : "multi";
+      if (imgs === files.length) return "seals";
+      return "other";
+    }
+    var dragDepth = 0;
+    document.addEventListener("dragenter", function (e) {
+      if (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], "Files") >= 0) dragDepth++;
+    });
+    document.addEventListener("dragleave", function () { if (dragDepth && --dragDepth <= 0) q("#preview").dataset.drag = "off"; });
+    document.addEventListener("dragover", function (e) {
+      if (!e.dataTransfer || Array.prototype.indexOf.call(e.dataTransfer.types || [], "Files") < 0) return;
+      e.preventDefault();
+      q("#preview").dataset.drag = "on";
+    });
+    document.addEventListener("drop", function (e) {
+      if (!e.dataTransfer) return;
+      var files = Array.prototype.slice.call(e.dataTransfer.files || []);
+      if (Array.prototype.indexOf.call(e.dataTransfer.types || [], "Files") < 0) return;
+      e.preventDefault();
+      dragDepth = 0; q("#preview").dataset.drag = "off";
+      var cls = loadClassify(files);
+      if (cls === "pdf") { toast("load.paste.hint", "PDF dropped: the drop replaces the open document", "ok"); setState("opened"); }
+      else if (cls === "seals") toast("load.seals.ok", "seal images loaded from the drop", "ok");
+      else if (cls === "multi") toast("load.reject.multi.hint", "open one PDF at a time; use the batch panel for many files", "warn");
+      else if (cls === "mix") toast("load.reject.mix.hint", "a drop or paste must be one PDF or images only, never mixed", "warn");
+      else toast("load.reject.other.hint", "only PDF files and images can be loaded here", "warn");
+    });
+    document.addEventListener("paste", function (e) {
+      var files = e.clipboardData ? Array.prototype.slice.call(e.clipboardData.files || []) : [];
+      if (!files.length) return;
+      if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName || "") && Array.prototype.indexOf.call(e.clipboardData.types || [], "text/plain") >= 0) return;
+      e.preventDefault();
+      var cls = loadClassify(files);
+      if (cls === "pdf") { toast("load.paste.hint", "pasted a single PDF: opening it", "ok"); setState("opened"); }
+      else if (cls === "seals") toast("load.seals.ok", "seal images loaded from the clipboard", "ok");
+      else if (cls === "multi") toast("load.reject.multi.hint", "open one PDF at a time; use the batch panel for many files", "warn");
+      else if (cls === "mix") toast("load.reject.mix.hint", "a drop or paste must be one PDF or images only, never mixed", "warn");
+      else toast("load.reject.other.hint", "only PDF files and images can be loaded here", "warn");
+    });
     q("#btn-save").addEventListener("click", function () { setState("save-confirm"); });
     q("#save-open").addEventListener("click", function () { setState("save-confirm"); });
     q("#btn-export").addEventListener("click", function () { setState("export"); });
@@ -1869,6 +1929,7 @@ window.__autoStampMock = (function () {
     var rows = [
       ["Ctrl+O", "open.hint", "open a PDF", "打开 PDF"],
       ["Ctrl+S", "save.hint", "save dialog", "保存对话框"],
+      ["Ctrl+V", "load.paste.hint", "paste/drop: one PDF opens, images load as seals", "粘贴或拖入：单个 PDF 直接打开，图片装载为印章"],
       ["Del", "del.hint", "delete selected instance", "删除选中的印章实例"],
       ["Ctrl+D", "dup.hint", "duplicate instance", "复制印章实例"],
       ["Arrows", "nudge.hint", "move 1pt (Shift: 10pt)", "移动 1pt（Shift = 10pt）"],

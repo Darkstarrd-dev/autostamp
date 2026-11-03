@@ -3,6 +3,18 @@
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-11-03 — §5.23 粘贴/拖拽装载 gate（PD1/PD2）+ §11 速查行
+
+- §5 新增决策 23：窗口级 Ctrl+V 与拖入共用同一装载 gate（`app-shell.js` 的 `submitFiles`/`classifyLoad`）：
+  只接受「单个 PDF」（multipart `pdf/open` adopt，同「上传」按钮语义）或「单张/复数图片」（`seal/prepare`：
+  单张设给选中实例；多张时第一张设给选中实例、其余各新增实例按文件名命名）；无文档时只 prepare 不指派；
+  多 PDF / 混拼 / 其它文件 toast 告警不装载；焦点输入框且含 `text/plain` 的粘贴放行（路径框语义）；
+  `dataTransfer` 不含 Files 的纯文本拖拽不被劫持（不 preventDefault）。
+- §11 速查表新增「改粘贴/拖拽装载」行；§6 路由表未变（无新路由/无新字段，只动前端）。
+- 验证：`shell-smoke.mjs` 新增装载链断言（真 File/真 /api 往返：拒绝词表读数、单 PDF drop 打开、
+  图片装载与 I1 实例语义、输入框放行、`#drop-hint` 存在）。
+
+
 ## 2026-11-03 — P7：§6 Origin 默认开 + `nosniff` 契约化
 
 - §6 的 `Host` 那条改成：Origin 校验**随 P7 默认开启**（`security.strictOrigin: true`，

@@ -19,6 +19,11 @@
 //   * the wired /api/pdf/save route surfaces a real JSON envelope error when
 //     there is no opened asset (no fake success), and the toast is announced
 //     to AT (role=status)
+//   * the paste/drop load gate (UI_SPEC §8 PD1/PD2): a single PDF opens the
+//     document, images load as seals (first -> selected instance, extras ->
+//     named instances), multi/mix/foreign selections are refused by name,
+//     text drags stay un-hijacked, and a focused field keeps text-paste
+//     semantics (PD1: the typed path box is never a load target)
 //
 // Usage: node tools/verify/shell-smoke.mjs [--reuse-build] [--keep-profile]
 // Exit: 0 = pass.
@@ -464,6 +469,142 @@ async function main() {
 
   const version = await pageErr("window.__autoStampShell.probe('version')");
   truthy("topbar shows the health version", /autostamp/.test(version));
+
+  // ---------- PD1/PD2: paste + drop load gate (UI_SPEC §8) ----------
+  // Real File objects flow through real ClipboardEvent/DragEvent into the
+  // shell's window-level gate, then through the real /api round-trips. The
+  // PDF fixture is produced by CDP (same trick preview-smoke uses); the seal
+  // fixture is the committed alpha PNG (docs/ui/fixtures/seal.png).
+  const sealB64 = readFileSync(join(root, "docs", "ui", "fixtures", "seal.png")).toString("base64");
+  const printout = await chrome.send("Page.printToPDF", { printBackground: false });
+  const pdfB64 = printout.data
+    || (printout.streamId ? (await chrome.send("IO.read", { handle: printout.streamId, offset: 0 })).base64 : null);
+  truthy("printToPDF produced a PDF to drop/paste", Boolean(pdfB64 && pdfB64.length > 100));
+
+  const gate = await json(`(async function () {
+    var s = window.__autoStampShell;
+    function b64file (b64, name, type) {
+      return new File([Uint8Array.from(atob(b64), function (c) { return c.charCodeAt(0); })], name, { type: type });
+    }
+    function wait (fn, ms) {
+      return new Promise(function (res) {
+        var t0 = Date.now();
+        var iv = setInterval(function () {
+          var done = false;
+          try { done = !!fn(); } catch (e) { done = false; }
+          if (done) { clearInterval(iv); res(true); }
+          else if (Date.now() - t0 > ms) { clearInterval(iv); res(false); }
+        }, 100);
+      });
+    }
+    function dropEv (files) {
+      var dt = new DataTransfer();
+      files.forEach(function (f) { dt.items.add(f); });
+      document.dispatchEvent(new DragEvent("dragenter", { dataTransfer: dt, bubbles: true, cancelable: true }));
+      document.dispatchEvent(new DragEvent("dragover", { dataTransfer: dt, bubbles: true, cancelable: true }));
+      var during = document.querySelector("#preview").dataset.drag === "on";
+      var ev = new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true });
+      document.dispatchEvent(ev);
+      return {
+        prevented: ev.defaultPrevented, during: during,
+        after: document.querySelector("#preview").dataset.drag || "off",
+        load: s.probe("load"),
+      };
+    }
+    function pasteEv (files, text, target) {
+      var dt = new DataTransfer();
+      (files || []).forEach(function (f) { dt.items.add(f); });
+      if (text !== undefined) dt.setData("text/plain", text);
+      var ev = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+      (target || document).dispatchEvent(ev);
+      return ev.defaultPrevented;
+    }
+    var out = {};
+    function pdf () { return b64file(${JSON.stringify(pdfB64)}, "pasted one.pdf", "application/pdf"); }
+    function png (n) { return b64file(${JSON.stringify(sealB64)}, n, "image/png"); }
+
+    // a pure text drag never hijacks the drop target (no Files type)
+    (function () {
+      var dt = new DataTransfer();
+      dt.setData("text/plain", "hello");
+      document.dispatchEvent(new DragEvent("dragover", { dataTransfer: dt, bubbles: true, cancelable: true }));
+      out.dragText = document.querySelector("#preview").dataset.drag || "off";
+    })();
+
+    // rejected sets must never load, and must name the reason (PD1/PD2)
+    out.mixed = dropEv([png("mix.png"), pdf()]); out.mixedToast = s.probe("toast");
+    out.multi = dropEv([pdf(), pdf()]); out.multiToast = s.probe("toast");
+    out.other = dropEv([b64file("RlE9PQ==", "notes.txt", "text/plain")]); out.otherToast = s.probe("toast");
+
+    // single PDF: multipart open -> adopt (wait for the real round-trip)
+    out.pdfBefore = s.probe("chain").current;
+    out.pdfDrop = dropEv([pdf()]);
+    out.pdfOpened = await wait(function () {
+      var l = s.probe("load") || {};
+      return l.kind === "pdf" && s.probe("state") === "opened" && s.probe("chain").current !== out.pdfBefore;
+    }, 8000);
+    out.fileChip = document.querySelector("#top-file").textContent;
+    out.pageCount = window.__autoStampPreview ? window.__autoStampPreview.probe("pageCount") : -1;
+
+    // The shell keeps instances across document switches (W2 clears only
+    // after stamping): the rows left by earlier checks stay live, and that
+    // carry-over is the baseline the I1 checks below build on.
+    out.slate = { count: s.probe("instanceCount"), seals: window.__autoStampSeal.probe("count") };
+
+    // images: clipboard -> seal/prepare; with a leftover row live, the first
+    // image lands on the selected instance (I1) without crashing (PD1)
+    out.pastePng1 = pasteEv([png("seal-one.png")]);
+    out.sealReady = await wait(function () { return window.__autoStampSeal.probe("count") >= out.slate.seals + 1; }, 6000);
+    out.sealCount1 = window.__autoStampSeal.probe("count");
+
+    // with an instance selected, the pasted image must land on it (I1)
+    s.addInstance("gate-inst");
+    out.pastePng2 = pasteEv([png("seal-two.png")]);
+    out.assigned = await wait(function () {
+      var sel = s.probe("selected");
+      var inst = s.probe("chain").instances.filter(function (i) { return i.id === sel; })[0];
+      return Boolean(inst && inst.sealId);
+    }, 6000);
+
+    // several images at once (I1): first -> selected instance; every extra
+    // image -> its own new instance, named after the file (PD1 decision row)
+    var base = s.probe("instanceCount");
+    out.multiPaste = pasteEv([png("seal-three.png"), png("seal-four.png")]);
+    out.multiSeals = await wait(function () {
+      var ins = s.probe("instances");
+      return ins.length === base + 1 && Boolean(ins[base] && ins[base].sealId);
+    }, 6000);
+    out.newInstances = s.probe("instances").slice(base).map(function (i) { return { name: i.name, seal: Boolean(i.sealId) }; });
+    out.oldInstances = s.probe("instances").slice(0, base).map(function (i) { return { name: i.name, seal: Boolean(i.sealId) }; });
+
+    // focused field + text/plain keeps the text-paste semantics: no load
+    out.passthrough = pasteEv([pdf()], "C:\\\\docs\\\\typed.pdf", document.querySelector("#apply-blend"));
+    out.kindAfterPaste = (s.probe("load") || {}).kind;
+
+    out.dropHint = Boolean(document.querySelector("#drop-hint"));
+    return JSON.stringify(out);
+  })()`);
+
+
+  if (gate.dragText !== "off") bad("a text-only drag hijacked the drop target: " + gate.dragText);
+  truthy("mixed PDF+image drop refused (PD2 mix)", gate.mixed && gate.mixed.load.kind === "reject" && gate.mixed.load.reason === "mix" && gate.mixed.prevented === true);
+  truthy("mixed refusal toast names the mix", /不能混|never mixed/.test(gate.mixedToast.text || "") && gate.mixedToast.level === "warn");
+  truthy("multi-PDF drop refused (PD2 multi)", gate.multi && gate.multi.load.kind === "reject" && gate.multi.load.reason === "multi");
+  truthy("multi-PDF refusal toast points at the batch panel", /批处理|batch/.test(gate.multiToast.text || ""));
+  truthy("foreign file drop refused (PD2 other)", gate.other && gate.other.load.kind === "reject" && gate.other.load.reason === "other");
+  truthy("foreign refusal toast names the allowlist", /只支持|only PDF/.test(gate.otherToast.text || ""));
+  truthy("single PDF drop opened the document (PD2)", gate.pdfOpened === true && gate.pdfDrop.during === true && gate.pdfDrop.after === "off" && gate.pageCount >= 1);
+  truthy("the opened document is titled from the drop name", /pasted one\.pdf/.test(gate.fileChip || ""));
+  truthy("pasted image prepared a seal (PD1)", gate.pastePng1 === true && gate.sealReady === true && gate.sealCount1 >= 1);
+  truthy("pasted image assigned to the selected instance (PD1/I1)", gate.assigned === true);
+  truthy("pasting two images adds exactly one named instance for the extra image (I1)", gate.multiSeals === true
+    && gate.newInstances.length === 1 && /seal-four/.test(gate.newInstances[0].name) && gate.newInstances[0].seal === true);
+  truthy("and every pre-existing instance kept a seal (I1/PD1)", gate.oldInstances.length >= 1
+    && gate.oldInstances.every((i) => i.seal) && gate.oldInstances.some((i) => /gate-inst/.test(i.name)));
+  truthy("seal count grew with every loaded image", gate.sealCount1 >= 1);
+  truthy("text paste in a focused field stays untouched (PD1)", gate.passthrough === false && gate.kindAfterPaste === "seals");
+  truthy("file drops are always prevented from default navigation (PD2)", gate.pdfDrop.prevented === true);
+  truthy("drop-hint affordance ships in the shell (PD2)", gate.dropHint === true);
 
   // The save click above is deliberate: with no document open the shell must
   // refuse locally, so *nothing* may reach the network (asserted below).
