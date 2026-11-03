@@ -185,5 +185,25 @@
       if (!res.ok) throw new ApiError(res.status, `http_${res.status}`, `${url}: ${res.statusText}`);
       return createImageBitmap(await res.blob());
     },
+
+    // --- P6: the seal preset library + the batch render channel ---
+
+    // The preset routes are plain JSON (AGENTS §6): the library stores the
+    // seal IMAGE server-side, so save/load/delete never re-upload bitmap bytes.
+    presetList: () => request("/api/seal/preset"),
+    presetSave: (body) => request("/api/seal/preset", { method: "POST", body }),
+    presetDelete: (name) =>
+      request(`/api/seal/preset?name=${encodeURIComponent(name)}`, { method: "DELETE" }),
+    presetRawURL: (name) => `/api/seal/preset/raw?id=${encodeURIComponent(name)}`,
+
+    // rawBytes fetches a stored byte stream (a preset's PNG or a session
+    // asset's PDF) with the owner token. The batch re-prepares the preset
+    // image through seal/prepare and re-renders the stamped document through
+    // pdf.js, so both consumers want the bytes, not a URL.
+    rawBytes: async (url) => {
+      const res = await fetch(url, { credentials: "same-origin", headers: { [SESSION_HEADER]: sessionToken() } });
+      if (!res.ok) throw new ApiError(res.status, `http_${res.status}`, `${url}: ${res.statusText}`);
+      return res.arrayBuffer();
+    },
   };
 })();

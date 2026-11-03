@@ -15,35 +15,59 @@ import (
 	"autostamp/internal/app"
 	"autostamp/internal/config"
 	"autostamp/internal/console"
+	"autostamp/internal/presetstore"
 	"autostamp/internal/tmpstore"
 	"autostamp/internal/webx"
 )
 
-// newTestMux builds the real route set with both stores in temp directories,
-// so every test exercises the same wiring main installs.
-func newTestMux(t *testing.T) (*http.ServeMux, *config.Store, *tmpstore.Store) {
+// testKit is the real route set plus the stores it is wired with, so a route test
+// can inspect what the handlers actually wrote to disk.
+type testKit struct {
+	mux      *http.ServeMux
+	settings *config.Store
+	assets   *tmpstore.Store
+	presets  *presetstore.Store
+}
+
+// newTestKit builds Deps the way main does (AGENTS §3): settings, the session
+// store, and the seal preset library, all under one temp dir.
+func newTestKit(t *testing.T) *testKit {
 	t.Helper()
 	dir := t.TempDir()
 	settings, err := config.Load(filepath.Join(dir, "settings.json"))
 	if err != nil {
 		t.Fatalf("settings load: %v", err)
 	}
+	log := console.New(io.Discard, false)
 	assets, err := tmpstore.New(filepath.Join(dir, "session"), tmpstore.Limits{
 		TTL:      time.Hour,
 		MaxFile:  1 << 20,
 		MaxTotal: 4 << 20,
-	}, console.New(io.Discard, false))
+	}, log)
 	if err != nil {
 		t.Fatalf("tmpstore: %v", err)
 	}
 	t.Cleanup(func() { _ = assets.Close() })
-	mux := NewMux(Deps{
-		Version:  app.BuildInfo{Version: "9.9.9", Commit: "dead123", GoVersion: "go1.26.5", GOOS: "windows", Arch: "amd64"},
-		Log:      console.New(io.Discard, false),
-		Settings: settings,
-		Assets:   assets,
-	})
-	return mux, settings, assets
+	presets := presetstore.New(filepath.Join(dir, "seals"), log)
+	return &testKit{
+		mux: NewMux(Deps{
+			Version:  app.BuildInfo{Version: "9.9.9", Commit: "dead123", GoVersion: "go1.26.5", GOOS: "windows", Arch: "amd66"},
+			Log:      log,
+			Settings: settings,
+			Assets:   assets,
+			Presets:  presets,
+		}),
+		settings: settings,
+		assets:   assets,
+		presets:  presets,
+	}
+}
+
+// newTestMux is the 3-value form the older route tests use.
+func newTestMux(t *testing.T) (*http.ServeMux, *config.Store, *tmpstore.Store) {
+	t.Helper()
+	kit := newTestKit(t)
+	return kit.mux, kit.settings, kit.assets
 }
 
 func decodeEnvelope(t *testing.T, rec *httptest.ResponseRecorder) webx.Envelope {
@@ -260,7 +284,7 @@ func TestSettingsWriteIsAtomic(t *testing.T) {
 func TestUnimplementedRouteKeepsRouterReply(t *testing.T) {
 	mux, _, _ := newTestMux(t)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/seal/preset", strings.NewReader(`{}`)))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPatch, "/api/seal/preset", strings.NewReader(`{}`)))
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405 from the static pattern", rec.Code)
 	}
@@ -271,8 +295,10 @@ func TestUnimplementedRouteKeepsRouterReply(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/seal/preset", nil))
+	// The preset routes are exact patterns, so a sub-path still falls through to the
+	// static handler and answers 404 (AGENTS §6: no /api/ catch-all).
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/seal/preset/save", nil))
 	if rec.Code != http.StatusNotFound {
-		t.Errorf("GET on the same path = %d, want 404", rec.Code)
+		t.Errorf("GET on an unregistered sub-path = %d, want 404", rec.Code)
 	}
 }

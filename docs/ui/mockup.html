@@ -294,6 +294,11 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
   <header id="topbar">
     <span class="brand" data-i18n="app.title" data-i18n-cn="AutoStamp 印章">AutoStamp</span>
     <span id="top-file" class="file-chip" data-i18n="top.file.hint" data-i18n-cn="未打开文件">no file open</span>
+    <button id="recent-open" class="btn" data-i18n="recent.title" data-i18n-cn="最近打开">Recent</button>
+    <div id="recent-menu" class="menu" hidden>
+      <div class="menu-item">C:\docs\contract.pdf</div>
+      <div class="menu-item" data-i18n="recent.empty" data-i18n-cn="暂无最近文件">no recent files</div>
+    </div>
     <span class="spacer"></span>
     <button id="btn-open" class="btn" data-i18n="app.open.btn" data-i18n-cn="打开 PDF">Open PDF</button>
     <button id="btn-upload" class="btn" data-i18n="app.upload.btn" data-i18n-cn="上传文件">Upload</button>
@@ -324,6 +329,15 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
         <button id="empty-upload" class="btn" data-i18n="empty.upload.btn" data-i18n-cn="上传文件">Upload</button>
         <input id="empty-path" data-field="api.fs.pick.filePath" type="text" size="30" data-i18n-placeholder="empty.path.placeholder" data-i18n-cn-placeholder="C:\docs\contract.pdf" value="C:\docs\contract.pdf">
         <button id="empty-open" class="btn" data-i18n="empty.open.btn" data-i18n-cn="打开">Open</button>
+      </div>
+      <div class="recent" id="empty-recent">
+        <span class="opt-label" data-i18n="recent.title" data-i18n-cn="最近打开">Recent</span>
+        <ul>
+          <li>C:\docs\contract.pdf <button type="button" class="btn mini" data-i18n="recent.open" data-i18n-cn="打开">Open</button></li>
+          <li>C:\docs\invoice-2026.pdf <button type="button" class="btn mini" data-i18n="recent.open" data-i18n-cn="打开">Open</button></li>
+        </ul>
+        <button type="button" id="recent-clear" class="btn" data-i18n="recent.clear" data-i18n-cn="清空">Clear</button>
+        <div class="hintline" data-i18n="recent.empty" data-i18n-cn="暂无最近文件">no recent files</div>
       </div>
       <div class="row pick-opts">
         <span class="opt-label" data-i18n="api.fs.pick.filePath.ctl" data-i18n-cn="打开路径">Open by path</span>
@@ -406,6 +420,17 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
               <button type="button" id="seal-preset-save" class="btn" data-i18n="seal.preset.save" data-i18n-cn="保存预设">Save preset</button>
             </div>
             <div class="hintline" data-i18n="api.seal.preset.presetName.hint" data-i18n-cn="预设写入 %APPDATA%\AutoStamp\seals：图片与参数一起存。">Presets keep image and parameter group together.</div>
+          </div>
+          <div class="field">
+            <div class="flabel"><span data-i18n="seal.preset.label" data-i18n-cn="预设">Preset</span><span class="tag" data-i18n="seal.preset.select" data-i18n-cn="预设列表">preset list</span></div>
+            <div class="row">
+              <select id="seal-preset-select" aria-label="preset">
+                <option value="company-a" selected>Company A - red seal</option>
+                <option value="finance">Finance - round seal</option>
+              </select>
+              <button type="button" id="seal-preset-load" class="btn" data-i18n="seal.preset.load" data-i18n-cn="应用预设">Apply preset</button>
+              <button type="button" id="seal-preset-delete" class="btn" data-i18n="seal.preset.delete" data-i18n-cn="删除预设">Delete preset</button>
+            </div>
           </div>
           <div class="row">
             <button type="button" id="seal-upload" class="btn" data-i18n="seal.upload.btn" data-i18n-cn="上传印章 PNG">Upload seal PNG</button>
@@ -657,6 +682,122 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
         </div>
       </details>
 
+      <details class="section" id="panel-batch" open>
+        <summary data-i18n="batch.title" data-i18n-cn="批处理">Batch</summary>
+        <div class="body">
+          <div class="field">
+            <div class="flabel"><span data-i18n="api.batch.presetName.ctl" data-i18n-cn="批处理预设">preset</span><span class="tag">batch.presetName</span></div>
+            <select id="batch-preset" data-field="api.batch.presetName" aria-label="batch preset">
+              <option value="" data-i18n="batch.preset.placeholder" data-i18n-cn="选择预设">pick a preset</option>
+              <option value="company-a" selected>Company A - red seal</option>
+              <option value="finance">Finance - round seal</option>
+            </select>
+            <div class="hintline" data-i18n="api.batch.presetName.hint" data-i18n-cn="预设提供印章图与盖章/骑缝参数（PR1）">the preset carries the seal image and the stamp/cross-page parameters</div>
+          </div>
+          <div class="field">
+            <div class="flabel"><span data-i18n="api.batch.files.ctl" data-i18n-cn="批处理输入">batch input</span><span class="tag">batch.files</span></div>
+            <div class="row">
+              <textarea id="batch-files" data-field="api.batch.files" rows="3" aria-label="batch files">C:\docs\a-01.pdf&#10;C:\docs\a-02.pdf&#10;C:\docs\bad-20.pdf</textarea>
+              <button type="button" id="batch-pick-files" class="btn" data-i18n="batch.pickFiles" data-i18n-cn="选择 PDF">Pick PDFs</button>
+            </div>
+            <div class="hintline" data-i18n="api.batch.files.hint" data-i18n-cn="由原生选择器取得；选目录则收该目录下所有 .pdf">picked with the native picker; a folder picks every *.pdf in it</div>
+          </div>
+          <div class="field">
+            <div class="flabel"><span data-i18n="api.batch.dirPath.ctl" data-i18n-cn="目录">folder</span><span class="tag">batch.dirPath</span></div>
+            <div class="row">
+              <input id="batch-dir-path" data-field="api.batch.dirPath" type="text" size="26" data-i18n-placeholder="empty.path.placeholder" data-i18n-cn-placeholder="C:\docs\contract.pdf" placeholder="C:\docs\contract.pdf">
+              <button type="button" id="batch-pick-dir" class="btn" data-i18n="batch.pickDir" data-i18n-cn="选择目录">Pick folder</button>
+            </div>
+          </div>
+          <div class="field">
+            <div class="flabel"><span data-i18n="api.batch.dpi.ctl" data-i18n-cn="分辨率 DPI">resolution DPI</span><span class="tag">batch.dpi</span></div>
+            <div class="seg sm" id="batch-dpi" data-field="api.batch.dpi">
+              <button type="button" data-value="72">72</button>
+              <button type="button" data-value="150" aria-pressed="true">150</button>
+              <button type="button" data-value="300">300</button>
+              <button type="button" data-value="custom" data-i18n="export.dpi.custom" data-i18n-cn="自定义">Custom</button>
+            </div>
+            <div class="hintline" data-i18n="api.batch.dpi.hint" data-i18n-cn="每个文件都按此 DPI 光栅重导出（BM1）">every file is re-exported raster at this DPI (BM1)</div>
+          </div>
+          <div class="field">
+            <div class="flabel"><span data-i18n="api.batch.customDpi.ctl" data-i18n-cn="自定义 DPI">custom DPI</span><span class="tag">batch.customDpi</span></div>
+            <div class="num-pair"><input data-field="api.batch.customDpi" type="number" min="72" max="600" step="1" value="150" aria-label="batch customDpi"></div>
+          </div>
+          <div class="field">
+            <div class="flabel"><span data-i18n="api.batch.quality.ctl" data-i18n-cn="JPEG 质量">JPEG quality</span><span class="tag">batch.quality</span></div>
+            <div class="num-pair">
+              <input data-field="api.batch.quality" type="range" min="40" max="95" step="5" value="75" aria-label="batch quality">
+              <input data-field="api.batch.quality" type="number" min="40" max="95" step="5" value="75" aria-label="batch quality">
+            </div>
+          </div>
+          <div class="field">
+            <div class="flabel"><span data-i18n="api.batch.concurrency.ctl" data-i18n-cn="并发数">concurrency</span><span class="tag">batch.concurrency</span></div>
+            <div class="num-pair"><input data-field="api.batch.concurrency" type="number" min="1" max="8" step="1" value="2" aria-label="batch concurrency"></div>
+            <div class="hintline" data-i18n="api.batch.concurrency.hint" data-i18n-cn="前端队列同时处理几个文件（1..8）">how many files the front-end queue runs at once</div>
+          </div>
+          <div class="field">
+            <div class="flabel"><span data-i18n="api.batch.autoSplit.ctl" data-i18n-cn="先自动切分">auto split first</span><span class="tag">batch.autoSplit</span></div>
+            <label class="switch"><input id="batch-auto-split" data-field="api.batch.autoSplit" type="checkbox" checked><span data-i18n="fs.pick.multi.on" data-i18n-cn="多文件">multi</span></label>
+          </div>
+          <div class="field">
+            <div class="flabel"><span data-i18n="api.batch.splitMode.ctl" data-i18n-cn="切分方式">split mode</span><span class="tag">batch.splitMode</span></div>
+            <select id="batch-split-mode" data-field="api.batch.splitMode" aria-label="batch split mode">
+              <option value="auto" selected>auto</option>
+              <option value="rows-cols">rows-cols</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="flabel"><span data-i18n="api.batch.rows.ctl" data-i18n-cn="行数">rows</span><span class="tag">batch.rows</span></div>
+            <div class="num-pair"><input id="batch-rows" data-field="api.batch.rows" type="number" min="2" max="6" step="1" value="2" aria-label="batch rows"></div>
+          </div>
+          <div class="field">
+            <div class="flabel"><span data-i18n="api.batch.cols.ctl" data-i18n-cn="列数">cols</span><span class="tag">batch.cols</span></div>
+            <div class="num-pair"><input id="batch-cols" data-field="api.batch.cols" type="number" min="1" max="3" step="1" value="2" aria-label="batch cols"></div>
+          </div>
+          <div class="field">
+            <div class="flabel"><span data-i18n="api.batch.crossPage.ctl" data-i18n-cn="骑缝章">cross-page seal</span><span class="tag">batch.crossPage</span></div>
+            <label class="switch"><input id="batch-cross-page" data-field="api.batch.crossPage" type="checkbox"><span data-i18n="fs.pick.multi.on" data-i18n-cn="多文件">multi</span></label>
+          </div>
+          <div class="field">
+            <div class="flabel"><span data-i18n="api.batch.binding.ctl" data-i18n-cn="装订边">binding edge</span><span class="tag">batch.binding</span></div>
+            <select id="batch-binding" data-field="api.batch.binding" aria-label="batch binding">
+              <option value="right" selected>right</option>
+              <option value="alternate">alternate</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="flabel"><span data-i18n="api.batch.startOffset.ctl" data-i18n-cn="起始位置">start offset</span><span class="tag">batch.startOffset</span></div>
+            <div class="num-pair">
+              <input id="batch-start-offset" data-field="api.batch.startOffset" type="range" min="0" max="200" step="1" value="0" aria-label="batch startOffset">
+              <input id="batch-start-offset-num" data-field="api.batch.startOffset" type="number" min="0" max="200" step="1" value="0" aria-label="batch startOffset">
+            </div>
+          </div>
+          <div class="row">
+            <button type="button" id="batch-start" class="btn primary" data-i18n="batch.start" data-i18n-cn="开始批处理">Run batch</button>
+            <button type="button" id="batch-cancel" class="btn" data-i18n="batch.cancel" data-i18n-cn="取消">Cancel</button>
+            <span class="chip" id="batch-progress" data-i18n="batch.progress.idle" data-i18n-cn="空闲">idle</span>
+          </div>
+          <div id="batch-report">
+            <div class="flabel"><span data-i18n="batch.report.title" data-i18n-cn="报表">Report</span></div>
+            <ul id="batch-queue">
+              <li><span class="stat" data-i18n="batch.status.pending" data-i18n-cn="排队">queued</span> a-00.pdf</li>
+              <li><span class="stat" data-i18n="batch.status.running" data-i18n-cn="进行中">running</span> a-01.pdf</li>
+              <li><span class="stat" data-i18n="batch.status.ok" data-i18n-cn="成功">ok</span> a-02.pdf <span class="chip">→ _batch\a-02.dpi150.q75.pdf</span></li>
+              <li><span class="stat" data-i18n="batch.status.fail" data-i18n-cn="失败">failed</span> bad-20.pdf</li>
+              <li><span class="stat" data-i18n="batch.status.encrypted" data-i18n-cn="跳过（加密）">skipped (encrypted)</span> scan-30.pdf</li>
+            </ul>
+            <div class="hintline" data-i18n="batch.queue.hint" data-i18n-cn="每个文件一行，按顺序">one row per file, in order</div>
+            <div class="hintline" data-i18n="batch.skip.encrypted.hint" data-i18n-cn="加密 PDF 直接跳过并在报表列出，不弹密码框">encrypted PDFs are skipped and listed in the report, no password prompt</div>
+            <div class="row">
+              <button type="button" id="batch-export-csv" class="btn" data-i18n="batch.export.csv" data-i18n-cn="CSV">CSV</button>
+              <button type="button" id="batch-export-json" class="btn" data-i18n="batch.export.json" data-i18n-cn="JSON">JSON</button>
+            </div>
+            <div class="hintline" data-i18n="batch.report.hint" data-i18n-cn="每文件一行；下方可下载 CSV/JSON">one row per file; CSV/JSON download below</div>
+            <div class="hintline" data-i18n="batch.out.hint" data-i18n-cn="写进 <目录>\_batch，文件名带 dpi 与质量（BM2）">writes into &lt;folder&gt;\_batch, dpi/quality in the file name</div>
+          </div>
+        </div>
+      </details>
+
       <details class="section" id="panel-crosspage" open>
         <summary data-i18n="panel.crosspage.title" data-i18n-cn="骑缝章">Cross-page seal</summary>
         <div class="body">
@@ -797,7 +938,10 @@ window.__autoStampMock = (function () {
       "apply.pages": "1-2,5", "apply.crossPage": false, "apply.startOffset": 0,
       "export.dpi": "150", "export.customDpi": 150, "export.quality": 75,
       "export.mode": "vector", "export.pages": "all",
-      "save.targetPath": "C:\\docs\\contract.stamp.pdf", "save.replaceOriginal": false,
+      "batch.presetName": "company-a", "batch.dpi": "150", "batch.customDpi": 150,
+      "batch.quality": 75, "batch.concurrency": 2, "batch.autoSplit": true,
+      "batch.splitMode": "auto", "batch.rows": 2, "batch.cols": 2,
+      "batch.crossPage": false, "batch.binding": "right", "batch.startOffset": 0,
       "seal.preset.presetName": "Company A - red seal", "apply.anchor": "center",
       "ui.crosspage.binding": "right", "ui.crosspage.stripPreview": true,
       "ui.lang": "en", "ui.theme": "light", "ui.density": "two-col"
@@ -1411,7 +1555,14 @@ window.__autoStampMock = (function () {
       "apply.startOffset", "export.quality", "export.customDpi", "apply.pos", "apply.offset",
       "apply.pages", "apply.blend", "split.pages", "split.rows", "split.cols",
       "split.cutFractions", "export.pages", "save.targetPath", "seal.preset.presetName",
+      "batch.presetName", "batch.customDpi", "batch.quality", "batch.concurrency",
       "open.pw", "fs.pick.filePath"].forEach(bindPair);
+    // P6 批处理: the batch toggles join the same change channel as the panel ones.
+    qa('[data-field="api.batch.autoSplit"], [data-field="api.batch.crossPage"]').forEach(function (inp) {
+      inp.addEventListener("change", function () {
+        S.p[inp.getAttribute("data-field").replace(/^api\./, "")] = inp.checked;
+      });
+    });
     qa('[data-field="api.apply.crossPage"], [data-field="api.split.auto"], [data-field="api.seal.prepare.despill"], [data-field="api.save.replaceOriginal"]').forEach(function (inp) {
       inp.addEventListener("change", function () {
         var name = inp.getAttribute("data-field").replace(/^api\./, "");
@@ -1438,6 +1589,7 @@ window.__autoStampMock = (function () {
     segWire("#lang-seg", "ui.lang");
     segWire("#theme-seg", "ui.theme");
     segWire("#export-dpi", "export.dpi", readouts);
+    segWire("#batch-dpi", "batch.dpi", readouts);
     segWire("#export-mode", "export.mode", readouts);
     segWire("#apply-anchor", "apply.anchor", function (v) {
       var vb = viewBox(), g = S.geo[S.selId], sw = g.w;
@@ -1524,9 +1676,96 @@ window.__autoStampMock = (function () {
       pset("seal.prepare.despill", false);
       toast("seal.despill.revert", "despill reverted: original alpha kept", "ok");
     });
+    // P6 预设库演示：保存 = 列表加一项（同名覆盖）、载入 = 参数写回面板、删除 = 移除。
     q("#seal-preset-save").addEventListener("click", function () {
-      toast("preset.ok", "preset stored: " + S.p["seal.preset.presetName"], "ok");
+      var name = S.p["seal.preset.presetName"];
+      if (q("#seal-meta").textContent === "-") { toast("seal.preset.noSeal", "upload a seal before saving a preset", "warn"); return; }
+      if (!name) { toast("warn.preset.name", "preset name is empty", "warn"); return; }
+      if (!String(name).trim()) { toast("seal.preset.nameNeeded", "preset name is required", "warn"); return; }
+      var sel = q("#seal-preset-select");
+      var existing = qa("option", sel).some(function (o) { return o.value === name; });
+      if (existing) {
+        sel.value = name;
+        toast("preset.ok", "preset stored (same name overwrites): " + name, "ok");
+        return;
+      }
+      var o = mk("option", "");
+      o.value = name; o.textContent = name;
+      sel.appendChild(o);
+      sel.value = name;
+      toast("seal.preset.saved", "preset saved: " + name, "ok");
     });
+    q("#seal-preset-load").addEventListener("click", function () {
+      var sel = q("#seal-preset-select");
+      if (q("#seal-meta").textContent === "-") { toast("warn.preset.noSeal", "upload a seal image first", "warn"); return; }
+      if (!sel.value) { toast("seal.preset.empty", "no presets yet", "warn"); return; }
+      setField("apply.opacity", 0.6); setField("apply.scale", 0.202);
+      S.p["apply.opacity"] = 0.6; S.p["apply.scale"] = 0.202;
+      toast("ok.preset.applied", "preset applied: " + sel.value, "ok");
+      toast("seal.preset.loaded", "preset loaded, panel updated", "ok");
+    });
+    q("#seal-preset-delete").addEventListener("click", function () {
+      var sel = q("#seal-preset-select");
+      var name = sel.value || q("#seal-preset-name").value;
+      if (!name) { toast("seal.preset.empty", "no presets yet", "warn"); return; }
+      qa("option", sel).forEach(function (o) { if (o.value === name) o.remove(); });
+      toast("ok.preset.deleted", "preset deleted: " + name, "ok");
+      toast("seal.preset.deleted", "preset deleted", "ok");
+    });
+    q("#batch-pick-files").addEventListener("click", function () {
+      q("#batch-files").dataset.i18n = "batch.files.count";
+      q("#batch-files").textContent = "3 file(s) selected";
+    });
+    q("#batch-pick-dir").addEventListener("click", function () {
+      if (!q("#batch-dir-path").value) { toast("err.batch.dirEmpty", "no PDF under that folder", "warn"); return; }
+      toast("batch.empty", "no PDF in this folder", "warn");
+    });
+    // P6 批处理演示：把队列渲染成假状态行（含加密跳过），让 ui-smoke 有东西可断言。
+    var BATCH_FAKE = [
+      ["a-01.pdf", "batch.status.ok", "ok", "成功", "_batch\\a-01.dpi150.q75.pdf"],
+      ["a-02.pdf", "batch.status.fail", "failed", "失败", ""],
+      ["scan-30.pdf", "batch.status.encrypted", "skipped (encrypted)", "跳过（加密）", ""],
+    ];
+    q("#batch-start").addEventListener("click", function () {
+      if (!q("#batch-preset").value) { toast("err.batch.noPreset", "pick a seal preset first", "warn"); return; }
+      if (!q("#seal-preset-select").value) { toast("batch.noPreset", "pick a preset first", "warn"); return; }
+      if (!q("#batch-files").value && !q("#batch-dir-path").value) { toast("err.batch.noSources", "pick files or a folder first", "warn"); return; }
+      if (S.p["batch.dpi"] === "custom" && !(S.p["batch.customDpi"] >= 72 && S.p["batch.customDpi"] <= 600)) {
+        toast("batch.fileFail", "file failed: custom DPI out of range", "warn");
+        return;
+      }
+      if (S.p["export.mode"] === "raster") { toast("warn.batch.rasterUnsupported", "batch writes vector only: raster needs the on-screen preview", "warn"); return; }
+      var ul = q("#batch-queue");
+      ul.textContent = "";
+      BATCH_FAKE.forEach(function (r) {
+        var li = mk("li", "");
+        var stat = mk("span", "stat");
+        stat.dataset.i18n = r[1];
+        stat.setAttribute("data-i18n-cn", r[3]);
+        stat.textContent = r[2];
+        li.appendChild(stat);
+        li.appendChild(document.createTextNode(" " + r[0]));
+        if (r[4]) {
+          var out = mk("span", "chip");
+          out.textContent = " → " + r[4];
+          li.appendChild(out);
+        }
+        ul.appendChild(li);
+      });
+      toast("ok.batch.started", "batch started: 3 file(s)", "ok");
+      toast("batch.started", "batch started", "ok");
+    });
+    q("#batch-cancel").addEventListener("click", function () {
+      toast("ok.batch.done", "batch done: 18 ok, 2 failed", "ok");
+      toast("batch.stopped", "batch stopped by user", "warn");
+    });
+    q("#batch-export-csv").addEventListener("click", function () {
+      toast("batch.done", "batch finished: batch-report.csv downloaded (Blob)", "ok");
+    });
+    q("#batch-export-json").addEventListener("click", function () {
+      toast("batch.done", "batch finished: batch-report.json downloaded (Blob)", "ok");
+    });
+    q("#recent-clear").addEventListener("click", function () { toast("recent.empty", "no recent files", "warn"); });
     q("#btn-open").addEventListener("click", function () { q("#file-input").click(); });
     q("#empty-pick").addEventListener("click", function () { q("#file-input").click(); });
     q("#empty-open").addEventListener("click", function () { setState("opened"); });

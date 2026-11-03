@@ -43,6 +43,11 @@ type pickBody struct {
 	// the caller shows a path box instead of a dialog, and the server only
 	// grants what is already on disk. An empty value means "show the dialog".
 	FilePath string `json:"filePath"`
+
+	// Dir asks for a folder instead of files (P6 批处理, UI_SPEC §2 api.fs.pick.dir):
+	// the response then carries dirPath plus the PDFs directly under it, each with
+	// its own pathGrantId so the batch queue can open them without re-asking.
+	Dir bool
 }
 
 // pickResult is one picked path plus the grant the caller must use later.
@@ -90,6 +95,7 @@ func handlePick(store *tmpstore.Store, log *slog.Logger) http.HandlerFunc {
 			return
 		}
 		var paths []string
+		dirPath := ""
 		if body.FilePath != "" {
 			// No dialog for a typed path, but the grant must resolve to a real
 			// file: handing out a capability for a missing path would let the
@@ -99,33 +105,47 @@ func handlePick(store *tmpstore.Store, log *slog.Logger) http.HandlerFunc {
 				webx.Fail(w, http.StatusBadRequest, "path_denied", "路径不可读: "+err.Error())
 				return
 			}
-			if st.IsDir() {
-				webx.Fail(w, http.StatusBadRequest, "path_denied", "需要文件路径，不是目录")
+			if body.Dir {
+				if !st.IsDir() {
+					webx.Fail(w, http.StatusBadRequest, "bad_body", "dir 为真时 filePath 必须是目录")
+					return
+				}
+				dirPath = body.FilePath
+			} else {
+				if st.IsDir() {
+					webx.Fail(w, http.StatusBadRequest, "path_denied", "需要文件路径，不是目录")
+					return
+				}
+				paths = []string{body.FilePath}
+			}
+		} else if body.Dir {
+			// A typed dir is the fallback for platforms with no native dialog, so
+			// 批处理 works everywhere; the dialog itself is one folder deep.
+			dir, err := fsx.PickDirs(r.Context(), fsx.PickOptions{Dir: true, Filter: body.Filter, StartDir: body.StartDir})
+			if pickDialogError(w, log, err) {
 				return
 			}
-			paths = []string{body.FilePath}
+			dirPath = dir
 		} else {
 			picked, err := fsx.PickFiles(r.Context(), fsx.PickOptions{
 				Filter:   body.Filter,
 				Multi:    body.Multi,
 				StartDir: body.StartDir,
 			})
-			switch {
-			case errors.Is(err, fsx.ErrPickCancelled):
-				webx.OK(w, map[string]any{"cancelled": true, "picks": []pickResult{}})
-				return
-			case errors.Is(err, fsx.ErrPickUnsupported):
-				webx.Fail(w, http.StatusNotImplemented, "pick_unsupported",
-					"该平台没有原生文件选择器，请改用路径输入框")
-				return
-			case errors.Is(err, context.Canceled):
-				return // the request was aborted; nothing more to write
-			case err != nil:
-				log.Error("file picker failed", "err", err)
-				webx.Fail(w, http.StatusInternalServerError, "pick_failed", err.Error())
+			if pickDialogError(w, log, err) {
 				return
 			}
 			paths = picked
+		}
+		if dirPath != "" {
+			// The server enumerates the folder (one level): the browser must not be
+			// the one deciding which files exist on the user's disk (fsx.ListMatching).
+			listed, err := fsx.ListMatching(dirPath, body.Filter)
+			if err != nil {
+				webx.Fail(w, http.StatusBadRequest, "path_denied", "无法列出该目录: "+err.Error())
+				return
+			}
+			paths = listed
 		}
 		out := make([]pickResult, 0, len(paths))
 		for _, p := range paths {
@@ -146,7 +166,33 @@ func handlePick(store *tmpstore.Store, log *slog.Logger) http.HandlerFunc {
 			}
 			out = append(out, res)
 		}
+		if dirPath != "" {
+			webx.OK(w, map[string]any{"cancelled": false, "dirPath": dirPath, "picks": out})
+			return
+		}
 		webx.OK(w, map[string]any{"cancelled": false, "picks": out})
+	}
+}
+
+// pickDialogError maps the dialog failures onto the registered codes and reports
+// whether the handler must stop. A cancel is a normal answer, not an error: the UI
+// closes its spinner and shows nothing (AGENTS §6 /api/fs/pick).
+func pickDialogError(w http.ResponseWriter, log *slog.Logger, err error) bool {
+	switch {
+	case err == nil:
+		return false
+	case errors.Is(err, fsx.ErrPickCancelled):
+		webx.OK(w, map[string]any{"cancelled": true, "picks": []pickResult{}})
+		return true
+	case errors.Is(err, fsx.ErrPickUnsupported):
+		webx.Fail(w, http.StatusNotImplemented, "pick_unsupported", "该平台没有原生文件选择器，请改用路径输入框")
+		return true
+	case errors.Is(err, context.Canceled):
+		return true // the request was aborted; nothing more to write
+	default:
+		log.Error("file picker failed", "err", err)
+		webx.Fail(w, http.StatusInternalServerError, "pick_failed", err.Error())
+		return true
 	}
 }
 
@@ -508,8 +554,18 @@ func inspectAsset(ctx context.Context, path, pw string) (*pdfcore.Doc, error) {
 	if err == nil {
 		return doc, nil
 	}
-	if !needsPassword(err) || pw == "" {
+	if !needsPassword(err) {
 		return nil, err
+	}
+	if pw == "" {
+		// pdfcpu reports an empty password against an AES-256 document as an
+		// *invalid* one, not as "owner password required" (verified 2026-11-03:
+		// fixture from tools/verify/encfx, see FACTS §2.4). The contract only
+		// distinguishes "needs a password" from "the password was wrong", and a
+		// caller that sent no credentials at all needs the prompt, so the empty
+		// attempt is re-classified as required here rather than leaking pdfcpu's
+		// distinction into two codes the UI cannot tell apart.
+		return nil, fmt.Errorf("%w: 文档已加密（pdfcpu 把空密码判为 invalid）", pdfcore.ErrNeedsPassword)
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		return nil, err

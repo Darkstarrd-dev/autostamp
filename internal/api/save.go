@@ -39,6 +39,10 @@ type saveBody struct {
 	TargetPath      string `json:"targetPath"`
 	PathGrantID     string `json:"pathGrantId"`
 	ReplaceOriginal bool   `json:"replaceOriginal"`
+
+	// Mkdirs creates the parent folder of targetPath when it does not exist (the
+	// batch job writes into a "_batch" folder it decides on itself, P6 需求 6).
+	Mkdirs bool `json:"mkdirs"`
 }
 
 // saveResult is the POST /api/pdf/save response. The front-end shows `message`
@@ -94,6 +98,15 @@ func handleSave(store *tmpstore.Store, log *slog.Logger) http.HandlerFunc {
 			return
 		}
 		dir := filepath.Dir(target)
+		// mkdirs (UI_SPEC §2 api.save.mkdirs) creates the parent folder for the batch
+		// output; without it a missing folder stays a 400, so a mistyped path cannot
+		// write a stray file into a brand new directory.
+		if body.Mkdirs {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				webx.Fail(w, http.StatusInternalServerError, "save_failed", "创建目录失败: "+err.Error())
+				return
+			}
+		}
 		if st, err := os.Stat(dir); err != nil || !st.IsDir() {
 			webx.Fail(w, http.StatusBadRequest, "bad_body", "目标目录不存在: "+dir)
 			return

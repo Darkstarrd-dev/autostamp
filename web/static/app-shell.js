@@ -55,11 +55,18 @@
     "api.export.customDpi": ["export", "customDpi"],
     "api.export.quality": ["export", "quality"],
     "api.export.pages": ["export", "pages"],
+    // P6 batch panel (BM1): the five control fields persist into the settings
+    // batch group; the queue/report stay transient.
+    "api.batch.presetName": ["batch", "presetName"],
+    "api.batch.dpi": ["batch", "dpi"],
+    "api.batch.customDpi": ["batch", "customDpi"],
+    "api.batch.quality": ["batch", "quality"],
+    "api.batch.concurrency": ["batch", "concurrency"],
   };
 
   const NUMERIC = new Set([
     "resampleDpi", "opacity", "brightness", "saturate", "scale", "rotation",
-    "startOffset", "rows", "cols", "customDpi", "quality",
+    "startOffset", "rows", "cols", "customDpi", "quality", "concurrency",
   ]);
 
   const api = window.__autoStampApi;
@@ -292,6 +299,9 @@
       ["apply", ["blend", "opacity", "brightness", "saturate", "scale", "pos", "anchor", "offset", "rotation", "pages", "crossPage", "binding", "startOffset"]],
       ["split", ["auto", "mode", "rows", "cols", "cutFractions", "pages"]],
       ["export", ["mode", "dpi", "customDpi", "quality", "pages"]],
+      // P6: the batch panel's five controls ride the same round-trip so a
+      // restart restores the last-used preset/dpi/quality/concurrency.
+      ["batch", ["presetName", "dpi", "customDpi", "quality", "concurrency"]],
     ];
     for (const [group, keys] of pairs) {
       const src = s[group] || {};
@@ -796,6 +806,24 @@
     });
     q("#pw-retry").addEventListener("click", () => retryOpen());
     q("#save-pick").addEventListener("click", () => pickSaveTarget());
+    // RF1: one data source, two surfaces; the dropdown re-reads settings on
+    // open because the server appended the last open behind our back.
+    q("#recent-open").addEventListener("click", async () => {
+      const menu = q("#recent-menu");
+      menu.hidden = !menu.hidden;
+      if (!menu.hidden) await refreshRecent();
+    });
+    q("#recent-menu").addEventListener("click", (e) => {
+      const item = e.target.closest("[data-recent-path]");
+      if (!item) return;
+      q("#recent-menu").hidden = true;
+      openRecent(item.dataset.recentPath);
+    });
+    q("#empty-recent").addEventListener("click", (e) => {
+      const item = e.target.closest("button[data-recent-path]");
+      if (item) openRecent(item.dataset.recentPath);
+    });
+    q("#recent-clear").addEventListener("click", () => clearRecent());
     q("#modal-layer .scrim").addEventListener("click", () => setModal(null));
     doc.addEventListener("keydown", onKey);
   }
@@ -1688,9 +1716,87 @@
       .then((res) => {
         state.settings = res.settings;
         applySettings(res.settings);
+        renderRecent();
         if (res.warning) toast("warn", res.warning);
       })
       .catch((e) => toast("error", `${e.code}: ${e.message}`));
+  }
+
+  // ---------- recent files (RF1: empty-state list + topbar dropdown) ----------
+  //
+  // One data source (settings.recentFiles, max 24, maintained server-side on
+  // every open) with two surfaces. The dropdown re-reads settings when it
+  // opens, because the server appended the last open behind our back.
+  function renderRecent() {
+    const list = (state.settings && state.settings.recentFiles) || [];
+    const menu = q("#recent-menu");
+    if (menu) {
+      menu.textContent = "";
+      list.slice(0, 24).forEach((r) => {
+        const item = doc.createElement("button");
+        item.type = "button";
+        item.className = "menu-item";
+        item.dataset.recentPath = r.path;
+        item.textContent = r.path;
+        menu.append(item);
+      });
+      if (!list.length) {
+        const empty = doc.createElement("div");
+        empty.className = "menu-item";
+        empty.setAttribute("data-i18n", "recent.empty");
+        empty.textContent = t("recent.empty");
+        menu.append(empty);
+      }
+    }
+    const host = q("#empty-recent");
+    if (host) {
+      const ul = q("ul", host);
+      ul.textContent = "";
+      list.slice(0, 24).forEach((r) => {
+        const li = doc.createElement("li");
+        const path = doc.createElement("span");
+        path.textContent = `${r.path} `;
+        const btn = doc.createElement("button");
+        btn.type = "button";
+        btn.className = "btn mini";
+        btn.dataset.recentPath = r.path;
+        btn.setAttribute("data-i18n", "recent.open");
+        btn.textContent = t("recent.open");
+        li.append(path, btn);
+        ul.append(li);
+      });
+      const hint = q(".hintline", host);
+      if (hint) hint.hidden = list.length > 0;
+    }
+  }
+
+  async function refreshRecent() {
+    try {
+      const res = await api.settings();
+      state.settings = res.settings;
+    } catch (e) {
+      /* the rendered list just stays stale; boot already reported the error */
+    }
+    renderRecent();
+  }
+
+  // openRecent reuses the typed-path channel: the recent entry is a path on
+  // disk, so it goes through the same grant + open chain as #empty-open.
+  async function openRecent(path) {
+    if (!path) return;
+    writeField("api.fs.pick.filePath", path);
+    await openByPath();
+  }
+
+  async function clearRecent() {
+    try {
+      const res = await api.patchSettings({ recentFiles: [] });
+      state.settings = res.settings;
+      renderRecent();
+      toast("warn", t("recent.empty"));
+    } catch (e) {
+      toast("error", `${e.code}: ${e.message}`);
+    }
   }
 
   // ---------- verify hooks (UI_SPEC §7) ----------
@@ -1822,7 +1928,7 @@
     STATES, state, escapeHtml,
     setState, verifyState, setParams, fields, ids, probe, i18nPairs,
     applyLang, applyTheme, setDensity,
-    setModal, clearToast, t,
+    setModal, clearToast, t, toast,
     q, qa,
     addInstance, selectInstance, deleteSelected, duplicateSelected,
     // P2: instance parameters + the hand-off the overlay/seal modules use.

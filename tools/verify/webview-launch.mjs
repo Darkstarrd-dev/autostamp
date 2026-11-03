@@ -37,7 +37,8 @@ function clean(dir) {
     console.log("webview-launch: sandbox left behind (locked by WebView2):", dir, e.message);
   }
 }
-const deadline = Date.now() + 20000;
+const t0 = Date.now();
+const deadline = t0 + 20000;
 let url = null;
 while (Date.now() < deadline) {
   const m = err.match(/url=(http:\/\/127\.0\.0\.1:\d+)/);
@@ -54,8 +55,18 @@ if (!url) {
   clean(sandbox);
   process.exit(1);
 }
+const tOpen = Date.now() - t0;
 const health = await fetch(url + "/api/health").then((r) => r.json());
-console.log("webview-launch: window up,", health.data.name, health.data.version, "served at", url);
+const tHealth = Date.now() - t0;
+// P6 acceptance: cold start = spawn -> "webview window opened" (the window is
+// created and navigated) and -> the first answered /api/health. Not a subjective
+// screenshot: the two numbers below are what the plan's 1.5 s criterion compares
+// against, and the exe under test is the shipped artifact passed on argv.
+console.log('webview-launch: window up,', health.data.name, health.data.version, 'served at', url);
+console.log('webview-launch: cold start window-open ' + tOpen + ' ms, health ' + tHealth + ' ms');
+if (tOpen > 1500) {
+  console.error('webview-launch: cold start ' + tOpen + ' ms exceeds the 1500 ms plan criterion');
+}
 proc.kill();
 clean(sandbox);
 process.exit(0);

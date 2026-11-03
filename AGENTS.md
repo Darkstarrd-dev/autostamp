@@ -97,7 +97,7 @@ powershell -NoProfile -File build.ps1                 # clean+vet+test+genfix+3 
 powershell -NoProfile -File build.ps1 -Task verify     # 只跑 UI 契约/冒烟校验
 powershell -NoProfile -File build.ps1 -Task genfix,fixtures   # 只刷新 docs/ui/fixtures 素材
 powershell -NoProfile -File build.ps1 -Task webview -Run      # 编窗口版并直接启动
-powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 + 重跑校验（Ctrl+C 退出）
+powershell -NoProfile -File build.ps1 -Task stripped,package  # 出货件 + win64 zip（PC1）
 ```
 
 - 任一任务失败 -> 退出码 1（汇总行「失败 N / 跳过 M」）；根目录还没有 `go.mod`/`*.go` 时
@@ -201,22 +201,46 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
     体积预估在发请求前拦下（`UI_SPEC` W6）。vector 走 JSON、只裁页。**保存幂等**：当前文档
     已是光栅化资产且 `dpi/质量/pages` 没变 ⇒ 第二次保存不再光栅化（`app-shell` 的
     `lastExport`），否则就是多一代 JPEG 画质损失；改了参数才重光栅化一次。
+20. **预设库 = 索引 + 图片文件**：`seals/presets.json`（数组索引，原子写）+ `seals/<slug>.png`。
+    图片**复制**自 tmpstore 的 seal 资产（前端已上传过一次，不再二次上传），参数组 =
+    `apply.*` 白名单 + `seal.prepare.*`（去背选项跟着预设走，`apply`/批处理都按它跑）。
+    删预设才删图片；重命名不改（同名 = 覆盖，PR2）。
+21. **批处理在前端逐文件跑链（BM1，2026-11-02 取代「服务端串行作业 + 只矢量」）**：
+    目录 = `fs/pick{dir:true}`（`dirPath` + 一层内每个 PDF 的 grant）；队列并发数
+    `api.batch.concurrency`（默认 2，1..8）。每文件：`fs/pick{filePath}` → `pdf/open` →
+    （可选 `pdf/split`，词表用面板的 `api.split.*`）→ `pdf/apply`（印章与参数来自预设：
+    `GET /api/seal/preset/raw?id=` 的字节 → `pdf/seal/prepare`，一份字节 prepare 一次全批复用）→
+    `pdf/export`（multipart 光栅，页位图由前端 pdf.js 渲染回传 ⇒ dpi/质量 真生效，
+    pdfcpu 无 rasterize，FACTS §2.4）→ `pdf/save{targetPath,mkdirs:true}`。
+    输出 = `源目录\_batch\原名.dpi<数字>.q<数字>.pdf`（例 `a-01.dpi150.q75.pdf`；BM2
+    取代 BC2 的 `_seal` 命名；**单扩展名**是硬要求：`fsx.ValidateTargetPath`/`CheckWriteTarget`
+    只认 `.pdf`，多后缀会被 `path_denied` 挡掉）；
+    加密件不弹密码，跳过并在报表记 `password_required`（BM4）；源文件永不改；
+    报表就是前端队列状态，CSV/JSON 由前端生成（需求 9，不发请求）。
+22. **最近文件不需要新后端**：`config.RecentFiles`（24 条，P0 就有）+ `SetRecent` 就是全部
+    后端；两个入口（启动页 `#empty-recent`、顶栏 `#recent-open` + `#recent-menu`）已接线
+    （P6，2026-11-02）：点了走 `fs/pick{filePath}` 直开授权 —— 与手输路径完全同一条链路，
+    没有新路由、没有新字段。空列表如实显示（不编造「最近」条目）。
 
 ## 6. HTTP 契约（`/api/*`，全部 JSON；字段在 **P0.5 与用户确认后**才冻结，改动必须同步本文、`docs/UI_SPEC.md` 与前端）
 
 |路由|用途|
 |---|---|
 |`GET /api/health`|健康检查 + 版本号|
-|`POST /api/fs/pick`|原生文件选择器（`{filter,multi,startDir}`）或 `{"filePath":…}` 直开授权，返回 `pathGrantId`（owner 绑定，TTL）；取消回 `{cancelled:true, picks:[]}`，无选择器的平台回 501 `pick_unsupported`|
+|`POST /api/fs/pick`|原生文件选择器（`{filter,multi,startDir}`）或 `{"filePath":…}` 直开授权，返回 `pathGrantId`（owner 绑定，TTL）；取消回 `{cancelled:true, picks:[]}`，无选择器的平台回 501 `pick_unsupported`；`{dir:true}` 选**目录**（Windows `FolderBrowserDialog`；`{dir:true,filePath:<目录>}` = 无选择器平台的直开），回 `{dirPath, picks[]}` = 该目录**一层内**匹配的 PDF，每个带自己的 grant（批处理输入，BM1）|
 |`POST /api/pdf/open`|按 `pathGrantId` 或 multipart 上传打开 PDF → `assetId` + 页元数据（页数、每页 pt 尺寸、rotation、是否含文字）|
 |`GET /api/pdf/raw?id=`|原始 PDF 字节（支持 Range/ETag），供 pdf.js 直接取|
 |`POST /api/pdf/split`|**已实现**:切分词表 `{assetId, splitMode, rows, cols, customCuts[], splitVeto, vetoPages[], splitPages}`（词表 = `UI_SPEC §2.2`；`splitVeto` 是指针,`false` 是真答案；`vetoPages` = D3 逐页否决；`splitPages` 用 pages 词表限定可切页）→ 新 `assetId`（kind `split`）+ 同形状页元数据;原资产保留即「撤销切分」的实现|
 |`POST /api/pdf/seal/prepare`|**已实现**:multipart 上传印章 PNG/生成 → `sealId` + alpha 元数据（`seal.prepare.despill/alphaTrim/resampleDpi` 词表见 `UI_SPEC §2.2`；**去背在前端**，见 §5.12 与 FACTS §1.8）。配套 `GET /api/pdf/seal/raw?id=` 只回印章字节给合成|
 |`POST /api/pdf/apply`|**已实现**:矢量落盘词表 `{assetId, instances[]}`，实例字段 `sealId/blend/opacity/scale/pos/anchor/offset/rotation/pages/crossPage/binding/startOffset`（`brightness/saturate` 仅预览，**不发送**；发送即 400）→ 新 `assetId`（kind `applied`）。实例数组是关键：一条请求写完全部实例，同一 `(blend,opacity)` 组走一次 pdfcpu pass|
 |`POST /api/pdf/export`|**已实现（P5）**：两形态靠 `Content-Type` 协商。`application/json` = vector：`{assetId, mode:"vector", pages}`，只按 pages 词表**裁页**（`all` 时原样克隆），不重编码；带 `dpi/quality` 即 400。`multipart/form-data` = raster：表单字段 `spec` 是 JSON（`{assetId, mode:"raster", dpi, quality, pages}`），每页一个文件 `page-<n>`（JPEG/PNG 字节，**页位图由前端 pdf.js 渲染回传**，服务端不 rasterize、不重编码 JPEG）→ 新 `assetId`（kind `exported`）+ `bytesPerPage`。单页图像 > 90 MiB ⇒ 400 `page_too_large`；前端按体积预估**提交前拦截**（`UI_SPEC` W6）|
-|`POST /api/pdf/save`|**已实现**:`{assetId, targetPath|pathGrantId|replaceOriginal}`（三选一，必须且只能给一个）→ `fsx.AtomicWriteFunc` 原子写盘；`replaceOriginal` 用 `tmpstore.Asset.Origin`（open/split/apply 都向前继承）|
+|`POST /api/pdf/save`|**已实现**:`{assetId, targetPath|pathGrantId|replaceOriginal}`（三选一，必须且只能给一个）→ `fsx.AtomicWriteFunc` 原子写盘；`replaceOriginal` 用 `tmpstore.Asset.Origin`（open/split/apply 都向前继承）；`{mkdirs:true}` 才允许创建 targetPath 的父目录（批处理 `_batch` 输出），不开时目标目录不存在仍是 400 `bad_body`，防止把文件写进一个拼错的新目录|
 |`GET /api/settings` / `PATCH /api/settings`|读全量设置；`PATCH` 走 `{"patch":{...}}` 信封（嵌套指针字段按需合并）|
-|`GET /api/seal/preset` 等|印章预设 list/save/delete|
+|`GET /api/seal/preset`|**已实现（P6）**：列出预设 → `{"presets":[{name,imageBytes,updatedAt,params}]}`（索引 `%APPDATA%\AutoStamp\seals\presets.json`）；`params` = `apply.*` + `seal.prepare.*` 白名单，写入前已按 `apply` 词表校验并补默认（`anchor=center`、`binding=right`）|
+|`POST /api/seal/preset`|**已实现（P6）**：`{name,sealId,params}` —— 把该 seal 资产的字节**复制**成 `seals/p-<hash>.png` + 原子重写索引（`fsx.AtomicWrite`）；同名 = 覆盖（PR2）；名字空/带路径分隔符/以点或空格结尾 ⇒ 400 `preset_bad_name`；`sealId` 不在 ⇒ 404 `not_found`；不是印章资产 ⇒ 400 `kind_denied`；参数不合法 ⇒ 400 `bad_body`|
+|`DELETE /api/seal/preset?name=`|**已实现（P6）**：删索引项 + 图片文件（不存在 ⇒ 404 `preset_not_found`）|
+|`GET /api/seal/preset/raw?id=`|**已实现（P6）**：流回预设存的印章字节（Range/ETag 由 `http.ServeContent` 负责）。「载入预设」= 前端把这份字节重新喂给 `/api/pdf/seal/prepare` 得到新 `sealId`（去背选项按预设存的跑）；批处理同一份字节只 prepare 一次，所有文件复用同一个 `sealId`|
+|批处理（需求 6/9）|**已实现（前端跑链，BM1–BM4；没有后端作业路由、没有 SSE）**：`fs/pick{dir:true}` ⇒ `dirPath` + 一层内每个 PDF 的 grant → 前端队列（`api.batch.concurrency` 1..8，默认 2）逐文件 `open`→（`split`）→`apply`→`export`(光栅，页位图前端渲染回传)→`save{mkdirs:true}`；输出 `源目录\_batch\原名.dpi<数字>.q<数字>.pdf`；加密件跳过记 `password_required`；报表 + CSV/JSON 由前端生成（不发请求）|
 
 契约细则（P0 已实现，改动必须同步本节 + `UI_SPEC §4` + `web/static/app-api.js`）：
 
@@ -225,7 +249,9 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
   已注册错误码：`bad_body`(400) `bad_host`(421) `bad_origin`(403) `internal_error`(500)、
   `bad_session` `bad_id` `not_found` `kind_denied` `path_denied` `password_required` `password_invalid`
   `unreadable_pdf` `payload_too_large` `split_failed` `apply_failed` `validate_failed` `not_pdf` `save_failed`
-  `pick_failed` `pick_unsupported` `page_too_large` `http_<status>`。
+  `pick_failed` `pick_unsupported` `page_too_large` `preset_not_found` `preset_bad_name`
+  `preset_list_failed` `preset_save_failed` `http_<status>`（原登记的 `preset_no_seal` / `batch_*`
+  随「无后端批处理作业」作废，见 §5.21）。
   新增码必须同时登记进本节 + `UI_SPEC §4` + 前端 i18n 文案表。
 - 请求体：`/api/settings` 的 body 是 `{"patch":{…}}`；未知字段一律 400
   （`webx.DecodeJSON` 用 `DisallowUnknownFields`），空体也算 400；
@@ -308,6 +334,13 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
       （`save` 回显同一 assetId，拿 probe 的 asset id 变化等会一直超时 —— 踩过的坑）。
   14. 以上全部由 `build.ps1` 串成一条命令（`-Task verify` / `go vet` / `go test`），
       任一失败退出码 1。
+  15. P6 预设 + 批处理（P6 起常驻）：`node tools/verify/batch-smoke.mjs`
+      （分段令牌 `--only=<preset|batch>`）—— 真 exe + 真 UI：预设 保存→列表→载入→删除
+      往返（存进去的字节与 `GET /api/seal/preset/raw` 回读的字节一致、参数填回面板），
+      批处理 `fs/pick{dir:true,filePath}` 列目录 → `#batch-start` 跑 BM1 前端链 → 断言
+      `_batch\原名.dpi<数字>.q<数字>.pdf` 存在、产物再 `fs/pick`+`open` 页数正确、
+      源文件字节没变、加密件在报表里记 `password_required` 且不弹密码、CSV 下载含表头与
+      每文件一行。批处理没有 SSE/作业路由（BM1 作废 BC1），队列状态就是前端 DOM 的读数。
 - `go test ./...` 全绿；`go vet ./...` 无输出。
 - UI 阶段用真实窗口（WebView2）+ headless 各跑一次，console 必须 0 error。
 - **UI 语义门槛：**任何 UI 语义/字段改动必须能在 `UI_SPEC` 决策表找到用户确认记录
@@ -346,6 +379,10 @@ powershell -NoProfile -File build.ps1 -Watch                  # 保存即重编 
 |改导出体积预估|`docs/FACTS.md` §4|`web/static/app-shell.js`（`computeEstimate/refreshEstimate`、`probe('estimate')`）|
 |改混合模式/透明度|`docs/FACTS.md` §1.2/§1.3/§2.2|`internal/pdfcore/blend.go`、`web/static/app-overlay.js`|
 |改导出 DPI/质量|`docs/FACTS.md` §4 + `UI_SPEC §8` W5/W6|`internal/pdfcore/raster.go`（writer 字节结构）、`internal/api/export.go`（协商两形态 + 硬限）、`web/static/app-shell.js`（保存内的 raster 通道 + `MAX_EXPORT_PAGE_BYTES` 拦截 + `exportDpiOf/exportQualityOf` + `lastExport` 幂等）、`tools/verify/export-smoke.mjs`|
+|改预设库|`UI_SPEC §8` PR1/PR2 + 本文件 §5.20/§6|`internal/presetstore/store.go`（索引 `presets.json` + `p-<hash>.png`，原子写）、`internal/api/seal_preset.go`（四路由 + `validatePresetParams`）、`web/static/app-batch.js`（预设 存/载/删/列表）、`web/static/app-api.js`（`preset*` 通道）、`tools/verify/batch-smoke.mjs --only=preset|
+|改批处理|`UI_SPEC §8` BM1-BM5 + 本文件 §5.21（**没有后端作业路由、没有 SSE**）|`web/static/app-batch.js`（`runOne` 跑链 + `batchTarget` + `pagesForDoc` + 报表下载）、`web/static/index.html`（批处理段字段）、`web/static/app-api.js`（`fsPickDir`/`exportUpload`）、`internal/api/pdf.go`（`fs/pick` 的 `dir` 分支）、`internal/api/save.go`（`{mkdirs}`）、`internal/fsx/list.go`（`ListPDFs`）、`tools/verify/batch-smoke.mjs --only=batch|
+|改打包/发布物|本文件 §4（PC1）|`build.ps1`（`Start-Package`：`autostamp-<rev>-win64.zip` = strip 窗口版重命名 `autostamp.exe` + `README.md`，25 MB 体积门）、`README.md`（随 zip 一起出货，必须保持准确）|
+|改最近文件|`UI_SPEC §8` RF1|`internal/config/{types.go,sanitize.go,store.go}`（`RecentFiles`/`SetRecent`,P0 已有）、`web/static/app-shell.js`（`renderRecent`/`recentMenu`）、`web/static/index.html`（`#empty-recent`、`#recent-open`）|
 |改预览渲染|`docs/FACTS.md` §1|`web/static/app-preview.js`、`web/static/vendor/pdfjs/`|
 |新增路由|本文件 §6|`internal/api/register.go`、`web/static/app-api.js`|
 |窗口/端口/浏览器回退|本文件 §5|`host_webview_windows.go`、`internal/app/`|

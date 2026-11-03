@@ -291,6 +291,35 @@
   要求外观一致（`Opacity` 不同会拒绝：实测报 “inconsistent Opacity: got 1, want 0.6”），
   所以按 `(blend, opacity)` 分组多次 pass；每组各得自己的 GS 字典 ✓（`apply_test.go` 断言）。
 
+### 2.7 原生目录选择器（实测 2026-11-02，批处理输入 BM1）
+
+- `System.Windows.Forms.FolderBrowserDialog` 在 `-STA` PowerShell 里可用：
+  `Add-Type -AssemblyName System.Windows.Forms,System.Drawing` 之后
+  `New-Object System.Windows.Forms.FolderBrowserDialog` 成功
+  （探针输出 `type=System.Windows.Forms.FolderBrowserDialog`、默认 `SelectedPath` 为空串、
+  `Description` 属性存在）。复现：`powershell -NoProfile -STA -Command` 同上三行。
+- 常驻断言在 `internal/fsx/pick_windows_test.go`（`TestFolderPickScriptShape`）：钉死
+  「目录选择必须是目录弹窗」—— 生成脚本里必须出现 `FolderBrowserDialog` + `SelectedPath`、
+  **不能**出现 `OpenFileDialog`（写成文件框就选不中目录，批处理输入会退化成只能选单个文件）。
+- 取消语义沿用 P1 的约定：`ShowDialog()` 非 OK ⇒ 脚本 `exit 3` ⇒ `ErrPickCancelled` ⇒
+  前端 `{cancelled:true}`（AGENTS §6 `POST /api/fs/pick`）。
+
+### 2.8 加密文档读取链路（实测 2026-11-03，`internal/api/pdf_password_test.go`）
+
+- 样本生成：`go run ./tools/verify/encfx <out.pdf> [userPW] [ownerPW]` —— 先用
+  `internal/pdfcore.WriteRaster` 写一页 JPEG 文档，再 `api.EncryptFile` +
+  `model.NewAESConfiguration("secret-open","secret-owner",256)` → **2,191 B**（R=6 AES-256）。
+- 语义实测（单字段词表 `pw` 同时试 UserPW/OwnerPW，AGENTS §6 `api.open.pw`）：
+  - **不给密码**：pdfcpu 的空密码尝试报的是「密码无效」类错误，**不是**
+    `ErrOwnerPasswordRequired`。契约里只有 `password_required`/`password_invalid` 两码，
+    UI 必须出密码框，所以 `inspectAsset` 在 `pw == ""` 时把它**重分类**为
+    `password_required`（不是 pdfcpu 的语义，是我们按契约收口）。
+  - 错密码 ⇒ `password_invalid`；`pw="secret-open"` ⇒ 201 + `pageCount=1`；
+    `pw="secret-owner"` ⇒ 同样 201。
+- 复现：`go test ./internal/api -run Password -v`。
+- **仍未实测**：对加密文档做 `apply`/`save` 落盘（只验了读取 + 密码往返）。
+
+
 ## 3. 前端资产体积（`pdfjs-dist@6.4.299` tarball 实测）
 
 获取方式（本机实测 2026-10-28，node v24.18.0 / npm 11.16.0）：
@@ -410,6 +439,10 @@
 |`node tools/verify/apply-smoke.mjs [--only=<matrix\|strip\|chain\|undo>]`|§1.9 §2.6|真 exe + 真 UI：`盖到 PDF` → applied 资产重渲染的 48 组像素矩阵、骑缝落盘逐页半枚 + 条带 bbox 四边、切分→盖章→保存链（磁盘文件再 open）、撤销盖章/撤销切分|
 |`go test ./internal/pdfcore -run 'Stamp'`|§2.2 §2.6|落盘写 `/BM`+`/ca`、多外观分 pass 各得自己的 GS、页面自己的 GS 不被污染、条带框比来自整枚印章（`TestStampStripBoxUsesWholeSealAspect`）、非法请求拒绝|
 |`go test ./internal/api -run 'Apply\|Save'`|AGENTS §6|`/api/pdf/apply` 词表 + owner 边界 + 400 分类；`/api/pdf/save` 目标三选一、`Origin` 继承、原子写|
+|`node tools/verify/export-smoke.mjs [--only=<raster\|vector\|guard\|chain>]`|§4|真 UI 保存链里的光栅通道：页 pt == `px*72/dpi`、导出文件字节落在 §4 量级带、回读像素 Δ ≤6、vector 零请求 + 文字仍在、W6 超限只出 warn|
+|`node tools/verify/batch-smoke.mjs [--only=<preset\|batch>]`|§2.8 §4|真 UI 预设往返 + 前端跑批：22 份样本（20 可盖 + AES-256 加密 + 故意坏）→ 计数 `[22,20,1,1]`、`_batch\原名.dpi150.q75.pdf` 页数一致、**源 sha1 不动**、CSV/JSON 真下载|
+|`go run ./tools/verify/encfx <out.pdf> <userPW>`|§2.8|现场生成 AES-256 加密样本（不落二进制 blob），给 `batch-smoke` 加密行与 `TestOpenPasswordRoundTrip`|
+|`go test ./internal/api -run 'Password\|Preset'`|§2.8|AES-256 密码往返（`password_required`/`password_invalid`）+ 预设路由的 list/save/delete/raw + 同 sealId 不同名去重|
 
 ### 5.2 尚未搬进仓库的历史探针
 
@@ -429,7 +462,7 @@
 ## 6. 未验证(UNVERIFIED)
 
 （已消项：真实中文 CID 文本抽取在 §1.7 实测通过，2026-10-29。）
-- `UNVERIFIED`:AES-256 加密 PDF 的读取+落盘链路。
+- `UNVERIFIED`：对**加密文档**做 `apply`/`save` 落盘（读取 + 密码往返已在 §2.8 实测消项）。
 - `UNVERIFIED`:更窄包(只用 `pkg/pdfcpu` 子集)的体积下界。
 - `UNVERIFIED`:未安装 WebView2 Runtime 的机器的回退行为(窗口本身已在带 Runtime 的
   本机实测通过,见 §1.6)。

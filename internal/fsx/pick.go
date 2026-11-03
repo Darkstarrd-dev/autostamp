@@ -15,6 +15,10 @@ type PickOptions struct {
 	Filter   string
 	Multi    bool
 	StartDir string
+	// Dir switches the dialog to a folder chooser (the batch directory, P6). The
+	// filter and multi-selection are meaningless there, so the route rejects the
+	// combination instead of pretending otherwise.
+	Dir bool
 }
 
 // ErrPickCancelled is what a runner returns when the user dismissed the dialog
@@ -37,6 +41,20 @@ func PickFiles(ctx context.Context, o PickOptions) ([]string, error) {
 	return runPick(ctx, pickScript(o))
 }
 
+// PickDirs opens the native folder dialog and reports the chosen directory. The batch
+// queue works on the files directly under this folder, so a folder is the contract
+// here rather than a file list (UI_SPEC §2 api.fs.pick.dir).
+func PickDirs(ctx context.Context, o PickOptions) (string, error) {
+	paths, err := runPick(ctx, pickScript(o))
+	if err != nil {
+		return "", err
+	}
+	if len(paths) == 0 {
+		return "", ErrPickCancelled
+	}
+	return paths[0], nil
+}
+
 // pickDialog maps the contract filter onto a Windows filter string. The two
 // entries are the only vocabulary the route accepts (UI_SPEC §2
 // api.fs.pick.filter), so anything else is a bug, not user input.
@@ -56,6 +74,11 @@ func pickDialog(filter string) string {
 // PowerShell 5.1 (.NET Framework); -NoProfile keeps user profiles from
 // injecting anything into this process.
 func pickScript(o PickOptions) string {
+	// A folder selection is a different dialog, not a file dialog with a flag: the
+	// batch queue asks for one folder and then enumerates it (fsx.ListMatching).
+	if o.Dir {
+		return folderPickScript(o)
+	}
 	var b strings.Builder
 	b.WriteString("$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n")
 	b.WriteString("Add-Type -AssemblyName System.Windows.Forms\n")
@@ -72,6 +95,25 @@ func pickScript(o PickOptions) string {
 	b.WriteString("$r = $d.ShowDialog()\n")
 	b.WriteString("if ($r -ne [System.Windows.Forms.DialogResult]::OK) { exit 3 }\n")
 	b.WriteString("foreach ($f in $d.FileNames) { Write-Output $f }\n")
+	return b.String()
+}
+
+// folderPickScript is the directory dialog the batch queue uses (UI_SPEC §8 B1: the
+// picked folder is the batch scope). FolderBrowserDialog auto-upgrades to the
+// Vista-style picker, and SelectedPath carries both the start and the result.
+func folderPickScript(o PickOptions) string {
+	var b strings.Builder
+	b.WriteString("$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n")
+	b.WriteString("Add-Type -AssemblyName System.Windows.Forms\n")
+	b.WriteString("$d = New-Object System.Windows.Forms.FolderBrowserDialog\n")
+	b.WriteString("$d.Description = 'AutoStamp: 选择批处理目录'\n")
+	b.WriteString("$d.ShowNewFolderButton = $true\n")
+	if o.StartDir != "" {
+		b.WriteString("$d.SelectedPath = '" + strings.ReplaceAll(o.StartDir, "'", "''") + "'\n")
+	}
+	b.WriteString("$r = $d.ShowDialog()\n")
+	b.WriteString("if ($r -ne [System.Windows.Forms.DialogResult]::OK) { exit 3 }\n")
+	b.WriteString("Write-Output $d.SelectedPath\n")
 	return b.String()
 }
 

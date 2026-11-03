@@ -2,6 +2,38 @@
 
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+
+## 2026-11-03 — P6 收尾：BM5、§8.15 实测重写、§11 真实文件、§4 package、§6 `splitPages` 补登记
+
+- **BM5 新增**（§5.21）：预设的 `pages:"all"` 对批处理无效 —— `pagesForDoc()` 逐文档求交集
+  （不实现会静默盖错页，样本实测会盖到没指定的页）。决策计数改成 BM1–BM5。
+- **§6 修正**：§5.20 的「四条预设路由」是笔误，实际五条（list / save 的 `POST`+`DELETE` / raw）；
+  `POST /api/pdf/split` 行补回漏登记的 `splitPages`（前端已在发、契约已实现）。
+- **§8.15 重写**成实测形态：22 份样本（20 可盖 + AES-256 加密 + 故意坏）、计数 `[22,20,1,1]`、
+  `_batch\原名.dpi150.q75.pdf`、**源文件字节不动**、CSV 22 行 + JSON 22 条真下载、
+  两个预期 400 之外 0 失败请求与 0 console error。
+- **§11 两行改成真实文件**：批处理行不再指 `internal/batch/*` + SSE（作废的 BC1 设计），
+  改成 `app-batch.js` + `app-api.js` + `pdf.go(dir)` + `save.go(mkdirs)` + `fsx/list.go`；
+  新增「改打包/发布物」行。
+- **§4 加 `package`**：`-Task stripped,package` → `autostamp-<rev>-win64.zip`（25 MB 体积门）。
+- i18n 事实纠正：批处理 UI 实为 44 个键，`app-i18n.js` 共 276 键（生成器输出，非手改）。
+
+## 2026-11-02 — P6 契约：§5 加决策 20-22、§6 预设/批处理行改写、§8 加第 15 项、§11 加两行
+
+- **决策 BC1-BC4 作废、被 BM1-BM4 取代**（用户 2026-11-02 改口径）：批处理从「服务端串行作业 +
+  SSE + 只矢量」改成**前端逐文件跑既有链** —— `fs/pick` → `pdf/open` →（可选 `pdf/split`）→
+  `pdf/apply` → `pdf/export`(raster，页位图由前端 pdf.js 渲染回传) → `pdf/save{mkdirs:true}`；
+  因此 `api.batch.dpi/customDpi/quality` 在批处理里**真正生效**（这是改口径的动机）。
+  输出 = `源目录\_batch\<原名>.dpi<N>.q<Q>.pdf`（BM2 取代 BC2 的 `<名>_seal.pdf`；
+  单扩展名是因为 `fsx.ValidateTargetPath`/`CheckWriteTarget` 只认 `.pdf`）；
+  加密件不弹密码、跳过并记 `password_required`（BM4 取代 BC3）；
+  **没有** `/api/batch/*` 路由、没有 SSE（BM1 作废 BC1），报表与 CSV/JSON 由前端生成（需求 9）。
+- 顺带修正既有文档的「已实现」假象（此前正文写的是事实不存在的状态）：`internal/batch`、
+  `internal/api/batch.go`、`tools/verify/batch-smoke.mjs`、§6 三条 `POST /api/batch/*`、
+  §5.21「服务端串行」、§8.15 的 SSE 断言、§5.20 预设库、§8.15 最近文件入口 ——
+  本轮全部按仓库里的真实实现重写；§6 的预设行由 `POST /api/seal/preset/load`
+  （原登记）改成 `GET /api/seal/preset/raw?id=`（载入 = 前端把 raw 字节重新喂 `seal/prepare`）。
+
 ## 2026-11-02 — P5 契约：§5 决策 19、§6 export 行改写、§8 加第 13 项、§11 导出行
 
 - §5 决策 19：光栅导出 = 前端渲染回传、服务端只写字节（JPEG 直传不重编码、

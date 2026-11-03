@@ -2,6 +2,30 @@
 
 > `PROJECT_MAP.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+
+## 2026-11-03 — P6 完成：地图补 app-batch / preset / batch-smoke / encfx / 密码测试 / package
+
+- 头「最后核对」改成 **P0–P6 全绿**；`web/static/app-batch.js` 行（预设 UI + 前端跑链 +
+  `batchTarget` + `pagesForDoc` + 报表下载）、`app-api.js` 的 P6 预设通道行、
+  `tools/verify/batch-smoke.mjs`（22 份样本断言清单）、`tools/verify/encfx`（现场生成
+ AES-256 样本）、`internal/api/pdf_password_test.go`、`build.ps1` 的 `package` 任务；
+  `save.go` 行补 `{mkdirs}`（BM2）。删掉一条重复的 app-batch「（续）」行。
+- 注：`tools/verify/webview-launch.mjs` 行加 P6 冷启动读数（`window-open N ms` / `health N ms`）。
+
+## 2026-11-02 — P6 后端地图：新增 presetstore / api/seal_preset / fsx+list
+
+- 新增包 `internal/presetstore`（`store.go`+`store_test.go`）；`internal/api` 加
+  `seal_preset.go`+`seal_preset_test.go`；`internal/fsx` 加 `list.go`+`list_test.go`；
+  `internal/api/register.go` 的 `Deps` 加 `Presets` + 四条预设路由；`main.go` 接线
+  （`presetstore.New(<configDir>/seals)`）。
+- `internal/fsx` 的 pick 行改成 `PickFiles`/`PickDirs`（`pick_script.go` 这个文件名是旧错写：
+  脚本生成一直在 `pick.go` 内，`pickScript` 是包内函数）；目录弹窗 = PowerShell
+  `System.Windows.Forms.FolderBrowserDialog`（`TestFolderPickScriptShape` 钉住目录弹窗形状）。
+- `internal/fsx` 新增 `ListMatching`：批处理输入由服务端列目录，**不让浏览器决定磁盘上有什么**
+  （注释写死这个理由）；`list_test.go` 钉住一层内/点文件排除/未知 filter 报错。
+- `internal/api/save.go` 行加 `mkdirs`；`seal_preset.go` 行说明参数校验复用 `pdfcore`
+  词表解析器（预设存的参数一定过 apply 校验）；头部「最后核对」改 P6。
+
 ## 2026-11-02 — P5 光栅导出：api 两行 + pdfcore 两行 + 前端两行续 + export-smoke 行
 
 - 顶部「最后核对」改 P0-P5。

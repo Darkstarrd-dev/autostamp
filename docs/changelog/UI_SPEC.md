@@ -2,6 +2,21 @@
 
 > `docs/UI_SPEC.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-02 — P6 决策表补齐（PR/BR/BM/RF 22 行）+ §2/§3/§4 加预设与批处理
+
+- **P6 决策表补齐**：此前 §8 从来没有 P6 的用户确认记录，只有 `IMPLEMENTATION_PLAN` 里的
+  「待确认」清单（W9）。本轮按 P6 交互协议用 `ask` 提问，得到答复：批处理改成**前端跑链**
+  （BM1-BM4 取代已作废的 BC1-BC4）、报表导出格式（BR7 = 前端生成 CSV/JSON，不发请求）、
+  其余（并发数、跳过加密件、预设同名覆盖、载入预设、最近文件入口）按推荐默认确认。
+- **诚实修正**：BC1-BC4 曾被写成「已实现」，但仓库里从未有 `internal/batch`；本轮按真实代码
+  重写（无后端作业路由、无 SSE）。BM2 的输出命名后来因 `fsx` 的目标校验只认 `.pdf` 单扩展，
+  定成 `_batch\<原名>.dpi<N>.q<Q>.pdf`。
+- §2 新增：`api.fs.pick.dir`、`api.save.mkdirs`、`api.batch.presetName/dpi/customDpi/quality/concurrency`；
+  §3 新增「印章预设库」5 行 + `#batch-*` 卡控件；§4 新增 `seal.preset.*`、`api.batch.*.ctl/.hint`、
+  `ok.batch.*`、`batch.report.*`、`batch.export.*`、`batch.status.encrypted`、`batch.empty/noPreset/
+  fileFail/started/stopped` 等键（en/cn）；§6 加 S6（预设）/S7（批处理）状态机行；
+  §9 词表补 `pages`/实例字段/`sealId`/`spec` 等遗漏项。
+
 ## 2026-11-02 — P5 决策 W5/W6 + §4 加两键 + mock 镜像
 
 - §8 决策表加 **W5**（光栅化何时触发：保存时自动，不加新控件；`mode=vector` 不发请求）与

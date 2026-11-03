@@ -374,3 +374,77 @@ func TestPickGrantsTypedPath(t *testing.T) {
 		t.Errorf("directory path = %d, want 400", dirPick.Code)
 	}
 }
+
+// 批处理 (P6, 需求 6) picks one folder and stamps everything in it: the response must
+// carry the folder itself plus a grant per PDF, one level deep, and refuse the wrong
+// shapes instead of guessing (UI_SPEC §8 B1).
+func TestPickDirectoryGrantsPDFsOneLevel(t *testing.T) {
+	mux, _, _ := newTestMux(t)
+	owner := newSession(t)
+	post := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/fs/pick", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set(webx.SessionHeader, owner)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+	dir := t.TempDir()
+	// The two batch inputs are real PDFs: the test opens one through its grant, and
+	// the open route is what proves the capability works.
+	for _, name := range []string{"a.pdf", "b.pdf"} {
+		if err := os.WriteFile(filepath.Join(dir, name), minimalPDF(t), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range []string{"notes.txt", ".hidden.pdf"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("not a pdf"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sub", "deep.pdf"), []byte("%PDF-1.4\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := post(`{"dir":true,"filePath":"` + filepath.ToSlash(dir) + `","filter":"pdf"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("dir pick = %d %s", rec.Code, rec.Body.String())
+	}
+	data := dataOf(t, rec)
+	if data["dirPath"] != filepath.ToSlash(dir) && data["dirPath"] != dir {
+		t.Errorf("dirPath = %v, want %s", data["dirPath"], dir)
+	}
+	picks, _ := data["picks"].([]any)
+	if len(picks) != 2 {
+		t.Fatalf("picks = %v, want the two PDFs only (txt, dot-file and subfolders are not batch input)", data["picks"])
+	}
+	first, _ := picks[0].(map[string]any)
+	grant, _ := first["pathGrantId"].(string)
+	if grant == "" {
+		t.Fatalf("no grant in %v", first)
+	}
+	// The grant is what lets the batch open the file without asking again.
+	if open := openJSON(t, mux, `{"pathGrantId":"`+grant+`"}`, owner); open.Code != http.StatusCreated {
+		t.Errorf("open with the batch grant = %d %s", open.Code, open.Body.String())
+	}
+
+	// An empty folder is an empty batch, not an error: the UI reports "没有可处理的
+	// PDF" from the empty list.
+	empty := post(`{"dir":true,"filePath":"` + filepath.ToSlash(t.TempDir()) + `","filter":"pdf"}`)
+	if empty.Code != http.StatusOK {
+		t.Fatalf("empty dir = %d %s", empty.Code, empty.Body.String())
+	}
+	if rows := dataOf(t, empty)["picks"]; len(rows.([]any)) != 0 {
+		t.Errorf("empty dir picks = %v, want none", rows)
+	}
+
+	// dir:true with a file path is a client bug, and dir:false with a folder stays
+	// rejected (that boundary is asserted above too).
+	bad := post(`{"dir":true,"filePath":"` + filepath.ToSlash(filepath.Join(dir, "a.pdf")) + `"}`)
+	if bad.Code != http.StatusBadRequest {
+		t.Errorf("dir:true + file path = %d, want 400", bad.Code)
+	}
+}

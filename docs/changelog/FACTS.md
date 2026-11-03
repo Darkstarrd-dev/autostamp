@@ -2,6 +2,16 @@
 
 > `docs/FACTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-02 — §2.7 新增：原生目录选择器实测（批处理输入 BM1）
+
+- 实测对象：PowerShell `-STA` 下的 `System.Windows.Forms.FolderBrowserDialog`
+  （`New-Object` 成功、默认 `SelectedPath` 空、`Description` 存在）= P6 目录输入的
+  选择器形态（AGENTS §6 `POST /api/fs/pick{dir:true}`）。
+- 复现方式写进正文（`powershell -NoProfile -STA -Command` 三行反射探针）；常驻断言
+  = `internal/fsx/pick_windows_test.go` 的 `TestFolderPickScriptShape`（必须出现
+  `FolderBrowserDialog`/`SelectedPath`，必须不出现 `OpenFileDialog`）。
+- 取消语义沿用 P1：`exit 3` ⇒ `ErrPickCancelled` ⇒ 前端 `{cancelled:true}`。
+
 ## 2026-11-02 — P5 实测：§4 真链路块、§4.1 体积重跑、§5.1 加 export-smoke
 
 - §4 加「真链路实测（`export-smoke.mjs`）」块：`bytesPerPage` = 141,139 / 143,019 B

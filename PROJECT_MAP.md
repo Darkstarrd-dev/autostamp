@@ -1,9 +1,11 @@
 # PROJECT_MAP.md — AutoStamp 代码地图
 
-> 最后核对：2026-11-02（P0-P5 绿：**P5 光栅导出** = `internal/pdfcore/raster.go` +
-> `internal/api/export.go` + `web/static/app-shell.js` 的保存内光栅通道 +
-> `tools/verify/export-smoke.mjs`；`app-crosspage.js` 这个计划名从未创建，真实形态在
-> `app-overlay.js`+`app-shell.js`）。
+> 最后核对：2026-11-03（**P0–P6 全绿**；当前阶段 = P7）。P6 交付：`internal/presetstore` 预设库 +
+> `internal/api/seal_preset.go` 四条预设路由 + `fsx` 的 `PickDirs`/`ListMatching` +
+> `POST /api/fs/pick{dir:true}` + `POST /api/pdf/save{mkdirs:true}` + 前端批处理跑链
+> （AGENTS §5.21 BM1，**没有后端作业路由/SSE**）+ `build.ps1 -Task package` 的 win64 zip。
+> `app-crosspage.js` 这个计划名从未创建，真实形态在 `app-overlay.js`+`app-shell.js`。
+>
 > 新增/删除包必须同步本文件（AGENTS §10.1）。阶段状态见 `docs/IMPLEMENTATION_PLAN.md §10`。
 
 ## 1. 可执行入口（根包 `main`）
@@ -23,10 +25,12 @@
 |(续)|`middleware.go`|中间链 `recoverLog → requestLog → hostGuard → gzip`；`hostGuard` 拒外部 `Host`（421 `bad_host`）、`strict` 时拒外部 `Origin`（403 `bad_origin`）；`gzipExt` 白名单（跳过 cmaps/wasm/PDF/PNG）|P0|
 |(续)|`browser.go`|`Browse(url)`：`rundll32 url.dll,FileProtocolHandler`（Windows）/ `xdg-open` 回退|P0|
 |(续)|`version.go`|`BuildInfo`（`debug.ReadBuildInfo` 的 VCS 戳：version/commit/go/os/arch）|P0|
-|`internal/api`|`register.go`|`Deps`、`NewMux`（注册静态资产 + `GET /api/health`、`GET/POST /api/settings`、P1 的 `POST /api/fs/pick`、`POST /api/pdf/open`、`GET /api/pdf/raw`、P3 的 `POST /api/pdf/split`、P2 的 `POST /api/pdf/seal/prepare` + `GET /api/pdf/seal/raw`、P4 的 `POST /api/pdf/apply` + `POST /api/pdf/save`、**P5 的 `POST /api/pdf/export`**；未接线的后续路由**不注册**，保留 `ServeMux` 的 405/404，FACTS §1.5）|P0-P5|
+|`internal/api`|`register.go`|`Deps`（含 **P6 `Presets *presetstore.Store`**）、`NewMux`（注册静态资产 + `GET /api/health`、`GET/POST /api/settings`、P1 的 `POST /api/fs/pick`、`POST /api/pdf/open`、`GET /api/pdf/raw`、P3 的 `POST /api/pdf/split`、P2 的 `POST /api/pdf/seal/prepare` + `GET /api/pdf/seal/raw`、P4 的 `POST /api/pdf/apply` + `POST /api/pdf/save`、P5 的 `POST /api/pdf/export`、**P6 的 `GET/POST/DELETE /api/seal/preset` + `GET /api/seal/preset/raw`**；未接线的后续路由**不注册**，保留 `ServeMux` 的 405/404，FACTS §1.5）|P0-P6|
 |（续）|`pdf.go`|P1 本地文件通道：`handlePick`（原生选择器 + `filePath` 直开授权）、`handleOpen`（grant/multipart 两形态 + 密码两错误码 + `SetRecent`）、`handleRaw`（`http.ServeContent` 的 Range/ETag + owner 绑定 404）、`pdfcore` 密码错误映射|P1|
 |（续）|`apply.go`|**P4 矢量落盘**：`handleApply`（`{assetId, instances[]}` → `pdfcore.Stamp` → 先 `Validate` 再注册，kind `applied`，失败删临时文件）、`resolveInstance`（词表逐项解析 + 400 分类：`bad_body`/`not_found`/`kind_denied`）、`(blend,opacity)` 分组、`Origin` 向前继承、`openResult` 复用 open 的响应形状|P4|
-|（续）|`save.go`|**P4 写盘**：`handleSave`（目标三选一：`targetPath` / `pathGrantId` / `replaceOriginal`，`replaceOriginal` 走 `tmpstore.Asset.Origin`）+ `fsx.AtomicWriteFunc` 原子写 + 目标校验（拒绝写进会话目录）|P4|
+|（续）|`pdf_password_test.go`|**AES-256 密码往返**（FACTS §2.8）：无密码 ⇒ `password_required`（pdfcpu 把空密码判 invalid，`inspectAsset` 按契约收口）、错密码 ⇒ `password_invalid`、userPW/ownerPW 都开成功 ⇒ 201 + 页数|
+|（续）|`save.go`|**P4 写盘**：`handleSave`（目标三选一：`targetPath` / `pathGrantId` / `replaceOriginal`，`replaceOriginal` 走 `tmpstore.Asset.Origin`）+ `fsx.AtomicWriteFunc` 原子写 + 目标校验（拒绝写进会话目录；`{mkdirs:true}` 才创建 targetPath 的父目录 = 批处理 `_batch` 输出，BM2）|P4+P6|
+|（续）|`seal_preset.go` / `seal_preset_test.go`|**P6 预设路由**：`GET/POST /api/seal/preset`、`DELETE /api/seal/preset?name=`、`GET /api/seal/preset/raw?id=`（`http.ServeContent` 管 Range/ETag）+ `validatePresetParams`（复用 `pdfcore.ParseBlend/ParseAnchor/ParsePair/ParseBinding` 并补 `anchor=center`/`binding=right` 默认 ⇒ 预设存的参数一定过 `apply` 校验）+ `presetError/presetStatus`（`preset_bad_name` 400 / `preset_not_found` 404）|P6|
 |（续）|`export.go`|**P5 光栅导出**：`handleExport` 按 `Content-Type` 协商 —— `handleExportVector`（json：`{assetId,mode,pages}`，`all` 原样克隆、子集 `TrimPages`、`none`/越界 400）/ `handleExportRaster`（multipart：`spec` JSON + `page-<n` 逐页字节）；`maxPageImageBytes`（90 MiB，包级 var）→ 400 `page_too_large`、页数上限 200、`maxExportBody` 的 `MaxBytesHandler`、dpi/quality 越界 clamp + `warning`、`carryOrigin`、先写临时文件 → `Validate` → 注册，失败删临时文件|P5|
 |（续）|`export_test.go`|vector 克隆（字节相等 + `kind:exported` + Origin 继承）、子集/`none`/越界页数、vector body 带 `dpi/quality/customDpi` ⇒ 400、raster multipart 正常（`bytesPerPage`、页 pt `12x16.8`）、owner/`kind_denied`/无 session、`page_too_large`（把上限临时改小）、200 页上限、clamp 落 `warning`、坏 spec 七例|P5|
 |（续）|`apply_test.go` / `save_test.go`|apply 词表 400 分类、owner 边界、未知字段拒绝、空 instances 拒绝、响应 `kind:applied` + 页元数据；save 目标三选一/互斥、`Origin` 继承链（open→split→apply）、磁盘文件内容 == applied 字节、拒绝写会话目录|P4|
@@ -37,9 +41,12 @@
 |�|`store.go`|`Store`：首启写默认、损坏文件备份 + 重置、加载时 clamp、`Apply`、`SetRecent`（去重 + 截断）|P0|
 |`internal/fsx`|`atomic.go`|`AtomicWrite`/`AtomicWriteFunc`（temp + `Rename`，跨卷回退）、`ReadIfExists`、`TempName`、`EqualPath`|P0|
 |（续）|`path.go`|路径校验（允许根白名单、符号链接解析、扩展名）|P0（P1 起用全量）|
-|（续）|`pick.go` / `pick_windows.go` / `pick_script.go` / `pick_other.go`|原生文件选择器：`PickFiles(ctx, PickOptions)` → PowerShell `Forms·FileDialog`（`-STA`、UTF-8 输出、`Cancel` 退出码 3 → `ErrPickCancelled`；`filter pdf|all`、`multi`、`startDir`），非 Windows → `ErrPickUnsupported`（501 `pick_unsupported`）|P1|
-|（续）|`pick_test.go` / `pick_windows_test.go`|脚本词表/旗标映射（`TestPickDialogFlags`、`TestPickDialogFilterVocabulary`）、`-STA` 必需、取消退出码、`parsePickScript` 解析|P1|
+|（续）|`pick.go` / `pick_windows.go` / `pick_other.go`|原生选择器：`PickFiles`/`PickDirs(ctx, PickOptions{Filter,Multi,StartDir,Dir})` → PowerShell（`-STA`、UTF-8、取消 ⇒ 退出码 3 → `ErrPickCancelled`；文件 = `Forms·OpenFileDialog` + `filter pdf|all` + `multi`；目录 = `Forms·FolderBrowserDialog`，批处理输入 BM1），非 Windows → `ErrPickUnsupported`（501 `pick_unsupported`）|P1+P6|
+|（续）|`pick_test.go` / `pick_windows_test.go`|脚本词表/旗标映射、`-STA` 必需、取消退出码、`pickScript({Dir:true})` 必须是目录弹窗（`TestFolderPickScriptShape`）|P1+P6|
+|（续）|`list.go`|`ListMatching(dir, filter)`：目录**一层内**的文件（`pdf` = `.pdf`、`all` = 任意、跳过子目录与点文件、大小写无关的稳定顺序）—— 批处理输入由服务端列目录，不让浏览器决定磁盘上有什么|P6|
+|（续）|`list_test.go`|作用域钉死：一层内、扩展名、点文件/子目录排除、空 filter 走 pdf 默认、未知 filter 报错、缺目录报错|P6|
 |`internal/tmpstore`|`store.go`|会话资产库：`Add/AddFile/Get/List/Delete`（owner 绑定 + TTL 2h + 配额 256MiB/2GiB）、`index.json` 持久 + 过期清扫、`GrantPath/CheckGrant/Rename/Rights`（`pathGrantId`）、`SetOrigin/OriginOf`（**P4**：资产来自哪个磁盘文件，split/apply 向前继承，`replaceOriginal` 用）、`ErrNotFound`/`ErrOwner`|P1+P4|
+|`internal/presetstore`|`store.go` / `store_test.go`|**P6 印章预设库**（`%APPDATA%\AutoStamp\seals`）：`presets.json` 索引（`fsx.AtomicWrite` 原子重写）+ 每预设一张 `p-<hash>.png`；`Save/SaveFile/List/Get/Delete/ImageFile`、`ValidateName`（拒路径分隔符/控制字符/尾点）、`Params` = `apply.*` + `seal.prepare.*`；同名 = 覆盖，索引是权威（损坏 ⇒ 按空库 + 警告）|P6|
 |`internal/console`|`logger.go`|`slog` 封装（级别过滤、stderr、`-verbose`）|P0|
 |`internal/webx`|`json.go`|`Envelope{ok,data,code,error}` + `OK/Created/Fail` + `DecodeJSON`（`http.MaxBytesReader`）|P0|
 |（续）|`session.go`|`SessionHeader = X-AutoStamp-Session`：前端 `crypto.getRandomValues` 生成的 128-bit 令牌 = 资产/grant 的 owner 能力；`SessionOf` 校验格式（缺失 → 400 `bad_session`）、`NewToken` 服务端测试用|P0（P1 全线使用）|
@@ -74,7 +81,9 @@
 |（续）|`web/static/app-overlay.js` 的 **P4 快照身份**|`paint` 用 `state.surface = info.canvas` 决定快照归属（按**画布元素**，不按 page/scale/尺寸）—— 换文档必须重抓快照，AGENTS §5.18 / FACTS §1.9|
 |（续）|`web/static/app-shell.js` 的 **P5 光栅通道**|`submitSave` 里的 W1/W5 链：`stampIntoPDF` → W6 预估拦截（`MAX_EXPORT_PAGE_BYTES` = 90 MiB，超 ⇒ `warn.export.tooBig` 且**零请求**）→ 前端光栅化（离屏 pdf.js `scale=dpi/72`、显示方向不补偿 → `toBlob('image/jpeg',q/100)`）→ `exportUpload`（multipart）→ `adopt(from:"export")` → `ok.exported`；`exportDpiOf`/`exportQualityOf` 与 `computeEstimate` 共用；`probe('exportBody')` 钉 spec/页号/每页字节/px 框|
 |（续）|`web/static/app-api.js` 的 **P5 multipart 通道**|`uploadMultipart(path, fields, files)` 是全仓**唯一**的 multipart 出口（会话头 + same-origin + `envelopeOf` 只此一处）；`uploadPDF`/`uploadPOST` 是它的「单 `file` 形状」包装，`exportUpload` 用它送 `spec` + `page-<n>`|
-|`web/static/app-i18n.js`|en/cn 文案表（由 `tools/verify/gen-i18n.mjs` 从 `docs/UI_SPEC.md §4` 生成，208 键，禁止手改）|
+|（续）|`web/static/app-api.js` 的 **P6 预设通道**|`presetList/presetSave/presetDelete/presetRawURL/rawBytes`（会话头 + 信封复用同一处）|
+|`web/static/app-batch.js`|P6 印章**预设库 UI** + **批处理队列**：`window.__autoStampBatch`；预设 存/载/删/列表（列表镜像到印章卡与批处理卡的两个 select）；批处理 = **无后端作业路由的前端跑链**（AGENTS §5.21 BM1）`fs/pick{dir:true}`→`open`→（`split`）→`apply`→`export`(raster，离屏 pdf.js `scale=dpi/72` 回传)→`save{mkdirs}`；`batchTarget()` 输出 `_batch\<原名>.dpi<N>.q<Q>.pdf`（BM2，单扩展名）；`pagesForDoc()` = 预设 pages 词表逐文档求交集（BM5）；并发 `api.batch.concurrency`（1..8）+ 停止；加密行 `batch.status.encrypted`（BM4，不弹密码）；报表 CSV/JSON 由 `Blob`+`a[download]` 生成（不发请求）；`probe("queue"｜"report"｜"presets")` 给 verify|
+|`web/static/app-i18n.js`|en/cn 文案表（由 `tools/verify/gen-i18n.mjs` 从 `docs/UI_SPEC.md §4` 生成，276 键，禁止手改）|
 |`web/static/style.css`|壳样式（两列密度 / 折叠态 / 控件表现代码）+ P1：分页条缩略图（`#page-pager canvas.pg-thumb`）、拖放高亮（`#preview[data-drag]`）|
 |`web/static/favicon.svg`|图标（`<link rel="icon">`，否则 Chromium 自动 404 `/favicon.ico`，FACTS §1.5）|
 |`web/static/vendor/pdfjs/`|pdf.js 6.4.299 资产（P1 已进）：`build/`（只有 ESM，FACTS §1.1）、`cmaps/`、`standard_fonts/`、`wasm/`、`image_decoders/`、`iccs/`、`web/pdf_viewer.css`（文本层 CSS）；205 文件 / 5,486,850 B，`SHA256.txt` + `web/embed_test.go:TestVendorChecksums` 断言；见该目录 `README.md`|
@@ -91,9 +100,11 @@
 |`tools/verify/overlay-smoke.mjs`|**P2 主校验**（真 exe + 真 UI + headless）：上传印章 → 16 模式 ×{1.0,0.6,0.3} → 几何/拖拽/四角/旋转/滚轮 → 骑缝条带 → `ctx.filter` 复位 → 去背计数 → 导出预估 == FACTS §4。分段令牌 `--only=<open\|geometry\|despill\|matrix\|drag\|strip\|filter\|export>`（缺省全跑）；`--reuse-build` 复用 `dist/autostamp-overlay-smoke.exe`（改前端后必须去掉该旗标重建）|
 |`tools/verify/preview-smoke.mjs`|P1 端到端：CDP `Page.printToPDF` 现场生成样本（英文多页文字 / 中文 CID / 混合 / 图片型无文字）→ 真 exe → 真 UI 打开（`#empty-path` + `#empty-open`）→ 画布像素、`getTextContent` 条数、`.textLayer` span 计数与层框宽度对齐、翻页/分页条/缩放、切分预览切点计数、vendor 资源 0 失败（FACTS §1.7）|
 |`tools/verify/export-smoke.mjs`|**P5 主校验**（真 exe + 真 UI + headless）：保存链里的 raster 通道（apply → 前端位图 → multipart → adopt → 写盘）、页 pt == `px*72/dpi`（Δ 0.000）、导出文件字节落在 FACTS §4 的 ±40% 量级带、回读像素 Δ ≤6、vector 零 `/api/pdf/export` 请求 + 文字仍在、W6 超限只出 warn 且零请求、`pages="2"` 只送 `page-2`。分段 `--only=<raster|vector|guard|chain>`|
+|`tools/verify/batch-smoke.mjs`|**P6 主校验**（真 exe + 真 UI + headless）：分段 `--only=<preset|batch>`。preset = 真 UI 存/载/删往返（两个 select 都出现、面板参数写回、删除后列表空）；batch = **P6 验收形态** 22 份（20 份可盖 + 1 份 AES-256 加密 + 1 份故意坏）→ 报表计数 `[22,20,1,1]`、状态分布、`_batch\原名.dpi150.q75.pdf` 全在、产物页数与源一致、**源文件字节不动**、加密/坏文件没有产物、CSV/JSON 真下载（22 行、只有 ok 行带 `_batch`）、两个预期 400（`/api/pdf/open`）之外 0 失败请求与 0 console error|
+|`tools/verify/encfx/main.go`|现场生成 **AES-256 加密样本**（`pdfcore.WriteRaster` 一页 JPEG → `api.EncryptFile` + `model.NewAESConfiguration`），给 batch-smoke 的加密行与 `pdf_password_test.go` 用；不落二进制 blob|
 |`tools/verify/apply-smoke.mjs`|**P4 主校验**（真 exe + 真 UI + headless）：回读一致性矩阵（48 组：落盘 → pdf.js 重渲染 == 独立 blend，FACTS §1.9）、骑缝落盘（逐页半枚 + 条带 bbox 四边 ≤1 pt）、切分→盖章→保存链（磁盘文件再 `fs/pick`+`open`）、撤销盖章/撤销切分。分段 `--only=<matrix|strip|chain|undo>`；改前端后别用 `--reuse-build`|
 |`tools/verify/cdp.mjs`|无依赖 CDP 客户端（launch Chrome → `page.*`/`Runtime.evaluate`）|
-|`tools/verify/webview-launch.mjs`|`-tags webview` 二进制真窗口启动断言（FACTS §1.6）|
+|`tools/verify/webview-launch.mjs`|`-tags webview` 二进制真窗口启动断言（FACTS §1.6）+ **P6 冷启动读数**：spawn → `webview window opened`（`window-open N ms`）与首个 `/api/health`（`health N ms`），与 P6 的 1.5 s 判据比对（超过打 error 行）；argv 可指到 `dist/autostamp-webview-stripped.exe`（出货件本身）|
 |`tools/verify/comprobe/main.go`|COM `CoInitializeEx` 实测探针（含 `-window` 真窗口泵消息）|
 |`tools/verify/gen-i18n.mjs`|从 `docs/UI_SPEC.md §4` 生成 `web/static/app-i18n.js`（改文案只改 §4 表，然后重跑 + 重编 exe）|
 
@@ -101,7 +112,7 @@
 
 |文件|作用|
 |---|---|
-|`build.ps1`|一键：`clean → vet → test → genfix/fixtures → 3 个 exe → verify（ui-smoke/ui-contract/shell-smoke/preview-smoke/overlay-smoke/pixel-matrix/webview-launch/comprobe）→ sizes`；`-Task`、`-Watch`、`-Run`；失败退出码 1（AGENTS §4）|
+|`build.ps1`|一键：`clean → vet → test → genfix/fixtures → 3 个 exe → verify（十脚本）→ sizes`；**P6 起 `package`（PC1）**：`autostamp-<rev>-win64.zip` = `autostamp.exe` + `README.md`，带 25 MB 体积门；`-Task`（逗号列表）/`-Watch`/`-Run`；失败退出码 1（AGENTS §4）。VCS 短号取 `go version -m` 的 `vcs.revision=`（旧正则按空白匹配，所以之前打印 `commit n/a`）|
 |`docs/FACTS.md §5.1`|就地可重跑的探针清单 ↔ 本文编号映射|
 
 ## 6. 数据目录（运行期，不属于仓库）

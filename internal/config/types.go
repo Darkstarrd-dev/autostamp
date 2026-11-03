@@ -22,6 +22,7 @@ type Settings struct {
 	Apply       Apply       `json:"apply"`
 	Split       Split       `json:"split"`
 	Export      Export      `json:"export"`
+	Batch       Batch       `json:"batch"`
 	RecentFiles []RecentRef `json:"recentFiles,omitempty"`
 }
 
@@ -86,6 +87,17 @@ type Export struct {
 	CustomDPI int    `json:"customDpi"` // 96..600
 	Quality   int    `json:"quality"`   // 40..95
 	Pages     string `json:"pages"`
+}
+
+// Batch maps api.batch.* (UI_SPEC §2): the front-end run-queue's own settings
+// group. Which preset to stamp with, the raster dpi/quality the export step
+// will really use (BM1), and how many files may run at once (BR6/BR3).
+type Batch struct {
+	PresetName  string `json:"presetName"`  // BR6: required; empty = no run
+	DPI         string `json:"dpi"`         // 72|150|300|custom
+	CustomDPI   int    `json:"customDpi"`   // 96..600
+	Quality     int    `json:"quality"`     // 40..95
+	Concurrency int    `json:"concurrency"` // 1..8 (BR3: default 2)
 }
 
 // RecentRef is one entry of the most-recently-opened list (P6).

@@ -1,6 +1,6 @@
 # AutoStamp — 实施计划（IMPLEMENTATION PLAN）
 
-> 最后核对：2026-11-02（P0 + P0.5 + P1 + P2 + P3 + P4 + P5 完成；当前阶段 = P6 预设/批处理/打包）。
+> 最后核对：2026-11-03（P0 + P0.5 + P1 + P2 + P3 + P4 + P5 + **P6** 完成；当前阶段 = P7 加固/文档）。
 > 依赖/浏览器事实引用 `docs/FACTS.md` 编号，禁止凭记忆改写。约束见 `AGENTS.md`。
 
 ## 0. 新对话恢复执行协议（执行入口）
@@ -362,16 +362,41 @@ DCT 流 == 输入原始字节、Flate 解压长度 `h*(1+w*3)`、`/SMask` 存在
 - `export-smoke --only=chain` 钉保存幂等:二次保存(同一 spec)export 请求 0 次、
   改 `quality/pages` 后重光栅化恰好 1 次 + 新 export asset。
 
-### P6 — 预设 / 批处理 / 打包 `[ ]`
+### P6 — 预设 / 批处理 / 打包 `[x]`
 
-印章预设库（`%APPDATA%\AutoStamp\seals\`：名称、图片、参数组，CRUD + 导出 zip）；
-最近文件列表；**批处理**（同参数套用到多个 PDF/一个目录，队列 + 进度 SSE）；
-页眉页脚/多印章（可选，若 P2 面板已支持多印章则复用）；
-`build.ps1`（default/webview/strip 变体 + 版本注入 + `rsrc` 图标 exe）；
-体积与冷启动实测回填本文。
+交付（实现形态见 AGENTS §5.20–§5.22 与 `UI_SPEC §8` P6 决策表）：
 
-验收：批处理 20 个 PDF（含混合/扫描）全成功、失败项不影响其他；exe 体积 ≤ 25 MB；
-双击启动到首屏可交互 ≤ 1.5 s。
+- **印章预设库**：`internal/presetstore`（索引 `presets.json` + `p-<hash>.png`，
+  同名 = 覆盖）+ 四条路由（list / save / delete / raw）+ 前端 存/载/删/列表。
+  预设带 `apply.*` + `seal.prepare.*`，后端 `validatePresetParams` 先校验再存
+  ⇒ 预设里的参数一定能过 `apply` 词表。**原计划的「预设导出 zip」未采纳**
+  （不在产品需求 1–5 内、无用户确认记录）。
+- **最近文件入口**（RF1）：启动页 `#empty-recent` + 顶栏 `#recent-open`，点了走
+  `fs/pick{filePath}` 直开授权（与手输路径同一条链），没有新路由/字段。
+- **批处理 = 前端逐文件跑链**（BM1 取代 BC1 的「服务端串行作业 + SSE」）：
+  `fs/pick{dir:true}` → `open` →（`split`）→ `apply` → `export`(raster) → `save{mkdirs}`；
+  因为走的是光栅导出，`api.batch.dpi/customDpi/quality` **真生效**（改口径的动机）。
+  输出 `源目录\_batch\原名.dpi<数字>.q<数字>.pdf`（BM2）；加密件跳过记
+  `password_required`（BM4）；报表 + CSV/JSON 由前端生成（需求 9，不发请求）。
+- **打包**（PC1）：`build.ps1 -Task package` → `dist\autostamp-<rev>-win64.zip`
+  （`autostamp.exe` + `README.md`，带 25 MB 体积门）。**原计划的 `rsrc` 图标 exe 未采纳**
+  （要引外部工具，违背单依赖策略）。页眉页脚/多印章按 OP1 不采纳（多印章已由 P2 多实例覆盖）。
+
+验收实测（2026-11-03，`node tools/verify/batch-smoke.mjs --only=<preset|batch>`）：
+
+- 预设：真 UI 存 → 两个 select 都出现 → 载入写回面板参数 → 删除后列表空。
+- 批处理 **22 份**（20 份可盖，页数不一 + 1 份 AES-256 加密 + 1 份故意坏）：
+  报表计数 `[22, 20, 1, 1]`、状态分布 `{ok:20, encrypted:1, fail:1}`；
+  20 份产物 `_batch\b-XX.dpi150.q75.pdf` 全在且页数与源一致（2/1/1…）；
+  **源文件 sha1 一字节没动**；加密与坏文件没有产物；加密行带 `password_required`
+  且不弹密码；CSV 22 行（只有 ok 行带 `_batch`）+ JSON 22 条（真下载，不发请求）。
+- AES-256 密码链路：`TestOpenPasswordRoundTrip`（无密码 ⇒ `password_required`；
+  错密码 ⇒ `password_invalid`；userPW / ownerPW 都开成功）→ FACTS §2.8 消项。
+- `go vet` + `go test ./...` 全绿；`build.ps1 -Task vet,test,verify` **失败 0 / 跳过 0**（十脚本）。
+- exe 体积 **19,744 KB**（≈19.3 MB，PC1 上限 25 MB ✓）；zip 8,183 KB。
+- 窗口版冷启动（出货件 `autostamp-webview-stripped.exe`）：
+  `webview window opened` **514 ms**、首个 `/api/health` **555 ms**（判据 ≤ 1.5 s ✓）。
+  口径 = 进程 spawn → 窗口创建并导航 + 首个 HTTP 应答，不是「肉眼双击到首屏」的计时。
 
 ### P7 — 加固与文档核对 `[ ]`
 
@@ -430,7 +455,7 @@ P3 的切分几何依赖 P4 的落盘才有完整「预览→保存」闭环。
 |D3|自动切分触发|MediaBox 横排且纵横比 > 0.7 才自动 2 拼；否则手动指定切点|已确认 2026-10-29：自动判定 + 逐页 veto → `UI_SPEC` §8 行 398|
 |D4|印章去白底|前端做（红印章扫描白底常见），存预设时保留 alpha；不做服务端 OCR|已确认 2026-10-29：预览即时去背 + 可撤销 → `UI_SPEC` §8 行 399|
 |D5|是否支持 macOS/Linux|不支持原生窗口（需 CGO），只回退浏览器；`UNVERIFIED`|不阻塞 P0.5（按默认，`UI_SPEC` §8 行 406）|
-|D6|批处理并发|3（与 IO 竞争最小化），失败不中断整批|不阻塞 P0.5（按默认，`UI_SPEC` §8 行 405）|
+|D6|批处理并发|3（与 IO 竞争最小化），失败不中断整批|**已被 P6 的 BR3 取代**（2026-11-02 用户确认：默认 2，1..8 可调 = `api.batch.concurrency`）；「失败不中断整批」仍是队列语义（实测 22 份里 2 份失败、20 份照常成功）|
 
 P0.5 追加必问项（不属上表）：布局密度、骑缝章预览形态、多印章实例形态、
 保存/替换原文件的确认方式、导出体积预估的展示位置。全部结论只落 `UI_SPEC` 决策表。
@@ -446,5 +471,5 @@ P0.5 追加必问项（不属上表）：布局密度、骑缝章预览形态、
 |P3 切分+骑缝|`[x]`|2026-10-29 切分半边 + 2026-11-02 骑缝落盘：词表 `auto/rows-cols/custom/unsplit` + `splitVeto`(+`vetoPages`/`splitPages`)，A4→297.5x842、`/Rotate 90`→421x595（FACTS §2.3）；`POST /api/pdf/split` → 新 assetId(kind `split`)、原资产保留 = 「撤销切分」；骑缝落盘 = `pdfcore.Strips` + apply（逐页第 i 条、装订边 right/alternate、`startOffset`），实测 `apply-smoke --only=strip`：页 1 = 印章左半 (24,190,70)、页 2 = 右半 (210,40,90)，Δ 0，条带 59.50x59.50 pt、x ∈ [535.5,595.0]、y ∈ [40,99.5]、四边 <=1 pt；Go 侧 `TestStampStripBoxUsesWholeSealAspect`（写入的 `cm` 数字 535.5/742.5）+ `TestStampBoxStripsRightAndAlternate` |
 |P4 矢量落盘+BM|`[x]`|2026-11-02：`POST /api/pdf/apply`（实例数组、按 `(blend,opacity)` 分 pass、注册前 `Validate`）+ `POST /api/pdf/save`（目标三选一 / `Origin` 继承 / `AtomicWriteFunc`）；`/BM` 注入在 `blend.go`（FACTS §2.2：实测写出的 GS 带 `/BM`+`/ca`）；**回读一致性 48 组最大 Δ = 2**（`apply-smoke --only=matrix`，16 模式 x{1.0,0.6,0.3}）；落盘几何 = 显示空间 + 一次 y 翻转（实测 `150.0/452.75`、`535.5/742.5` → FACTS §2.6）；保存链：切分→盖章→保存到沙箱路径（3,534 B）→ 磁盘文件再 `fs/pick`+`open` 页数 = 2；撤销盖章/撤销切分断言（asset id 换回、实例恢复）；顺带修掉前端快照身份 bug（FACTS §1.9）|
 |P5 光栅导出|`[x]`|2026-11-02：`internal/pdfcore/raster.go`（stdlib：`/DCTDecode` 直传前端 JPEG 字节、PNG 走 `/FlateDecode` + `/SMask`、`/MediaBox` = `px*72/dpi` 两位小数、xref/`/Length`/`/Size`/`startxref` 精确、无 `/Rotate`）+ `POST /api/pdf/export`（`Content-Type` 协商：json=vector 只裁页 / multipart=raster 收 `spec` + `page-<n`）；实测真链：`bytesPerPage` 141,139/143,019 B、导出文件 **285,313 B**（落在 FACTS §4 行的 ±40% 量级带，**±5% 钉不住**）、页 pt `594.72 × 841.92` Δ 0.000、回读像素 Δ (1,-1,0)、vector 零请求 + 文字仍在、W6 预估 156,651,960 B/页 → 只出 warn 且零请求；`node tools/verify/export-smoke.mjs`（分段 `--only=<raster|vector|guard|chain>`）已进 `build.ps1 -Task verify`（九项）|
-|P6 预设/批处理/打包|`[ ]`||
+|P6 预设/批处理/打包|`[x]`|2026-11-03：预设库 `internal/presetstore` + 四条路由（list/save/delete/raw，`{name,sealId,params}`，同名覆盖 PR2）+ 前端存/载/删（真 UI 往返：两个 select 出现、载入写回面板、删除后空）；最近文件入口 RF1（`#empty-recent`/`#recent-open` → `fs/pick{filePath}`）；**批处理 = 前端跑链**（BM1 取代 BC1 的 SSE 作业）`fs/pick{dir:true}`→`open`→(`split`)→`apply`→`export`(raster)→`save{mkdirs}`，`api.batch.*` 进 settings 的 `batch` 段（dpi 150 / customDpi 150 / quality 75 / concurrency 2）；`batch-smoke` 22 份样本（20 可盖 + AES-256 加密 + 故意坏）→ 计数 `[22,20,1,1]`、状态分布 `{ok:20,encrypted:1,fail:1}`、产物 `_batch\b-XX.dpi150.q75.pdf` 页数一致、**源 sha1 不动**、加密/坏件无产物、CSV 22 行 / JSON 22 条（真下载）；AES-256 密码往返 `TestOpenPasswordRoundTrip`（FACTS §2.8）；`build.ps1 -Task package` 出 `autostamp-<rev>-win64.zip` 8,183 KB（exe 19,744 KB ≤ 25 MB ✓）；窗口版冷启动 514 ms（判据 1.5 s ✓，口径 = spawn→窗口导航 + 首个 health）|
 |P7 加固/文档|`[ ]`||

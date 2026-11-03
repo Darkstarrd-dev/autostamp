@@ -15,6 +15,7 @@ import (
 	"autostamp/internal/app"
 	"autostamp/internal/config"
 	"autostamp/internal/console"
+	"autostamp/internal/presetstore"
 	"autostamp/internal/tmpstore"
 )
 
@@ -53,7 +54,16 @@ func main() {
 	}
 	defer store.Close()
 
-	mux := api.NewMux(api.Deps{Version: build, Log: log, Settings: settings, Assets: store})
+	// The seal preset library lives in %APPDATA%\AutoStamp\seals (AGENTS §4); it is
+	// a disk fact, so the batch job can stamp from it without any browser.
+	presetsDir, err := config.SealsDir()
+	if err != nil {
+		log.Error("preset dir failed", "err", err)
+		os.Exit(1)
+	}
+	presets := presetstore.New(presetsDir, log)
+
+	mux := api.NewMux(api.Deps{Version: build, Log: log, Settings: settings, Assets: store, Presets: presets})
 	srv := app.NewServer(ln, mux, log, port, settings.Snapshot().Security.StrictOrigin)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

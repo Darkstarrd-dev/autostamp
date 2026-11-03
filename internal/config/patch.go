@@ -11,6 +11,7 @@ type Patch struct {
 	Apply       *PatchApply    `json:"apply,omitempty"`
 	Split       *PatchSplit    `json:"split,omitempty"`
 	Export      *PatchExport   `json:"export,omitempty"`
+	Batch       *PatchBatch    `json:"batch,omitempty"`
 	RecentFiles *[]RecentRef   `json:"recentFiles,omitempty"`
 }
 
@@ -77,6 +78,15 @@ type PatchExport struct {
 	Pages     *string `json:"pages,omitempty"`
 }
 
+// PatchBatch mirrors Batch (api.batch.*).
+type PatchBatch struct {
+	PresetName  *string `json:"presetName,omitempty"`
+	DPI         *string `json:"dpi,omitempty"`
+	CustomDPI   *int    `json:"customDpi,omitempty"`
+	Quality     *int    `json:"quality,omitempty"`
+	Concurrency *int    `json:"concurrency,omitempty"`
+}
+
 // Merge applies p onto s (pointer semantics above). It does not validate; call
 // Sanitize afterwards so the caller sees one normalized document.
 func Merge(s *Settings, p *Patch) {
@@ -140,6 +150,13 @@ func Merge(s *Settings, p *Patch) {
 		setInt(&s.Export.CustomDPI, p.Export.CustomDPI)
 		setInt(&s.Export.Quality, p.Export.Quality)
 		setStr(&s.Export.Pages, p.Export.Pages)
+	}
+	if p.Batch != nil {
+		setStr(&s.Batch.PresetName, p.Batch.PresetName)
+		setStr(&s.Batch.DPI, p.Batch.DPI)
+		setInt(&s.Batch.CustomDPI, p.Batch.CustomDPI)
+		setInt(&s.Batch.Quality, p.Batch.Quality)
+		setInt(&s.Batch.Concurrency, p.Batch.Concurrency)
 	}
 	if p.RecentFiles != nil {
 		s.RecentFiles = *p.RecentFiles

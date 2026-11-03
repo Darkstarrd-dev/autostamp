@@ -11,6 +11,7 @@ import (
 
 	"autostamp/internal/app"
 	"autostamp/internal/config"
+	"autostamp/internal/presetstore"
 	"autostamp/internal/tmpstore"
 	"autostamp/internal/webx"
 	"autostamp/web"
@@ -22,6 +23,7 @@ type Deps struct {
 	Log      *slog.Logger
 	Settings *config.Store
 	Assets   *tmpstore.Store
+	Presets  *presetstore.Store
 }
 
 // NewMux builds the P0–P5 route set. Method patterns come from Go 1.22
@@ -65,6 +67,13 @@ func NewMux(d Deps) *http.ServeMux {
 	// because a whole document can arrive as bitmaps; MaxBytesHandler turns a
 	// runaway body into a plain 413 like the upload route does.
 	mux.Handle("POST /api/pdf/export", http.MaxBytesHandler(handleExport(d.Assets, d.Log), maxExportBody))
+	// P6: the seal preset library (AGENTS §6, UI_SPEC §8 PR1/PR2). The POST route
+	// copies a session seal asset into %APPDATA%\AutoStamp\seals, so a preset is a
+	// disk fact rather than a browser blob, and the batch job can stamp from it.
+	mux.HandleFunc("GET /api/seal/preset", handlePresetList(d.Presets, d.Log))
+	mux.HandleFunc("POST /api/seal/preset", handlePresetSave(d.Presets, d.Assets, d.Log))
+	mux.HandleFunc("DELETE /api/seal/preset", handlePresetDelete(d.Presets, d.Log))
+	mux.HandleFunc("GET /api/seal/preset/raw", handlePresetRaw(d.Presets))
 	// Routes no later stage has implemented still match the static pattern, so
 	// they reply 405 (empty body) or 404 (static handler). The front-end
 	// reports those as http_405 / http_404 with the status text instead of a

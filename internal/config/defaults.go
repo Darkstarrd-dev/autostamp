@@ -32,5 +32,11 @@ func Default() Settings {
 		},
 		Split:  Split{Auto: true, Mode: "v2", Rows: 1, Cols: 2, CutFractions: "0.5", Pages: "all"},
 		Export: Export{Mode: "vector", DPI: "150", CustomDPI: 150, Quality: 75, Pages: "all"},
+		Batch: Batch{
+			DPI:         "150",
+			CustomDPI:   150,
+			Quality:     75,
+			Concurrency: 2, // BR3/BR6: default 2, 1..8
+		},
 	}
 }

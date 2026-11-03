@@ -139,6 +139,35 @@ func Sanitize(s *Settings) error {
 		ex.Pages = "all"
 	}
 
+	// Batch is the front-end run-queue's own group (api.batch.*). The dpi/quality
+// values matter for real here (BM1): unlike the save panel's export group they
+// are applied per file, so a bad value silently becomes stamped output.
+	bt := &s.Batch
+	if bt.DPI != "72" && bt.DPI != "150" && bt.DPI != "300" && bt.DPI != "custom" {
+		fail("batch.dpi %q not in 72|150|300|custom", bt.DPI)
+		bt.DPI = "150"
+	}
+	if !inRange(bt.CustomDPI, 96, 600) {
+		fail("batch.customDpi %d out of 96..600", bt.CustomDPI)
+	}
+	bt.CustomDPI = clampInt(bt.CustomDPI, 96, 600)
+	if !inRange(bt.Quality, 40, 95) {
+		fail("batch.quality %d out of 40..95", bt.Quality)
+	}
+	bt.Quality = clampInt(bt.Quality, 40, 95)
+	// BR3: 1..8 concurrent files. Too many at once would fight over CPU for the
+	// pdf.js rasterisation of every page anyway.
+	if !inRange(bt.Concurrency, 1, 8) {
+		fail("batch.concurrency %d out of 1..8", bt.Concurrency)
+	}
+	bt.Concurrency = clampInt(bt.Concurrency, 1, 8)
+	// BR6: an empty preset name means "not chosen yet"; the run refuses to start
+	// then rather than inventing a preset.
+	if len(bt.PresetName) > 120 {
+		fail("batch.presetName too long")
+		bt.PresetName = bt.PresetName[:120]
+	}
+
 	if !inRange(s.Session.TTLMinutes, 1, 24*60) {
 		fail("session.ttlMinutes %d out of 1..1440", s.Session.TTLMinutes)
 	}

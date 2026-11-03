@@ -269,3 +269,32 @@ func TestSaveAnswerShape(t *testing.T) {
 		}
 	}
 }
+
+// The batch job (P6 需求 6) writes into a "_batch" folder it decides on, so the save
+// route creates the parent only when mkdirs is set - and never when it is not.
+func TestSaveMkdirsCreatesBatchFolder(t *testing.T) {
+	mux, _, _ := newTestMux(t)
+	session := newSession(t)
+	asset := openUploadedPDF(t, mux, session, threePageA4(t))
+	root := t.TempDir()
+	missing := filepath.Join(root, "_batch", "章 · 甲.pdf")
+
+	rec := saveJSON(t, mux, map[string]any{"assetId": asset, "targetPath": missing}, session)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("mkdirs off = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+	if code := errorCode(t, rec); code != "bad_body" {
+		t.Errorf("code = %q, want bad_body", code)
+	}
+	if _, err := os.Stat(filepath.Dir(missing)); !os.IsNotExist(err) {
+		t.Error("a rejected save must not create the folder")
+	}
+
+	rec = saveJSON(t, mux, map[string]any{"assetId": asset, "targetPath": missing, "mkdirs": true}, session)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("mkdirs on = %d: %s", rec.Code, rec.Body.String())
+	}
+	if _, err := os.Stat(missing); err != nil {
+		t.Errorf("the batch file is not on disk: %v", err)
+	}
+}

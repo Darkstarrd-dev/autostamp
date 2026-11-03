@@ -97,6 +97,22 @@ field=api.apply.startOffset api=apply.startOffset type=slider+number range=0..20
 field=api.save.targetPath api=save.targetPath type=text range=绝对路径 default=- nullable=yes ctl=yes i18nkey=api.save.targetPath.ctl decision=-
 field=api.save.replaceOriginal api=save.replaceOriginal type=toggle range=bool default=false nullable=no ctl=yes i18nkey=api.save.replaceOriginal.ctl decision=S1
 field=api.open.pw api=open.pw type=password range=string default=- nullable=yes ctl=yes i18nkey=api.open.pw.ctl decision=-
+field=api.batch.files api=batch.files type=text range=绝对路径列表 default=- nullable=no ctl=yes i18nkey=api.batch.files.ctl decision=BC2
+field=api.batch.dirPath api=batch.dirPath type=text range=绝对路径 default=- nullable=yes ctl=yes i18nkey=api.batch.dirPath.ctl decision=BC2
+field=api.batch.autoSplit api=batch.autoSplit type=toggle range=bool default=false nullable=no ctl=yes i18nkey=api.batch.autoSplit.ctl decision=BC3
+field=api.batch.splitMode api=batch.splitMode type=select range=auto|rows-cols|custom|unsplit default=auto nullable=no ctl=yes i18nkey=api.batch.splitMode.ctl decision=BC3
+field=api.batch.rows api=batch.rows type=number range=2..6 default=2 nullable=no ctl=yes i18nkey=api.batch.rows.ctl decision=BC3
+field=api.batch.cols api=batch.cols type=number range=1..3 default=2 nullable=no ctl=yes i18nkey=api.batch.cols.ctl decision=BC3
+field=api.batch.crossPage api=batch.crossPage type=toggle range=bool default=false nullable=no ctl=yes i18nkey=api.batch.crossPage.ctl decision=BC3
+field=api.batch.binding api=batch.binding type=select range=right|alternate default=right nullable=no ctl=yes i18nkey=api.batch.binding.ctl decision=BC3
+field=api.batch.startOffset api=batch.startOffset type=slider+number range=0..200 default=0 nullable=no ctl=yes i18nkey=api.batch.startOffset.ctl decision=BC3 unit=pt
+field=api.batch.presetName api=batch.presetName type=select range=预设名 default=- nullable=yes ctl=yes i18nkey=api.batch.presetName.ctl decision=BM1
+field=api.batch.dpi api=batch.dpi type=segmented range=72|150|300|custom default=150 nullable=no ctl=yes i18nkey=api.batch.dpi.ctl decision=BM1 unit=dpi
+field=api.batch.customDpi api=batch.customDpi type=number range=72..600 default=- nullable=yes ctl=yes i18nkey=api.batch.customDpi.ctl decision=BM1 unit=dpi
+field=api.batch.quality api=batch.quality type=slider+number range=40..95 default=75 nullable=no ctl=yes i18nkey=api.batch.quality.ctl decision=BM1
+field=api.batch.concurrency api=batch.concurrency type=number range=1..8 default=2 nullable=no ctl=yes i18nkey=api.batch.concurrency.ctl decision=BM1 unit=并发
+field=api.fs.pick.dir api=fs.pick.dir type=toggle range=bool default=false nullable=no ctl=no i18nkey=- decision=BM1
+field=api.save.mkdirs api=save.mkdirs type=toggle range=bool default=false nullable=no ctl=no i18nkey=- decision=BM2
 ```
 
 `pages-词表`：`all | none | <页号>[-<页号>][,...]`（1 基，例 `1-2,5`）。
@@ -118,6 +134,11 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
     （`pos` 只作派生读数）。预览与落盘共用同一套换算：`app-overlay.rectFor` == `pdfcore.StampGeom.Box`。
 - `api.apply.startOffset` 是骑缝条带沿装订边的起始偏移（pdfcpu `offset:0 -N`），与 `api.apply.offset` 独立。
 - `api.export.dpi/customDpi/quality` 仅 `mode=raster` 生效（页位图由前端回传，FACTS §2.4 无 rasterize）。
+- `api.batch.*`（BM1/BM2）= 前端逐文件跑完整链：`fs/pick` → `open` →（`split`）→ `apply` →（`export` 光栅）→ `save(mkdirs)`；
+  并发 = 前端队列数（默认 2，1..8）；加密件不弹密码，跳过并在报表记 `password_required`；
+  输出写进 `原目录\_batch\`，文件名加前后缀（`原文件名.dpi<数字>.q<数字>.pdf`，
+  例 `a-01.dpi150.q75.pdf`）；绝不改源文件（BC2 的命名被 BM2 取代）。单扩展名是硬要求：
+  `fsx.ValidateTargetPath`/`CheckWriteTarget` 只认 `.pdf`，多一层后缀会被 `path_denied` 挡掉。
 - `api.open.pw`：UserPW/OwnerPW 都试；AES-256 链路 `UNVERIFIED`（FACTS §6）。
 - `ui.*` 字段不进请求（`api=-`）；`ui.split.vetoedPages` 是 `split` 的派生参数，切分时随请求带上。
 
@@ -131,6 +152,13 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 | 主画布 · 选中实例（`#stamp-layer`） | `apply.offset`（拖框）/ `apply.scale`（四角、Ctrl+滚轮 V3）/ `apply.rotation`（顶部手柄） | 虚线框 + 手柄 | 无请求（叠加层内部状态） |
 | 印章段 · 去白底 | `api.seal.prepare.despill` | toggle + 撤销 | 同上 |
 | 印章段 · 存为预设 | `api.seal.preset.presetName` | text + button | `GET/POST /api/seal/preset` |
+| 批处理段 · 输入 | `api.batch.files` / `api.batch.dirPath` | text + 两个按钮 | 前端逐文件走 `fs/pick`(filePath/dir) → `pdf/open` → …（BM1） |
+| 批处理段 · 印章来源 | `api.batch.presetName` | select（预设库） | 预设图像字节 → `POST /api/pdf/seal/prepare` |
+| 批处理段 · 光栅参数 | `api.batch.dpi` / `customDpi` / `quality` | segmented + number + 滑杆 | `POST /api/pdf/export`（multipart 光栅） |
+| 批处理段 · 并发 | `api.batch.concurrency` | number | 前端队列（不落请求） |
+| 批处理段 · 链路开关 | `api.batch.autoSplit` / `splitMode` / `rows` / `cols` / `crossPage` / `binding` / `startOffset` | toggle + select + number | `POST /api/pdf/split`；骑缝参数走预设 |
+| 印章段 · 载入/删除预设 | `api.seal.preset.select`（响应侧） | select + 两个按钮 | `GET/DELETE /api/seal/preset` |
+| 最近文件 · 入口 | （无字段，操作控件） | 启动页列表 + 顶栏下拉 | `POST /api/fs/pick`（直开授权）→ `POST /api/pdf/open` |
 | 实例段 · 列表 | instance（名称/模式/删除） | list + text | 内部状态 |
 | 叠加段 · 混合模式 | `api.apply.blend` | 分组 `<select>` | `/api/pdf/apply` |
 | 叠加段 · 透明度/明度/饱和度 | `api.apply.opacity/brightness/saturate` | 滑杆 + 数值（双向绑定） | 同上 / 仅预览 |
@@ -169,7 +197,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 滑杆 + 数值必须**双向绑定**（同一 `data-field` 复用两次，mock 已实现 `bindPair`）；
 隐藏 `type=file` input 只作选择器触发器，不占字段。
 
-## 4. i18n 清单（key | en | cn；共 208 键，全部由 mock + 状态文案生成；`node tools/verify/gen-i18n.mjs` 打印同数）
+## 4. i18n 清单（key | en | cn；共 276 键，全部由 mock + 状态文案生成；`node tools/verify/gen-i18n.mjs` 打印同数）
 
 规则（AGENTS §7）：每个可见控件/文案必须有 `data-i18n` key，en/cn 两值非空；
 `data-i18n-cn`（及 `-placeholder`、`-title`）提供中文值，en 取元素自身文本或 `class="tag"` 的字段名。
@@ -386,6 +414,74 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |warn.noText.hint|No extractable text layer: this file has only scanned images|无可抽取文字层：该文件只有扫描图像|
 |warn.render.hint|Page 3 has 33 MP: rendered at reduced scale|第 3 页 33 MP：已按缩略尺寸渲染|
 |warn.export.tooBig|page bitmap exceeds the 90 MB cap: lower DPI to 300 or fewer pages|单页位图超过 90 MB 上限：请把 DPI 降到 300 或少选几页|
+|api.batch.files.ctl|batch input|批处理输入|
+|api.batch.files.hint|picked with the native picker; a folder picks every *.pdf in it|由原生选择器取得；选目录则收该目录下所有 .pdf|
+|api.batch.dirPath.ctl|folder|目录|
+|api.batch.autoSplit.ctl|auto split first|先自动切分|
+|api.batch.splitMode.ctl|split mode|切分方式|
+|api.batch.rows.ctl|rows|行数|
+|api.batch.cols.ctl|cols|列数|
+|api.batch.crossPage.ctl|cross-page seal|骑缝章|
+|api.batch.binding.ctl|binding edge|装订边|
+|api.batch.startOffset.ctl|start offset|起始位置|
+|api.batch.presetName.ctl|preset|批处理预设|
+|api.batch.presetName.hint|the preset carries the seal image and the stamp/cross-page parameters|预设提供印章图与盖章/骑缝参数（PR1）|
+|api.batch.dpi.ctl|resolution DPI|分辨率 DPI|
+|api.batch.dpi.hint|every file is re-exported raster at this DPI (BM1)|每个文件都按此 DPI 光栅重导出（BM1）|
+|api.batch.customDpi.ctl|custom DPI|自定义 DPI|
+|api.batch.quality.ctl|JPEG quality|JPEG 质量|
+|api.batch.concurrency.ctl|concurrency|并发数|
+|api.batch.concurrency.hint|how many files the front-end queue runs at once|前端队列同时处理几个文件（1..8）|
+|batch.preset.placeholder|pick a preset|选择预设|
+|batch.skip.encrypted.hint|encrypted PDFs are skipped and listed in the report, no password prompt|加密 PDF 直接跳过并在报表列出，不弹密码框|
+|batch.report.title|Report|报表|
+|batch.report.hint|one row per file; CSV/JSON download below|每文件一行；下方可下载 CSV/JSON|
+|batch.export.csv|CSV|CSV|
+|batch.export.json|JSON|JSON|
+|batch.status.encrypted|skipped (encrypted)|跳过（加密）|
+|seal.preset.select|preset list|预设列表|
+|seal.preset.saved|preset saved|预设已保存|
+|seal.preset.deleted|preset deleted|预设已删除|
+|seal.preset.empty|no presets yet|还没有预设|
+|seal.preset.nameNeeded|preset name is required|预设名不能为空|
+|seal.preset.noSeal|upload a seal before saving a preset|先上传印章再存预设|
+|seal.preset.loaded|preset loaded, panel updated|预设已载入,参数已写入面板|
+|batch.started|batch started|批处理已启动|
+|batch.done|batch finished|批处理结束|
+|batch.stopped|batch stopped by user|批处理已被用户停止|
+|batch.empty|no PDF in this folder|该目录下没有可处理的 PDF|
+|batch.noPreset|pick a preset first|请先选择预设|
+|batch.fileFail|file failed|文件处理失败|
+|batch.title|Batch|批处理|
+|batch.pickFiles|Pick PDFs|选择 PDF|
+|batch.pickDir|Pick folder|选择目录|
+|batch.start|Run batch|开始批处理|
+|batch.cancel|Cancel|取消|
+|batch.queue.hint|one row per file, in order|每个文件一行，按顺序|
+|batch.progress.idle|idle|空闲|
+|batch.status.pending|queued|排队|
+|batch.status.running|running|进行中|
+|batch.status.ok|ok|成功|
+|batch.status.fail|failed|失败|
+|batch.files.count|%d file(s) selected|已选 %d 个文件|
+|batch.out.hint|writes into <folder>\_batch, dpi/quality in the file name|写进 <目录>\_batch，文件名带 dpi 与质量（BM2）|
+|ok.batch.started|batch started: %d file(s)|批处理已开始：%d 个文件|
+|ok.batch.done|batch done: %d ok, %d failed|批处理完成：%d 成功，%d 失败|
+|warn.batch.rasterUnsupported|batch writes vector only: raster needs the on-screen preview|批处理只做矢量落盘：光栅化要有预览页面|
+|err.batch.noPreset|pick a seal preset first|先选一个印章预设|
+|err.batch.noSources|pick files or a folder first|先选文件或目录|
+|err.batch.dirEmpty|no PDF under that folder|该目录下没有 PDF|
+|seal.preset.label|Preset|预设|
+|seal.preset.load|Apply preset|应用预设|
+|seal.preset.delete|Delete preset|删除预设|
+|ok.preset.applied|preset applied|预设已应用|
+|ok.preset.deleted|preset deleted|预设已删除|
+|warn.preset.name|preset name is empty|预设名不能为空|
+|warn.preset.noSeal|upload a seal image first|请先上传印章图片|
+|recent.title|Recent|最近打开|
+|recent.empty|no recent files|暂无最近文件|
+|recent.clear|Clear|清空|
+|recent.open|Open|打开|
 
 ## 5. 快捷键（mock 已注册，P1/P2 起在真实 UI 里同样注册）
 
@@ -407,7 +503,7 @@ P0/P1 的 `index.html` 必须使用下表 id（`ui-ids` 块 = `ui-contract.mjs` 
 新增 id 要先登记，mock 缺该 id 即报错。
 
 ```ui-ids
-app-main  app-root  apply-anchor  apply-blend  asset-hooks  btn-export  btn-open  btn-save  btn-shortcuts  btn-upload  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  density-seg  empty-open  empty-path  empty-pick  empty-pick-filter  empty-pick-multi  empty-state  empty-upload  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-add  instance-delete  instance-duplicate  lang-seg  modal-layer  page-pager  panel  panel-actions  panel-crosspage  panel-export  panel-instances  panel-overlay  panel-position  panel-seal  panel-split  password-modal  pixel-readout  pos-center  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  right-sidebar  save-cancel  save-confirm  save-modal  file-input  error-toast  save-open  save-pick  save-source  scale-pt  seal-despill-revert  seal-file-input  seal-instances  seal-meta  seal-preset-name  seal-preset-save  seal-upload  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  split-apply  split-mode  split-veto  strip-previews  theme-seg  top-file  topbar
+app-main  app-root  apply-anchor  apply-blend  asset-hooks  batch-auto-split  batch-binding  batch-cols  batch-cross-page  batch-files  batch-pick-dir  batch-pick-files  batch-progress  batch-queue  batch-rows  batch-split-mode  batch-start  batch-start-offset  btn-export  btn-open  btn-save  btn-shortcuts  btn-upload  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  density-seg  empty-open  empty-path  empty-pick  empty-pick-filter  empty-pick-multi  empty-recent  empty-state  empty-upload  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-add  instance-delete  instance-duplicate  lang-seg  modal-layer  page-pager  panel  panel-actions  panel-batch  panel-crosspage  panel-export  panel-instances  panel-overlay  panel-position  panel-seal  panel-split  password-modal  pixel-readout  pos-center  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  recent-menu  recent-open  right-sidebar  save-cancel  save-confirm  save-modal  file-input  error-toast  save-open  save-pick  save-source  scale-pt  seal-despill-revert  seal-file-input  seal-instances  seal-meta  seal-preset-delete  seal-preset-load  seal-preset-name  seal-preset-save  seal-preset-select  seal-upload  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  split-apply  split-mode  split-veto  strip-previews  theme-seg  top-file  topbar
 
 ```
 
@@ -508,11 +604,28 @@ FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 |W4|实例 pages 的落盘语义|按实例 pages 词表逐页写（推荐）/ 只写当前可见页|已确认：按实例 `pages` 词表逐页落章（与 P2 预览按 pages 绘制一致）|2026-10-30|ask 第 4 轮 pages-semantics|
 |W5|光栅导出（raster）何时真正触发|保存弹窗「保存」时按导出段参数自动光栅化（推荐，不加新控件）/ 导出段新增「光栅化并导出」按钮（新契约 id）/ 顶栏「导出」+ 独立弹窗|已确认：保存时自动光栅化 —— `mode=raster` 则先渲染页位图 → `POST /api/pdf/export` → adopt 新 asset → 写盘；`mode=vector` 不发该请求（源资产直接写）。实现决定（2026-11-02，不新增控件、不改词表）：同一份 raster 参数第二次保存**不再**光栅化，复用已光栅化的 asset；只有 `dpi/质量/pages` 变了才重光栅化一次|2026-11-02|ask P5 轮 raster-trigger|
 |W6|单页位图超过 90 MB 上限（PLAN P5）时的行为|提交前拦截 + 提示降 DPI（推荐）/ 服务端只告警不拒绝 / 前端自动降到 300 dpi|已确认：提交前拦截 —— 前端按体积预估（§E1，FACTS §4 换算）在发请求前挡住并提示降 DPI（i18n `warn.export.tooBig`）；服务端仍留硬限，超 90 MB/页回 400 `page_too_large`|2026-11-02|ask P5 轮 raster-limit|
+|PR1|印章预设存什么|图片 + `api.apply.*` 全套参数（推荐）/ 只存参数组（图片另选）/ 图片 + 参数 + 导出参数（工作预设）|已确认：图片 + 印章/骑缝参数（含 `seal.prepare.*` 去背选项），导出参数不进预设|2026-11-02|ask 第 6 轮 preset-scope|
+|PR2|预设库界面与导入导出|印章段内联：下拉 + 保存/另存/删除（推荐）/ 内联 + 两个 zip 按钮 / 独立缩略图面板|已确认：印章段内联 `#seal-preset-select` + `#seal-preset-load` + `#seal-preset-save` + `#seal-preset-delete`；不做 zip（`%APPDATA%\AutoStamp\seals\` 目录即数据）|2026-11-02|ask 第 6 轮 preset-ui|
+|RF1|最近文件入口形态|启动页列表 + 顶栏下拉（推荐）/ 只在启动页空态列表 / 右侧栏常驻面板|已确认：启动页 `#empty-recent` 列表 + 顶栏 `#recent-open` 下拉（`#recent-menu`），两处同一个数据源（`config.recentFiles`，最多 24 条，P0 已实现）|2026-11-02|ask 第 7 轮 recent-ui|
+|BC1|批处理进度通道|面板内队列 + SSE 流（推荐）/ 队列 + 轮询 status / 无队列 UI 一次性任务|已确认：队列 `#batch-queue` + 每文件状态 排队/进行中/成功/失败。（原 `GET /api/batch/events` SSE 被 BM1 作废：批处理由前端逐文件跑链，进度就是前端队列状态，不再有 SSE 路由）|2026-11-02|ask 第 6 轮 batch-progress + 第 8 轮 batch-mode|
+|BC2|批处理输入与输出命名|多文件 + 目录，输出同级 `<名>_seal.pdf`（推荐）/ 输出写进 `out/` / 可选覆盖原文件|已确认：输入 = `fs/pick` 多选 + 目录；输出 = 与源同目录、同名加 `_seal`（派生产物，重跑可覆盖）；**绝不覆盖源文件**；失败项跳过并记错误码|2026-11-02|ask 第 6 轮 batch-io|
+|BC3|批处理是否带切分/骑缝|可选开关 `autoSplit` + `crossPage`（推荐）/ 只盖普通印章 / 强制 auto 切分|已确认：两个开关随任务走；`autoSplit` 带 `splitMode/rows/cols`（切分词表 = §2.2），`crossPage` 带 `binding/startOffset`|2026-11-02|ask 第 7 轮 batch-split|
+|BC4|批处理的导出形态|只矢量落盘（推荐）/ 让用户也选光栅参数|第 8 轮（2026-11-02）确认：**走前端逐文件完整链**，光栅的 dpi/质量 真生效（`api.batch.dpi/customDpi/quality`），见 BM1；原先「只矢量落盘」的实现决定作废|2026-11-02|ask 第 8 轮 batch-mode|
+|BM1|批处理怎么跑|前端逐文件跑完整链（真 dpi/质量）/ 后端作业只做矢量 / 两者都做|已确认：前端逐文件跑完整链 —— `fs/pick`(filePath) → `open` →（`split`）→ `apply` →（`export` 光栅，页位图由前端渲染回传）→ `save(mkdirs)`；并发 = 前端队列数（`api.batch.concurrency`，默认 2，1..8）。BC1 的 SSE 通道随之作废：队列与进度都在前端|2026-11-02|ask 第 8 轮 batch-mode|
+|BM2|批处理输出放哪里|每文件建 `原名_batch` 子目录 / 单个 `_batch` 目录 + 文件名加前缀|已确认：原目录下只加一个 `_batch`，内部 N 个 PDF，文件名 `原名.dpi<数字>.q<数字>.pdf`（例 `a-01.dpi150.q75.pdf`；取代 BC2 的「同名加 `_seal`」）；**绝不改源文件**；**单扩展名**是硬要求（`fsx.ValidateTargetPath`/`CheckWriteTarget` 只认 `.pdf`，多后缀会被 `path_denied`）|2026-11-02|ask 第 8 轮 batch-output|
+|BM3|批处理的印章与参数从哪来|选一个已存印章预设 / 用当前面板参数 + 当前上传印章|已确认：选一个已存预设（印章图 + 盖章/骑缝参数都从预设，PR1）；`api.batch.presetName` 是必填项，没选预设不开工|2026-11-02|ask 第 8 轮 batch-params|
+|BM4|加密 PDF 在批处理里怎么处理|跳过 + 报表列出（不弹密码）/ 整批用一个密码框|已确认：跳过并记 `password_required` 到报表，不弹密码框；要处理加密件回单文件走链（§2 `api.open.pw`）|2026-11-02|ask 第 8 轮 batch-password|
+|BM5|预设里的 `pages` 在批处理里怎么作用|原样照抄（可能 400）/ 逐文档求交集|实现决定（2026-11-02，`app-batch.js` 的 `pagesForDoc`）：预设的 pages 词表**对每一份文档**解析 —— 越界页丢弃（1 页文档配 `1-2,5` 预设是正常情况，不是错误），交集为空则回退 `all`。否则「一个预设跑不同页数」的核心场景直接失败。单文档面板不受影响（W4 语义不变）|2026-11-02|实现决定|
+|PC1|交付打包形态|zip：单 exe + README（推荐）/ zip + 带图标 exe / 不做安装包|已确认：`build.ps1 -Task package` 产 `dist\autostamp-<ver>-win64.zip`（webview-stripped exe + README）；不做安装器、不做图标资源（要 .syso 就得引外部工具）|2026-11-02|ask 第 6 轮 packaging|
+|OP1|P6 可选项（页眉页脚 / 多印章）|不做，登记为未采纳（推荐）/ 做页眉页脚|已确认：不做。多印章已由 P2 的多实例覆盖；页眉页脚不在产品需求 1–5 内|2026-11-02|ask 第 7 轮 optional-scope|
 
 
 D2–D4、L1、CP1 已在 P0.5 第 1 轮确认（2026-10-29）；D1、I1、S1、E1 在第 2 轮确认（同日）。
 
 W5、W6 是 P5（光栅导出）开工前的落盘/保存语义，用第 5 轮确认（2026-11-02）。
+P6 的 PR1/PR2/RF1/BC1–BC3/PC1/OP1 是开工前的预设/批处理/打包语义,用第 6 轮（5 条）与
+第 7 轮（3 条）确认（2026-11-02）。BC4 是实现决定,不是新语义:光栅的页位图只能来自
+前端预览（pdfcpu 无 rasterize,FACTS §2.4）,批处理没有预览,所以批处理只走矢量落盘。
 V1–V3 是 P1 开工前的形态问题，用第 3 轮确认（同日），因为它们改的是预览区/分页条的可见形态而非字段词表。
 B1/D5 属 `IMPLEMENTATION_PLAN` §9 的「不阻塞 P0.5」，按 §9 默认实现并在此登记。
 C1 是 P2 叠加层落地的坐标语义，本轮未评审：先按默认实现，落盘一致性（预览==落盘）靠 P4 的

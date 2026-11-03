@@ -334,3 +334,67 @@ func TestSnapshotCopiesSlice(t *testing.T) {
 		t.Error("Snapshot must not alias the stored slice")
 	}
 }
+
+// The batch group is the front-end run-queue's own settings (api.batch.*). Its
+// dpi/quality really drive the per-file raster export (AGENTS §5.21 BM1), so the
+// defaults are pinned to what UI_SPEC §8 BR3/BR6 confirm, and the clamp rules
+// guard against a silent "stamped at an unexpected resolution".
+func TestBatchDefaultsMatchVocabulary(t *testing.T) {
+	b := Default().Batch
+	if b.DPI != "150" || b.CustomDPI != 150 || b.Quality != 75 {
+		t.Errorf("batch defaults = %+v, want dpi 150 / customDpi 150 / quality 75", b)
+	}
+	if b.Concurrency != 2 {
+		t.Errorf("batch.concurrency = %d, want the BR3 default 2", b.Concurrency)
+	}
+	if b.PresetName != "" {
+		t.Errorf("batch.presetName = %q, want empty (BR6: chosen, not guessed)", b.PresetName)
+	}
+	s := Default()
+	if err := Sanitize(&s); err != nil {
+		t.Fatalf("Default() must sanitize clean: %v", err)
+	}
+}
+
+func TestBatchSanitizeClamps(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		mut  func(*Settings)
+		ok   func(*Settings) bool
+	}{
+		{"dpi out of the three-step vocabulary falls back to 150", func(s *Settings) { s.Batch.DPI = "999" }, func(s *Settings) bool { return s.Batch.DPI == "150" }},
+		{"custom dpi below 96 clamps up", func(s *Settings) { s.Batch.CustomDPI = 10 }, func(s *Settings) bool { return s.Batch.CustomDPI == 96 }},
+		{"quality above 95 clamps down", func(s *Settings) { s.Batch.Quality = 200 }, func(s *Settings) bool { return s.Batch.Quality == 95 }},
+		{"concurrency above 8 clamps down (BR3)", func(s *Settings) { s.Batch.Concurrency = 64 }, func(s *Settings) bool { return s.Batch.Concurrency == 8 }},
+		{"concurrency below 1 clamps up", func(s *Settings) { s.Batch.Concurrency = 0 }, func(s *Settings) bool { return s.Batch.Concurrency == 1 }},
+	} {
+		s := Default()
+		tc.mut(&s)
+		if err := Sanitize(&s); err == nil {
+			t.Errorf("%s: want a warning", tc.name)
+		}
+		if !tc.ok(&s) {
+			t.Errorf("%s: clamp did not land, batch = %+v", tc.name, s.Batch)
+		}
+	}
+}
+
+func TestBatchPatchMergesOnlySentFields(t *testing.T) {
+	s := Default()
+	p := Patch{Batch: &PatchBatch{Quality: intp(90), Concurrency: intp(4)}}
+	Merge(&s, &p)
+	if err := Sanitize(&s); err != nil {
+		t.Fatalf("patched batch must stay in vocabulary: %v", err)
+	}
+	if s.Batch.Quality != 90 || s.Batch.Concurrency != 4 {
+		t.Errorf("batch after patch = %+v, want quality 90 / concurrency 4", s.Batch)
+	}
+	if s.Batch.DPI != "150" || s.Batch.CustomDPI != 150 {
+		t.Errorf("un-sent batch fields must survive: %+v", s.Batch)
+	}
+	if s.Export.Quality != 75 {
+		t.Errorf("batch patch must not touch export: %+v", s.Export)
+	}
+}
+
+func intp(v int) *int { return &v }

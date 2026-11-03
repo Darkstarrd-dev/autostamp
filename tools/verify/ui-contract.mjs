@@ -104,6 +104,10 @@ const PREFIX = {
   "seal.prepare": "/api/pdf/seal/prepare",
   apply: "/api/pdf/apply",
   export: "/api/pdf/export",
+  // batch has no server-side job route (BM1: the front-end walks
+  // fs/pick -> pdf/open -> split -> apply -> export -> save itself), so the
+  // vocabulary maps onto the /api/pdf family those steps exercise.
+  batch: "/api/pdf",
   save: "/api/pdf/save",
   "seal.preset": "/api/seal/preset",
 };
@@ -140,10 +144,12 @@ for (const f of mockFields) {
   if (p === null) continue;
   seenPrefix.add(p);
   if (!PREFIX[p]) bad("E-ROUTE", `data-field "${f}" has unknown prefix "${p}" (UI_SPEC §2 vocabulary)`);
-  else if (!routes[PREFIX[p]]) bad("E-ROUTE", `prefix "${p}" maps to ${PREFIX[p]} which is absent from AGENTS §6`);
+  else if (!Object.keys(routes).some((r) => r === PREFIX[p] || r.startsWith(PREFIX[p] + "/")))
+    bad("E-ROUTE", `prefix "${p}" maps to ${PREFIX[p]} which is absent from AGENTS §6`);
 }
 for (const [prefix, url] of Object.entries(PREFIX)) {
-  if (!routes[url]) bad("E-ROUTE6", `UI_SPEC §2 prefix "${prefix}" -> ${url} is not in AGENTS §6`);
+  if (!Object.keys(routes).some((r) => r === url || r.startsWith(url + "/")))
+    bad("E-ROUTE6", `UI_SPEC §2 prefix "${prefix}" -> ${url} is not in AGENTS §6 (sub-path routes count)`);
 }
 for (const f of fieldNames) {
   const ent = fieldMap.get(f);
