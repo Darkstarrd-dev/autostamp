@@ -1,6 +1,6 @@
 # AutoStamp — 实施计划（IMPLEMENTATION PLAN）
 
-> 最后核对：2026-11-03（**P0–P7 全部完成**；产品需求 1–6 全在真窗口里可用；同日另加 PD1/PD2 粘贴/拖拽装载 + impeccable polish，commit `7d241d3`。出货 = `build.ps1 -Task stripped,package` 的 win64 zip）。**阶段计划已收官，当前工作模式 = 人工端到端验收 + 细节调整 + 功能细化，走 §0 第 9 条与 §10.1。**
+> 最后核对：2026-11-03（**P0–P7 全部完成**；产品需求 1–6 全在真窗口里可用；同日另加 PD1/PD2 粘贴/拖拽装载 + impeccable polish，commit `7d241d3`；另新增单 exe 出口 `build1.ps1` / UPX 极限压缩 `buildm.ps1`，FACTS §4.3。出货 = `build.ps1 -Task stripped,package` 的 win64 zip）。**阶段计划已收官，当前工作模式 = 人工端到端验收 + 细节调整 + 功能细化，走 §0 第 9 条与 §10.1。**
 > 依赖/浏览器事实引用 `docs/FACTS.md` 编号，禁止凭记忆改写。约束见 `AGENTS.md`。
 
 ## 0. 新对话恢复执行协议（执行入口）
@@ -514,4 +514,5 @@ P0.5 追加必问项（不属上表）：布局密度、骑缝章预览形态、
 |---|---|---|---|
 |PD1/PD2 粘贴/拖拽装载|用户任务 2026-11-03|已实现，commit `7d241d3`|`shell-smoke` 装载断言 16 条（reject 词表、单 PDF adopt、图片 I1 语义、输入框放行、`#drop-hint`）；UI_SPEC §8 PD1/PD2|
 |impeccable polish：导出段淡化删除 + `.seg.sm` 内边距|`detect` 扫描 8 findings|已实现，commit `7d241d3`|真链复扫 = 0 findings；`build.ps1 -Task verify` 失败 0 / 跳过 0|
+|单 exe 出口 `build1.ps1` + 极限压缩 `buildm.ps1`|用户任务 2026-11-03|已实现（未 commit）|build1 = 19,752 KB（webview+strip，同 `build.ps1 -Task stripped`，输出名 `dist\autostamp.exe`）；buildm 全链 exit 0：20,226,048 → 6,157,312 B（30.44%；ultra-brute 96.6 s，`-Fast` 9.2 s 同尺寸字节 = brute 零增益），`upx -t` [OK] + 真启动 `/api/health` 门槛（FACTS §4.3）|
 |人工端到端验收轮（真窗口逐项走产品需求 1–6 + 装载）|用户操作|待验收|发现按行登记本表；触及 UI 语义 → UI_SPEC §8 先补确认行|

@@ -7,6 +7,8 @@
 > `fsx` `PickDirs`/`ListMatching`、`fs/pick{dir:true}`、`save{mkdirs:true}`、前端批处理跑链
 > （AGENTS §5.21 BM1，**没有后端作业路由/SSE**）、`package` 打包、`strictOrigin` 默认开 + `nosniff`。
 > `app-crosspage.js` 这个计划名从未创建，真实形态在 `app-overlay.js`+`app-shell.js`。
+> 同日新增 `build1.ps1`/`buildm.ps1`：单 exe 出口 `dist\autostamp.exe`（覆盖），buildm 走 UPX `--ultra-brute`
+> 极限压缩 + 自校验/真启动门槛（AGENTS §4、FACTS §4.3）。
 >
 > 新增/删除包必须同步本文件（AGENTS §10.1）。阶段状态见 `docs/IMPLEMENTATION_PLAN.md §10`。
 
@@ -117,6 +119,8 @@
 |文件|作用|
 |---|---|
 |`build.ps1`|一键：`clean → vet → test → genfix/fixtures → 3 个 exe → verify（十脚本）→ sizes`；**P6 起 `package`（PC1）**：`autostamp-<rev>-win64.zip` = `autostamp.exe` + `README.md`，带 25 MB 体积门；`-Task`（逗号列表）/`-Watch`/`-Run`；失败退出码 1（AGENTS §4）。VCS 短号取 `go version -m` 的 `vcs.revision=`（旧正则按空白匹配，所以之前打印 `commit n/a`）|
+|`build1.ps1`|单 exe 出口：webview+strip → `dist\autostamp.exe`（覆盖；运行中进程先报错）；与 build.ps1 的 stripped 同构建、输出名不同（AGENTS §4）|
+|`buildm.ps1`|极限压缩出口：同 build1 构建 → `UPX --ultra-brute`（`-Fast` = `--best --lzma`；upx 缺失自动装 `tools\upx\`）→ `upx -t` + 真启动 `/api/health` 两道门槛（AGENTS §4、FACTS §4.3）|
 |`docs/FACTS.md §5.1`|就地可重跑的探针清单 ↔ 本文编号映射|
 
 ## 6. 数据目录（运行期，不属于仓库）

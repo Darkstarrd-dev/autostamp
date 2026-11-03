@@ -2,6 +2,10 @@
 
 > `PROJECT_MAP.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-03 — 新增 `build1.ps1` / `buildm.ps1` 行（§5 构建与校验）
+
+- §5 表增两行：单 exe 出口（webview+strip → `dist\autostamp.exe`）与极限压缩出口（UPX `--ultra-brute`
+  + 自校验/真启动门槛）。头「最后核对」补同日增量。实测数据在 FACTS §4.3。
 
 ## 2026-11-03 — PD1/PD2 装载 gate 行 + i18n 282 键 + style.css 行更新
 

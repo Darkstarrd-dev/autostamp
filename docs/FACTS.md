@@ -1,6 +1,6 @@
 # docs/FACTS.md — 实测事实（依赖与浏览器）
 
-> 最后核对：2026-11-02（本机 Windows + Go 1.26.5 + Chrome 151 + WebView2 Runtime）。
+> 最后核对：2026-11-03（新增 §4.3 UPX 极限压缩实测；本机 Windows + Go 1.26.5 + Chrome 151 + WebView2 Runtime）。
 > §1.2/§1.3/§1.4 由 `tools/verify/pixel-matrix.mjs`（2026-10-29）与
 > `tools/verify/overlay-smoke.mjs`（2026-10-30）在仓库内重跑；§1.7 P1、§1.8 P2、
 > §1.9 P4 回读、§2.3 切分、§2.6 落盘几何、§4 导出体积表（预估断言，见 §4 末）均可就地重跑，命令见 §5.1。
@@ -416,6 +416,24 @@
   version 来自 `debug.ReadBuildInfo()` 的 VCS 戳(`v0.0.0-<ts>-<hash>[+dirty]`),
   前端据此确认端口上确实是本 App(`app-shell.js` 名称不匹配时告警)。
 - 实测本机输出:`autostamp v0.0.0-20261029…+dirty go1.26.5 windows/amd64 (commit …dirty)`。
+
+### 4.3 UPX 极限压缩（实测 2026-11-03，UPX 5.0.2 win64，`buildm.ps1`）
+
+|阶段|命令|实测|
+|---|---|---|
+|输入（= build1 产物：`-tags webview -trimpath -ldflags "-s -w"`）|`build1.ps1` / `buildm.ps1` 第 1 步|**20,226,048 B**（≈19.3 MiB）|
+|极限打包|`upx --ultra-brute -q`|**6,157,312 B**（≈5.9 MiB，ratio 30.44%），**98.5 s**|
+|快速档对照|`upx --best --lzma -q`|**6,157,312 B**（同尺寸字节），9.5 s|
+
+- Go 1.26.5 × UPX 5.0.2 组合无破坏：两道门槛 = `upx -t` 自校验 [OK] + 真启动
+  （`-window=false -no-browser`，沙箱化 `%APPDATA%`/`%LOCALAPPDATA%`）应答 `/api/health`——
+  `buildm.ps1` 内置，任一失败退出码 1（这是「压上了就出货」的假绿风险门槛）。
+- `--ultra-brute` 对本二进制**零增益**（与 `--best --lzma` 同尺寸），耗时 10 倍；`-Fast` 就是为此而设。
+- 打包后 `go version -m` 读不出 commit（UPX 剥掉 buildinfo note 区布局），版本在打包前打印（AGENTS §4）。
+- AV 误报：UPX 压缩 PE 常被按「UPX 打包器」签名拦截，分发渠道慎用（改走 build1 未压缩版）。
+- upx 定位：PATH → `tools\upx\upx.exe` → 自动从 GitHub releases 取 v5.0.2；`tools/upx/` 由
+  `.gitignore` 的 `*.exe` 覆盖，不入库、不进 embed（UPX 只是构建期工具，不随 exe 出货）。
+- 复现：`powershell -NoProfile -File buildm.ps1`（或手动 `tools\upx\upx.exe --best --lzma -q -o <tmp> <输入>`）。
 
 ## 5. 复现方式
 

@@ -2,6 +2,13 @@
 
 > `docs/FACTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-03 — §4.3 新增：UPX 极限压缩实测（`buildm.ps1`）
+
+- 输入 20,226,048 B（webview+strip）→ `upx --ultra-brute` 6,157,312 B（30.44%，98.5 s）；
+  `--best --lzma` 同字节尺寸只 9.5 s ⇒ brute 零增益，`-Fast` 档写进脚本。
+- 门槛两道（`upx -t` + 真启动 `/api/health`）登记进正文；UPX 5.0.2 × Go 1.26.5 无破坏。
+- 坑登记：打包后 `go version -m` 读不出 commit；AV 按 UPX 打包器签名误报风险。
+
 ## 2026-11-02 — §2.7 新增：原生目录选择器实测（批处理输入 BM1）
 
 - 实测对象：PowerShell `-STA` 下的 `System.Windows.Forms.FolderBrowserDialog`

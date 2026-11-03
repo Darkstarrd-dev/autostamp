@@ -98,6 +98,8 @@ powershell -NoProfile -File build.ps1 -Task verify     # 只跑 UI 契约/冒烟
 powershell -NoProfile -File build.ps1 -Task genfix,fixtures   # 只刷新 docs/ui/fixtures 素材
 powershell -NoProfile -File build.ps1 -Task webview -Run      # 编窗口版并直接启动
 powershell -NoProfile -File build.ps1 -Task stripped,package  # 出货件 + win64 zip（PC1）
+powershell -NoProfile -File build1.ps1              # 单 exe 出口：webview+strip -> dist\autostamp.exe（覆盖）
+powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 构建后 UPX 重打包（覆盖）
 ```
 
 - 任一任务失败 -> 退出码 1（汇总行「失败 N / 跳过 M」）；根目录还没有 `go.mod`/`*.go` 时
@@ -115,6 +117,15 @@ powershell -NoProfile -File build.ps1 -Task stripped,package  # 出货件 + win6
 - `-Run` 是开关（等价于在任务列表末尾追加 `run`）；`dist` 里没有 `autostamp*.exe` 时只打提示，
   说明 P0 未开工、当前只有 `genfix.exe` 这类 CLI 产物。
 - 上面手敲的 `go build` 命令仍有效，两者等价：脚本只是把本节命令固化 + 加校验/体积输出。
+- `build1.ps1` / `buildm.ps1`（2026-11-03 新增的单 exe 出口，用户决定同名 `autostamp.exe`）：产物固定写
+  `dist\autostamp.exe`（已存在则覆盖；检测到同名进程在跑时先报错退出，不静默跳过）。build1 = build.ps1 的
+  stripped 构建、只是输出名不同；buildm 在 build1 同一构建后加 `UPX --ultra-brute`（`-Fast` 可退到
+  `--best --lzma`），PATH 里没有 `upx` 时自动从 GitHub releases 取 v5.0.2 装进 `tools\upx\`（`.gitignore`
+  的 `*.exe` 覆盖它，不入库、不进 embed——UPX 只是构建期工具，不随 exe 出货）。打包后门槛两道：`upx -t`
+  自校验 + 真启动（`-window=false -no-browser` 沙箱化运行）应答 `/api/health`，任一失败退出码 1。
+  **注意两件事**：`build.ps1 -Task console` 同样写 `dist\autostamp.exe`（console 构建），二者互盖、二选一
+  别混用；UPX 打包后 `go version -m` 读不出 commit（版本在打包前打印），且压缩产物常被 AV 按打包器签名
+  误报（实测体积与耗时见 FACTS §4.3）。
 
 - 首次运行在 `%APPDATA%\AutoStamp\` 生成 `settings.json`（印章默认值、切分默认值、
   导出默认 DPI/质量）+ `seals/`（印章预设）；临时会话资产在
@@ -394,7 +405,7 @@ powershell -NoProfile -File build.ps1 -Task stripped,package  # 出货件 + win6
 |改导出 DPI/质量|`docs/FACTS.md` §4 + `UI_SPEC §8` W5/W6|`internal/pdfcore/raster.go`（writer 字节结构）、`internal/api/export.go`（协商两形态 + 硬限）、`web/static/app-shell.js`（保存内的 raster 通道 + `MAX_EXPORT_PAGE_BYTES` 拦截 + `exportDpiOf/exportQualityOf` + `lastExport` 幂等）、`tools/verify/export-smoke.mjs`|
 |改预设库|`UI_SPEC §8` PR1/PR2 + 本文件 §5.20/§6|`internal/presetstore/store.go`（索引 `presets.json` + `p-<hash>.png`，原子写）、`internal/api/seal_preset.go`（四路由 + `validatePresetParams`）、`web/static/app-batch.js`（预设 存/载/删/列表）、`web/static/app-api.js`（`preset*` 通道）、`tools/verify/batch-smoke.mjs --only=preset|
 |改批处理|`UI_SPEC §8` BM1-BM5 + 本文件 §5.21（**没有后端作业路由、没有 SSE**）|`web/static/app-batch.js`（`runOne` 跑链 + `batchTarget` + `pagesForDoc` + 报表下载）、`web/static/index.html`（批处理段字段）、`web/static/app-api.js`（`fsPickDir`/`exportUpload`）、`internal/api/pdf.go`（`fs/pick` 的 `dir` 分支）、`internal/api/save.go`（`{mkdirs}`）、`internal/fsx/list.go`（`ListPDFs`）、`tools/verify/batch-smoke.mjs --only=batch|
-|改打包/发布物|本文件 §4（PC1）|`build.ps1`（`Start-Package`：`autostamp-<rev>-win64.zip` = strip 窗口版重命名 `autostamp.exe` + `README.md`，25 MB 体积门）、`README.md`（随 zip 一起出货，必须保持准确）|
+|改打包/发布物|本文件 §4（PC1）|`build.ps1`（`Start-Package`：`autostamp-<rev>-win64.zip` = strip 窗口版重命名 `autostamp.exe` + `README.md`，25 MB 体积门）、`README.md`（随 zip 一起出货，必须保持准确）、`build1.ps1`/`buildm.ps1`（单 exe 出口 `dist\autostamp.exe`；极限压缩走 UPX，见 FACTS §4.3）|
 |改最近文件|`UI_SPEC §8` RF1|`internal/config/{types.go,sanitize.go,store.go}`（`RecentFiles`/`SetRecent`,P0 已有）、`web/static/app-shell.js`（`renderRecent`/`recentMenu`）、`web/static/index.html`（`#empty-recent`、`#recent-open`）|
 |改粘贴/拖拽装载|`UI_SPEC §8` PD1/PD2 + 本文件 §5.23（无新路由/新字段）|`web/static/app-shell.js`（`submitFiles`/`classifyLoad`/paste/dragover/drop/`state.loadLog`）、`web/static/index.html`（`#drop-hint`）、`web/static/style.css`（`[data-drag]`+`#drop-hint`）、`web/static/app-seal.js`（图片经 `seal/prepare`）、`tools/verify/shell-smoke.mjs`（装载断言）|
 |改预览渲染|`docs/FACTS.md` §1|`web/static/app-preview.js`、`web/static/vendor/pdfjs/`|

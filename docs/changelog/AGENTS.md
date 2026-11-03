@@ -2,6 +2,15 @@
 
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-03 — §4 新增 `build1.ps1`/`buildm.ps1` 单 exe 出口 + §11 发布物行扩充
+
+- §4 命令块追加两行 + 一段细则：两个脚本都把产物写进 `dist\autostamp.exe`（已存在覆盖；同名进程在跑先
+  报错退出）。build1 = stripped 同构建换输出名；buildm = 构建后 UPX `--ultra-brute`（`-Fast` 退
+  `--best --lzma`），upx 缺失自动从 GitHub 取 v5.0.2 装 `tools\upx\`（git 不入库、不进 embed），
+  打包后 `upx -t` + 真启动 `/api/health` 门槛。登记两坑：与 `build.ps1 -Task console` 互盖同名产物；
+  打包后 `go version -m` 读不出 commit + AV 打包器误报风险。
+
+
 
 ## 2026-11-03 — §0 文档清单：IMPLEMENTATION_PLAN 行标注收官 + 指向 §10.1 工作模式
 

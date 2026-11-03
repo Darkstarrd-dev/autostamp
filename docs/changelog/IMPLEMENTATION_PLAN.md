@@ -2,6 +2,12 @@
 
 > `docs/IMPLEMENTATION_PLAN.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-03 — §10.1 登记：单 exe 出口 `build1.ps1` + 极限压缩 `buildm.ps1`
+
+- 新行登记用户任务（两个脚本都写 `dist\autostamp.exe`，覆盖语义）；实测回填：buildm
+  全链 exit 0，20,226,048 → 6,157,312 B（30.44%），ultra-brute 96.6 s、`-Fast` 9.2 s
+  同尺寸字节；`upx -t` + 真启动 `/api/health` 门槛全过。数据在 FACTS §4.3。
+
 
 ## 2026-11-03 — 工作模式切换：§10.1 人工端到端验收 + 细节调整 + 功能细化
 
