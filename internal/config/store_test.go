@@ -27,7 +27,6 @@ func TestDefaultsMatchSpecVocabulary(t *testing.T) {
 		want string
 	}{
 		{"ui.lang", s.UI.Lang, "en"},
-		{"ui.density", s.UI.Density, "two-col"},
 		{"ui.theme", s.UI.Theme, "light"},
 		{"apply.opacity", jsonNum(s.Apply.Opacity), "0.6"},
 		{"seal.prepare.resampleDpi", intStr(s.Seal.ResampleDPI), "300"},

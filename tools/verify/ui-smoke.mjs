@@ -117,26 +117,24 @@ async function main() {
     }
   }
 
-  // 3b. the three densities (D-L1 vocabulary) each reflow without overflow
-  const dens = await evaluate(`
-    (function () {
-      var m = window.__autoStampMock;
-      var out = {};
-      ["single-col", "collapsed", "two-col"].forEach(function (d) {
-        m.setDensity(d);
+  // 3b. the layout is fixed two-col: the sidebar column stays 380px at both
+  // contract viewports and nothing reflows sideways (no density control).
+  for (const [w, h] of [[1280, 720], [1440, 900]]) {
+    await viewport(w, h);
+    const fixed = await evaluate(`
+      (function () {
+        var m = window.__autoStampMock;
         var sb = m.q("#right-sidebar").getBoundingClientRect();
-        out[d] = {
-          density: m.q("#app-main").dataset.density,
-          field: m.S.p["ui.density"],
+        return {
           sidebarW: Math.round(sb.width),
-            overflow: m.probe("overflow"),
+          densityAttr: m.q("#app-main").hasAttribute("data-density"),
+          densityCtl: Boolean(m.q("#density-seg")),
+          overflow: m.probe("overflow"),
         };
-      });
-      return out;
-    })()`);
-  cmp("single-col spans the full width", [dens["single-col"].density, dens["single-col"].field, dens["single-col"].sidebarW === 1440, dens["single-col"].overflow], ["single-col", "single-col", true, false]);
-  cmp("collapsed hides the panel", [dens["collapsed"].density, dens["collapsed"].sidebarW, dens["collapsed"].overflow], ["collapsed", 0, false]);
-  cmp("two-col keeps a bounded panel", [dens["two-col"].sidebarW === 380, dens["two-col"].overflow], [true, false]);
+      })()`);
+    cmp(`${w}x${h} fixed two-col layout`, [fixed.sidebarW === 380, fixed.overflow], [true, false]);
+    if (fixed.densityAttr || fixed.densityCtl) bad(`${w}x${h}: the density control/density attribute is still live`);
+  }
 
   // 4. i18n coverage: every key resolves to non-empty en and cn
   await evaluate('window.__autoStampMock.applyLang("en")');
@@ -155,7 +153,38 @@ async function main() {
   }
   if (!Object.keys(cnSnapshot).length) bad("i18n snapshot empty");
 
-  // 4b. ui.lang really swaps the panel field labels (leaf-level i18n targets)
+  // 4b. icon tooltips: every [data-i18n-title] control carries a cn twin, and
+  // applyLang must land it on title + aria-label (the accessible name).
+  const tooltips = await evaluate(`
+    (function () {
+      var m = window.__autoStampMock;
+      var read = function () {
+        return m.qa("[data-i18n-title]").map(function (e) {
+          return {
+            key: e.getAttribute("data-i18n-title"),
+            twin: e.getAttribute("data-i18n-title-cn"),
+            title: e.getAttribute("title"),
+            label: e.getAttribute("aria-label")
+          };
+        });
+      };
+      m.applyLang("cn");
+      var cn = read();
+      m.applyLang("en");
+      var en = read();
+      return { cn: cn, en: en };
+    })()`);
+  if (!tooltips.cn || !tooltips.cn.length) bad("the mock has no [data-i18n-title] control: every icon button needs a tooltip");
+  const bareTwin = tooltips.cn.filter((t) => !(t.twin || "").trim());
+  if (bareTwin.length) bad("tooltip keys without data-i18n-title-cn: " + bareTwin.map((t) => `${t.key}(${JSON.stringify(t.twin)})`).join(" "));
+  const enTitle = (tooltips.en || []).filter((t) => /[一-鿿]/.test(t.title || ""));
+  if (enTitle.length) bad("cn tooltip left over in en mode: " + enTitle.map((t) => `${t.key}(${JSON.stringify(t.title)})`).join(" "));
+  const enLabel = (tooltips.en || []).filter((t) => !(t.label || "").trim());
+  if (enLabel.length) bad("icon control without aria-label in en mode: " + enLabel.map((t) => t.key).join(" "));
+  const cnMismatch = (tooltips.cn || []).filter((t) => t.title !== t.twin || t.label !== t.twin);
+  if (cnMismatch.length) bad("cn tooltip not on title/aria-label: " + cnMismatch.map((t) => `${t.key}(title=${JSON.stringify(t.title)},label=${JSON.stringify(t.label)})`).join(" "));
+
+  // 4c. ui.lang really swaps the panel field labels (leaf-level i18n targets)
   const labels = await evaluate(`
     (function () {
       var m = window.__autoStampMock;

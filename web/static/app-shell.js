@@ -1,5 +1,5 @@
 // Copyright 2026 AutoStamp Authors. SPDX-License-Identifier: Apache-2.0
-// app-shell.js — the P0/P1 shell: state machine, i18n, density/theme, panel
+// app-shell.js — the P0/P1 shell: state machine, i18n, theme, panel
 // field binding, instance list, modals and shortcuts. No PDF geometry here
 // (P1 renders pages, P2 drags seals); the shell only owns contract state.
 //
@@ -27,7 +27,6 @@
   const PERSIST = {
     "ui.lang": ["ui", "lang"],
     "ui.theme": ["ui", "theme"],
-    "ui.density": ["ui", "density"],
     "api.seal.prepare.despill": ["seal", "despill"],
     "api.seal.prepare.alphaTrim": ["seal", "alphaTrim"],
     "api.seal.prepare.resampleDpi": ["seal", "resampleDpi"],
@@ -75,7 +74,7 @@
   const state = {
     lang: "en",
     theme: "light",
-    density: "two-col",
+    version: "", // GET /api/health version — the topbar/window title carrier
     settings: null,
     warning: "",
     instances: [],
@@ -102,14 +101,18 @@
   // labelFor resolves a key: CATALOG wins, otherwise the element's own text is
   // the en value and data-i18n-cn the cn value (UI_SPEC §4 rule).
   function pairFor(el, kind) {
-    const key = el.getAttribute(kind === "placeholder" ? "data-i18n-placeholder" : "data-i18n");
+    const attr = kind === "placeholder" ? "data-i18n-placeholder" : kind === "title" ? "data-i18n-title" : "data-i18n";
+    const key = el.getAttribute(attr);
     if (!key) return null;
     const entry = i18n && i18n.CATALOG[key];
     if (entry) return { key, en: entry.en, cn: entry.cn };
-    const attr = kind === "placeholder" ? "data-i18n-cn-placeholder" : "data-i18n-cn";
-    const cn = el.getAttribute(attr);
+    const cnAttr = kind === "placeholder" ? "data-i18n-cn-placeholder" : kind === "title" ? "data-i18n-title-cn" : "data-i18n-cn";
+    const cn = el.getAttribute(cnAttr);
     if (!cn) return null;
-    const en = kind === "placeholder" ? el.getAttribute("placeholder") : el.textContent.trim();
+    let en = null;
+    if (kind === "placeholder") en = el.getAttribute("placeholder");
+    else if (kind === "title") en = el.getAttribute("title");
+    else en = el.textContent.trim();
     return { key, en, cn };
   }
 
@@ -129,6 +132,15 @@
         const p = pairFor(el, "placeholder");
         if (p) el.setAttribute("placeholder", state.lang === "cn" ? p.cn : p.en);
       }
+    });
+    // HD1: the remaining topbar controls are icons, so their accessible name is
+    // the tooltip/aria-label pair, not visible text.
+    qa("[data-i18n-title]").forEach((el) => {
+      const p = pairFor(el, "title");
+      if (!p) return;
+      const text = state.lang === "cn" ? p.cn : p.en;
+      el.setAttribute("title", text);
+      el.setAttribute("aria-label", text);
     });
     qa("#lang-seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.value === state.lang)));
     renderInstances();
@@ -151,15 +163,6 @@
     if (name === "split-preview") q("#panel-split").open = true;
     if (name === "export") q("#panel-export").open = true;
     return name;
-  }
-
-  function setDensity(d) {
-    if (!["two-col", "single-col", "collapsed"].includes(d)) throw new Error(`unknown density: ${d}`);
-    state.density = d;
-    q("#app-main").dataset.density = d;
-    qa("#density-seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.value === d)));
-    persist("ui", { density: d });
-    return d;
   }
 
   function applyTheme(t) {
@@ -259,7 +262,6 @@
     Object.entries(patch || {}).forEach(([name, value]) => {
       if (name === "ui.lang") return applyLang(value);
       if (name === "ui.theme") return applyTheme(value);
-      if (name === "ui.density") return setDensity(value);
       writeField(name, value);
       // The verify hook drives the same events a real edit fires, so the
       // persist path and any side-effect handlers run exactly as in the UI.
@@ -291,7 +293,6 @@
     if (!s) return;
     if (s.ui) {
       if (s.ui.theme) applyTheme(s.ui.theme);
-      if (s.ui.density) setDensity(s.ui.density);
       if (s.ui.lang) applyLang(s.ui.lang);
     }
     const pairs = [
@@ -703,7 +704,6 @@
 
     bindSegment("lang-seg", "ui.lang", (v) => applyLang(v));
     bindSegment("theme-seg", "ui.theme", (v) => applyTheme(v));
-    bindSegment("density-seg", "ui.density", (v) => setDensity(v));
     bindSegment("apply-anchor", "api.apply.anchor", (v) => persist("apply", { anchor: v }));
     bindSegment("split-mode", "ui.split.mode", (v) => persist("split", { mode: v }));
     bindSegment("export-mode", "api.export.mode", (v) => { persist("export", { mode: v }); refreshEstimate(); });
@@ -750,7 +750,6 @@
     // --- P1 open channel: picker / upload / path box / drag and drop (AGENTS §6) ---
     q("#btn-open").addEventListener("click", () => pickAndOpen());
     q("#empty-pick").addEventListener("click", () => pickAndOpen());
-    q("#btn-upload").addEventListener("click", () => q("#file-input").click());
     q("#empty-upload").addEventListener("click", () => q("#file-input").click());
     q("#empty-open").addEventListener("click", () => openByPath());
     q("#empty-path").addEventListener("keydown", (e) => {
@@ -833,24 +832,6 @@
     });
     q("#pw-retry").addEventListener("click", () => retryOpen());
     q("#save-pick").addEventListener("click", () => pickSaveTarget());
-    // RF1: one data source, two surfaces; the dropdown re-reads settings on
-    // open because the server appended the last open behind our back.
-    q("#recent-open").addEventListener("click", async () => {
-      const menu = q("#recent-menu");
-      menu.hidden = !menu.hidden;
-      if (!menu.hidden) await refreshRecent();
-    });
-    q("#recent-menu").addEventListener("click", (e) => {
-      const item = e.target.closest("[data-recent-path]");
-      if (!item) return;
-      q("#recent-menu").hidden = true;
-      openRecent(item.dataset.recentPath);
-    });
-    q("#empty-recent").addEventListener("click", (e) => {
-      const item = e.target.closest("button[data-recent-path]");
-      if (item) openRecent(item.dataset.recentPath);
-    });
-    q("#recent-clear").addEventListener("click", () => clearRecent());
     q("#modal-layer .scrim").addEventListener("click", () => setModal(null));
     doc.addEventListener("keydown", onKey);
   }
@@ -1159,10 +1140,10 @@
 
   // ---------- open: the local-file channel (P1, AGENTS §6) ----------
   //
-  // Three ways in: the native picker (#btn-open / #empty-pick), the hidden
-  // <input type=file> (#btn-upload, plus drag/drop), and the typed path box
-  // (#empty-path + #empty-open). Every one of them lands in adopt(), which is
-  // the only place that changes the document state.
+  // Three ways in: the native picker (#btn-open / #empty-pick), the upload
+  // channel (#empty-upload → the hidden #file-input, plus drag/drop), and the
+  // typed path box (#empty-path + #empty-open). Every one of them lands in
+  // adopt(), which is the only place that changes the document state.
 
   // pickAndOpen asks the server to show the native dialog. A cancel is normal
   // (no toast), an unsupported platform gets a toast plus focus on the path box.
@@ -1766,11 +1747,15 @@
     return rot === 0 ? { width: w, height: h } : { width: h, height: w };
   }
 
+  // renderFileChip paints the topbar title (HD2): the app name plus the version
+  // while nothing is open, and the opened file's name appended after it. The
+  // full path and size stay in the tooltip so the visible line never wraps.
   function renderFileChip() {
     const el = q("#top-file");
     if (!el) return;
-    if (!state.file) return; // applyLang owns the empty label
-    el.textContent = `${state.file.name} · ${formatBytes(state.file.size)}`;
+    const base = `AutoStamp${state.version ? ` ${state.version}` : ""}`;
+    el.textContent = state.file ? `${base} ${state.file.name}` : base;
+    el.title = state.file ? `${state.file.path} · ${formatBytes(state.file.size)}` : "GET /api/health";
   }
 
   // formatBytes keeps the units language-neutral (KB/MB are not i18n strings).
@@ -1824,95 +1809,21 @@
     applyHash();
     api.health()
       .then((h) => {
-        q("#app-version").textContent = `${h.name} ${h.version}`;
+        // HD2: the version rides the window title — the native caption for the
+        // WebView2 window (main.go builds it) and document.title here for the
+        // browser fallback — and the topbar title string mirrors it.
+        state.version = h.version || "";
+        doc.title = `AutoStamp ${state.version}`.trim();
+        renderFileChip();
         if (h.name !== "autostamp") toast("warn", `foreign app on this port: ${h.name}`);
       })
-      .catch((e) => toast("error", `${e.code}: ${e.message}`));
     api.settings()
       .then((res) => {
         state.settings = res.settings;
         applySettings(res.settings);
-        renderRecent();
         if (res.warning) toast("warn", res.warning);
       })
       .catch((e) => toast("error", `${e.code}: ${e.message}`));
-  }
-
-  // ---------- recent files (RF1: empty-state list + topbar dropdown) ----------
-  //
-  // One data source (settings.recentFiles, max 24, maintained server-side on
-  // every open) with two surfaces. The dropdown re-reads settings when it
-  // opens, because the server appended the last open behind our back.
-  function renderRecent() {
-    const list = (state.settings && state.settings.recentFiles) || [];
-    const menu = q("#recent-menu");
-    if (menu) {
-      menu.textContent = "";
-      list.slice(0, 24).forEach((r) => {
-        const item = doc.createElement("button");
-        item.type = "button";
-        item.className = "menu-item";
-        item.dataset.recentPath = r.path;
-        item.textContent = r.path;
-        menu.append(item);
-      });
-      if (!list.length) {
-        const empty = doc.createElement("div");
-        empty.className = "menu-item";
-        empty.setAttribute("data-i18n", "recent.empty");
-        empty.textContent = t("recent.empty");
-        menu.append(empty);
-      }
-    }
-    const host = q("#empty-recent");
-    if (host) {
-      const ul = q("ul", host);
-      ul.textContent = "";
-      list.slice(0, 24).forEach((r) => {
-        const li = doc.createElement("li");
-        const path = doc.createElement("span");
-        path.textContent = `${r.path} `;
-        const btn = doc.createElement("button");
-        btn.type = "button";
-        btn.className = "btn mini";
-        btn.dataset.recentPath = r.path;
-        btn.setAttribute("data-i18n", "recent.open");
-        btn.textContent = t("recent.open");
-        li.append(path, btn);
-        ul.append(li);
-      });
-      const hint = q(".hintline", host);
-      if (hint) hint.hidden = list.length > 0;
-    }
-  }
-
-  async function refreshRecent() {
-    try {
-      const res = await api.settings();
-      state.settings = res.settings;
-    } catch (e) {
-      /* the rendered list just stays stale; boot already reported the error */
-    }
-    renderRecent();
-  }
-
-  // openRecent reuses the typed-path channel: the recent entry is a path on
-  // disk, so it goes through the same grant + open chain as #empty-open.
-  async function openRecent(path) {
-    if (!path) return;
-    writeField("api.fs.pick.filePath", path);
-    await openByPath();
-  }
-
-  async function clearRecent() {
-    try {
-      const res = await api.patchSettings({ recentFiles: [] });
-      state.settings = res.settings;
-      renderRecent();
-      toast("warn", t("recent.empty"));
-    } catch (e) {
-      toast("error", `${e.code}: ${e.message}`);
-    }
   }
 
   // ---------- verify hooks (UI_SPEC §7) ----------
@@ -1931,8 +1842,6 @@
         return html.dataset.state;
       case "overflow":
         return doc.documentElement.scrollWidth > doc.documentElement.clientWidth + 1;
-      case "density":
-        return q("#app-main").dataset.density;
       case "instances":
         return state.instances.map((i) => ({
           id: i.id,
@@ -1956,7 +1865,9 @@
       case "theme":
         return state.theme;
       case "version":
-        return q("#app-version").textContent;
+        return state.version;
+      case "docTitle":
+        return doc.title;
       case "estimate": {
         const e = computeEstimate();
         if (!e) return { mode: "", pagesSelected: 0, pagesTotal: 0, perPageBytes: null, totalBytes: null, perPageText: "", totalText: "" };
@@ -2040,13 +1951,17 @@
       const p = pairFor(el, "placeholder");
       if (p) out.push({ key: p.key, en: p.en, cn: p.cn, kind: "placeholder" });
     });
+    qa("[data-i18n-title]").forEach((el) => {
+      const p = pairFor(el, "title");
+      if (p) out.push({ key: p.key, en: p.en, cn: p.cn, kind: "title" });
+    });
     return out;
   }
 
   window.__autoStampShell = {
     STATES, state, escapeHtml,
     setState, verifyState, setParams, fields, ids, probe, i18nPairs,
-    applyLang, applyTheme, setDensity,
+    applyLang, applyTheme,
     setModal, clearToast, t, toast,
     q, qa,
     addInstance, selectInstance, deleteSelected, duplicateSelected,

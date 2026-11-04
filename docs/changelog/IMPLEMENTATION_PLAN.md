@@ -2,6 +2,26 @@
 
 > `docs/IMPLEMENTATION_PLAN.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-04 — §10.1 登记版本号取值（HD4）+ 顶栏行补真壳几何读数
+
+- §10.1 新行：版本 = `0.1-dev`，`internal/app.pickVersion` 不再让 Go 的伪版本进 UI；
+  门槛 = `version_test.go`（版本取值表）+ `shell-smoke` 的 `probe('version')`/`docTitle` 动态比对。
+- 顶栏收尾行补实测：真壳（headless 真 exe，1440×900）顶栏几何 = `#btn-open` x=12（最左）、
+  `#top-file` x=56、`save/shortcuts/lang/theme` = 1184/1228/1272/1353、svg 计数 1/1/1/2、
+  图标按钮文本 0 字符；该行状态改「已实现（随本轮提交）」。
+- 顺带修掉「单 exe 出口」行的过期状态（`未 commit` → `commit f46b31e`）。
+
+## 2026-11-03 — §10.1 登记：顶栏收尾（`UI_SPEC §8` HD1/HD2/HD3）
+
+- §10.1 新行：顶栏精简 + 图标化 + 标题承载版本/文件名 + 版式密度字段删除 + 最近文件入口删除；
+  来源 = 用户 2026-11-03 对话指令，门槛 = `build.ps1 -Task vet,test,verify`（`ui-contract` 三方一致、
+  `shell-smoke` 的 `docTitle` 断言、`ui-smoke` 无横向溢出）。
+- P6 交付段「最近文件入口」改成「后端保留、两个 UI 入口已删」；§10 状态表 P6 行的 RF1 片段追加作废
+  注记（当时的入口形态与 2026-11-03 的删除都写清楚，仍算历史回填）。
+- 头「最后核对」单行摘要重写：本轮 = 顶栏收尾，指向 §10.1；契约面同步在 `docs/UI_SPEC.md`
+  （§2 删 `ui.density` 字段行、§4 删 12 键 282 → 270、§6 删 6 个契约 id、§7 去 `setDensity`、
+  §8 新增 HD1–HD3 并把 L1/RF1 标作废）。
+
 ## 2026-11-03 — §10.1 登记：单 exe 出口 `build1.ps1` + 极限压缩 `buildm.ps1`
 
 - 新行登记用户任务（两个脚本都写 `dist\autostamp.exe`，覆盖语义）；实测回填：buildm

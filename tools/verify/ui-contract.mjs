@@ -3,8 +3,9 @@
 //
 // Checks that docs/ui/mockup.html, docs/UI_SPEC.md and AGENTS.md §6 agree:
 //   mock data-field  <->  UI_SPEC §2 field table  <->  AGENTS §6 route prefixes
-// plus state names, i18n keys (UI_SPEC §4), the DOM id contract (UI_SPEC §7),
-// fixture presence, and structural guards (no pdf.js annotation-save channel).
+// plus state names, i18n keys (UI_SPEC §4: the mock plus web/static/index.html),
+// the DOM id contract (UI_SPEC §7), fixture presence, and structural guards
+// (no pdf.js annotation-save channel).
 //
 // Usage: node tools/verify/ui-contract.mjs
 // Exit: 0 = pass, 1 = failures (each printed with a CODE tag).
@@ -35,7 +36,7 @@ const all = (re) => {
 };
 const mockFieldsRaw = [...new Set(all(/data-field="([^"]+)"/g))];
 const mockFields = mockFieldsRaw.filter((f) => /^(api|ui|decision)\.[A-Za-z0-9_.]+$/.test(f));
-const mockI18nKeys = [...new Set(all(/data-i18n="([^"]+)"(?!-)/g))];
+const mockI18nKeys = [...new Set(all(/data-i18n(?:-title)?="([^"]+)"(?!-)/g))];
 const mockPlaceholders = [...new Set(all(/data-i18n-placeholder="([^"]+)"/g))];
 const mockIds = [...new Set(all(/\sid="([^"]+)"/g))];
 const initState = (mock.match(/<html[^>]*data-state="([^"]+)"/) || [])[1];
@@ -171,7 +172,12 @@ for (const f of fieldNames) {
 // i18n keys: every mock key declared in §4, every §4 key used in the mock,
 // and the control convention <field-minus-api.>.ctl/hint for api.* fields.
 for (const k of mockI18nKeys) if (!i18nSet.has(k)) bad("E-I18N-MOCK", `mock key "${k}" missing from UI_SPEC §4`);
-const usedKeys = new Set([...mockI18nKeys, ...mockPlaceholders, ...dynKeys]);
+// web/static/index.html is the other half of the same vocabulary: a key the real
+// shell binds (the top-file hint inside #save-source / #confirm-path) is in use
+// even when the design artifact no longer hosts it.
+const shellMarkup = read("web/static/index.html");
+const shellI18nKeys = [...new Set([...shellMarkup.matchAll(/data-i18n(?:-title|-placeholder)?="([^"]+)"/g)].map((m) => m[1]))];
+const usedKeys = new Set([...mockI18nKeys, ...mockPlaceholders, ...dynKeys, ...shellI18nKeys]);
 for (const i of i18n) {
   if (!i.en || !i.cn) bad("E-I18N-EMPTY", `UI_SPEC §4 key "${i.key}" has empty en/cn`);
   if (!usedKeys.has(i.key)) bad("E-I18N-UNUSED", `UI_SPEC §4 key "${i.key}" not used in mock`);
@@ -179,6 +185,7 @@ for (const i of i18n) {
 for (const k of dynKeys) if (!i18nSet.has(k)) bad("E-I18N-DYN", `dynamic mock key "${k}" missing from UI_SPEC §4`);
 for (const m of mock.matchAll(/data-i18n-cn="([^"]*)"/g)) if (!m[1].trim()) bad("E-I18N-CN", "empty data-i18n-cn in mock");
 for (const m of mock.matchAll(/data-i18n-cn-placeholder="([^"]*)"/g)) if (!m[1].trim()) bad("E-I18N-CN", "empty data-i18n-cn-placeholder");
+for (const m of mock.matchAll(/data-i18n-title-cn="([^"]*)"/g)) if (!m[1].trim()) bad("E-I18N-CN", "empty data-i18n-title-cn");
 for (const f of fieldNames) {
   if (!f.startsWith("api.")) continue;
   const base = f.replace(/^api\./, "");

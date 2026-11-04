@@ -1,7 +1,7 @@
 /* AutoStamp shell styles.
    Token set is the contract (UI_SPEC §6 note in the mock header: "this is the
    style.css contract"); docs/ui/mockup.html keeps the same variables so the two
-   surfaces never drift. P0.5 decisions baked into layout: L1 density modes. */
+   surfaces never drift. The layout is fixed to two columns (HD3, 2026-11-03). */
 
 :root {
   --fg: #14181d;
@@ -47,29 +47,21 @@ body, button, input, select { font: inherit; }
 button { cursor: pointer; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* layout: density is decision L1 (UI_SPEC §8) */
+/* layout: two columns is fixed (UI_SPEC §8 HD3; L1 retired 2026-11-03) */
 #app-main {
   display: grid; height: 100vh;
   grid-template-columns: minmax(0, 1fr) 380px;
   grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas: "topbar topbar" "preview panel";
 }
-#app-main[data-density="single-col"] {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: "topbar" "preview" "panel";
-}
-#app-main[data-density="single-col"] #right-sidebar { border-left: 0; border-top: 1px solid var(--border); }
-#app-main[data-density="collapsed"] { grid-template-columns: minmax(0, 1fr); grid-template-areas: "topbar" "preview"; }
-#app-main[data-density="collapsed"] #right-sidebar { display: none; }
 
 /* topbar */
 #topbar {
   grid-area: topbar; display: flex; align-items: center; gap: var(--gap);
   padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface-2);
 }
-#topbar .brand { font-weight: 600; }
-#topbar .file-chip { font: var(--mono); color: var(--muted); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#topbar .version { font: var(--mono); color: var(--muted); }
+/* HD2: one left-aligned title string — AutoStamp <version> [filename] */
+#topbar .file-chip { font: var(--mono); color: var(--muted); max-width: min(56ch, 45vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .spacer { margin-left: auto; }
 
 .btn { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius); padding: 5px 10px; }
@@ -78,6 +70,11 @@ button { cursor: pointer; color: inherit; }
 .btn.ghost { border-color: transparent; background: transparent; }
 .btn.danger { color: var(--error); border-color: var(--error); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
+/* HD1: the remaining topbar controls are icon-only; the icon is decorative,
+   the accessible name comes from title/aria-label (i18n via data-i18n-title). */
+.btn.icon { display: inline-flex; align-items: center; justify-content: center; padding: 5px 8px; }
+.btn.icon .ic, .seg.sm .ic { width: 16px; height: 16px; display: block; }
+.seg.sm button { display: inline-flex; align-items: center; gap: var(--gap-sm); }
 
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .seg button { border: 0; background: var(--surface); padding: 5px 9px; }

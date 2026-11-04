@@ -2,6 +2,29 @@
 
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-04 — §4 版本条目补 `pickVersion` 规则（显示版本 = `0.1-dev`）
+
+- §4 的「版本用 Go 自动 VCS 注入」条目补一段：`internal/app.pickVersion` 只认真实标签，未打标签时
+  Go 的伪版本（`v0.0.0-<日期>-<hash>+dirty`）不进 UI，显示的就是 `devVersion`（当前 `0.1-dev`）；
+  窗口标题栏 / 标签页 / 顶栏标题 / `/api/health` 四处同源（`UI_SPEC §8` HD2 + HD4）。
+  仍然没有 `-X main.xxx` 形式 ldflags，出货要换版本只需 `-X autostamp/internal/app.devVersion=`。
+
+## 2026-11-03 — §5.22 改写 + 新增 §5.24（顶栏契约 HD1/HD2/HD3）+ §7/§8/§11 同步
+
+- **§5.22 重写**：最近文件只剩后端 —— `config.RecentFiles`（24 条）+ `SetRecent` 继续记录，
+  `settings.json` 的 `recentFiles` 有值；RF1 的两个 UI 入口（启动页列表 + 顶栏下拉）在 2026-11-03
+  顶栏收尾时删除，前端不再读回展示。
+- **新增 §5.24**：顶栏 = 「打开」（左）+「保存」「快捷键」+ 语言/主题分段（右），全是图标按钮
+  （内嵌 SVG + `data-i18n-title`，cn 孪生 `data-i18n-title-cn`，`applyLang` 写 `title` + `aria-label`）；
+  品牌文字 / 最近入口 / 顶栏上传 / 导出设置入口 / 密度切档 / 版本 chip 都已删（启动页 `#empty-upload`
+  保留）；`#top-file` = 窗口标题文本（`AutoStamp <版本>` + 打开后的文件名），版本串同时写进原生窗口
+  标题栏（Go `windowTitle`）与标签页（`document.title`）；版式固定 two-col，`ui.density` 契约字段与
+  `[data-density=…]` 规则删除，`setDensity()` / `probe('density')` 由 `probe('docTitle')` 取代。
+- **§7 + §8 第 7 项**：验证清单去掉「密度切换」，改成断言窗口标题（`probe('docTitle')`）与图标按钮
+  `data-i18n-title` tooltip 的 i18n 覆盖。
+- **§11**：删「改最近文件」行（UI 入口已不存在）；「改 UI 契约 / 参数词表」行加「顶栏形态」，涉及文件
+  补 `web/static/app-i18n.js`、`style.css`、`internal/config/{types,sanitize,patch}.go`、`main.go`。
+
 ## 2026-11-03 — §4 新增 `build1.ps1`/`buildm.ps1` 单 exe 出口 + §11 发布物行扩充
 
 - §4 命令块追加两行 + 一段细则：两个脚本都把产物写进 `dist\autostamp.exe`（已存在覆盖；同名进程在跑先

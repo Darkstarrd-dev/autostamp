@@ -106,6 +106,9 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
   Go 任务打 `[skip]` 不算失败（P0 之前不会假绿，也不会报错）。
 - 版本用 Go 自动 VCS 注入（`debug.ReadBuildInfo` 的 `vcs.revision`），脚本用 `go version -m`
   顺带打印 commit 短号；**不得**手写 `-X main.xxx` 形式 ldflags。
+  `internal/app.pickVersion` 只认真实标签：未打标签时 Go 的伪版本（`v0.0.0-<日期>-<hash>+dirty`）
+  不进 UI，显示的就是 `devVersion`（当前 `0.1-dev`）——窗口标题栏 / 标签页 / 顶栏标题 /
+  `/api/health` 四处同源（UI_SPEC §8 HD2 + HD4）。
 - `-Watch` 观察 `*.go|mod|sum|mjs|js|html|css|ps1`（跳过 `.git`/`dist`/`tmp`），改动后自动跑
   `vet -> test -> genfix -> console -> webview -> verify`；`-Once` 表示只跑一轮（CI 冒烟用）。
 
@@ -228,10 +231,11 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
     只认 `.pdf`，多后缀会被 `path_denied` 挡掉）；
     加密件不弹密码，跳过并在报表记 `password_required`（BM4）；源文件永不改；
     报表就是前端队列状态，CSV/JSON 由前端生成（需求 9，不发请求）。
-22. **最近文件不需要新后端**：`config.RecentFiles`（24 条，P0 就有）+ `SetRecent` 就是全部
-    后端；两个入口（启动页 `#empty-recent`、顶栏 `#recent-open` + `#recent-menu`）已接线
-    （P6，2026-11-02）：点了走 `fs/pick{filePath}` 直开授权 —— 与手输路径完全同一条链路，
-    没有新路由、没有新字段。空列表如实显示（不编造「最近」条目）。
+22. **最近文件只有后端，UI 入口已于 2026-11-03 删除**：`config.RecentFiles`（24 条，P0 就有）+
+    `SetRecent`（去重 + 截断）就是全部后端 —— `pdf/open` 成功时按路径记录，`settings.json` 的
+    `recentFiles` 继续有值。RF1 当年接的两个入口（启动页列表 + 顶栏下拉，点了走 `fs/pick{filePath}`
+    直开授权，与手输路径同一条链）在顶栏收尾（`UI_SPEC §8` HD1）时删掉，前端不再读回展示；
+    没有新路由、没有新字段；记录的都是真在 `pdf/open` 里成功开过的路径，不编造条目。
 23. **粘贴/拖拽装载同一 gate（PD1/PD2，2026-11-03）**：前端 `app-shell.js` 的
     `submitFiles(files, via)` 是唯一装载漏斗 —— 接受条件只有两种：
     **单个 PDF**（`handleFiles` → multipart `pdf/open` → `adopt`，与「上传」按钮同语义）或
@@ -239,6 +243,16 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
     其余每张**新增实例**按文件名命名；空态无文档只 prepare 不指派）。多个 PDF、PDF+图片混拼、
     其它类型一律 toast 告警不装载。粘贴：焦点在输入框且含 `text/plain` 时放行（路径框语义）；
     拖拽：`dataTransfer` 不含 `Files` 不 `preventDefault`（文本拖拽不被劫持）。无新路由、无新字段。
+24. **顶栏契约（HD1/HD2/HD3，用户 2026-11-03 对话指令）**：顶栏只有「打开」（左对齐）+「保存」
+    「快捷键」+ 语言/主题分段（右对齐），且全部是**图标按钮**（内嵌 SVG + `data-i18n-title`，
+    cn 孪生 `data-i18n-title-cn`，`applyLang` 写 `title` + `aria-label`）；品牌文字、最近文件入口、
+    顶栏「上传」、「导出设置」入口、密度切档、版本 chip **都已删除**（启动页的「上传」按钮
+    `#empty-upload` 保留）。`#top-file` 就是**窗口标题文本**：无文档 = `AutoStamp <版本>`，打开后
+    追加 ` 文件名`，其 `title` 属性 = 完整路径 · 体积；同一个版本串写进原生窗口标题栏（Go
+    `windowTitle`）与浏览器标签页（`document.title`），不新增任何控件。版式**固定 two-col**：
+    `ui.density` 契约字段（Go `config.UI.Density` / `PatchUI.Density` / `sanitize` 校验）与 CSS
+    `[data-density=…]` 规则整条删除，settings 的 patch 不再接受该字段。驱动面：`probe('version')`
+    返回纯版本串、新增 `probe('docTitle')` 读标题，`setDensity()` 与 `probe('density')` 删除。
 
 ## 6. HTTP 契约（`/api/*`，全部 JSON；字段在 **P0.5 与用户确认后**才冻结，改动必须同步本文、`docs/UI_SPEC.md` 与前端）
 
@@ -299,7 +313,7 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
   i18n 双语文本集中在 `web/static/app-i18n.js`（en+cn），不得散落在 JSX/HTML。
 - 测试：**Go 测试为唯一编译期测试通道**（`go test ./...`，无 npm/node 测试框架）。
   静态契约（CSP 指令、静态资产服务/遍历拒绝、内联脚本禁止）由 `web/embed_test.go` 断言；
-  运行时行为（状态机、i18n 覆盖、`data-field` 快照、`/api` 往返、密度/实例交互）由
+  运行时行为（状态机、i18n 覆盖、`data-field` 快照、`/api` 往返、实例交互、窗口标题）由
   `tools/verify/shell-smoke.mjs`（真二进制 + CDP）与 `ui-smoke.mjs`（mock）断言；
   `data-field` ↔ 字段表三方一致性由 `ui-contract.mjs` 断言。
   `internal/pdfcore` 必须有单测（切分几何、条带切片、blend 注入、raster writer 字节结构）。
@@ -318,7 +332,8 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
      （`docs/ui/mockup.html` 的 `data-field` ↔ `UI_SPEC` 字段表 ↔ 本文 §6 请求字段）。
   7. 壳契约（P0 起常驻）：`node tools/verify/shell-smoke.mjs` — 真二进制 + headless
      Chromium（`tools/verify/cdp.mjs`，无 npm 依赖），沙箱化 `%APPDATA%`/`%LOCALAPPDATA%`；
-     断言 console 0 error、无 404、12 状态机、深链、en/cn i18n 覆盖、密度切换、
+     断言 console 0 error、无 404、12 状态机、深链、en/cn i18n 覆盖（含图标按钮的
+     `data-i18n-title` tooltip）、窗口标题（`probe('docTitle')` = `AutoStamp <版本>`）、
      实例增删选中复制、`/api` 往返与 `{"patch":…}` 合并。
   8. 窗口通道：`node tools/verify/webview-launch.mjs`（真窗口 + 页内 `/api` 请求）与
        `go run ./tools/verify/comprobe`（COM 返回值实测，FACTS §1.6）。
@@ -406,11 +421,10 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
 |改预设库|`UI_SPEC §8` PR1/PR2 + 本文件 §5.20/§6|`internal/presetstore/store.go`（索引 `presets.json` + `p-<hash>.png`，原子写）、`internal/api/seal_preset.go`（四路由 + `validatePresetParams`）、`web/static/app-batch.js`（预设 存/载/删/列表）、`web/static/app-api.js`（`preset*` 通道）、`tools/verify/batch-smoke.mjs --only=preset|
 |改批处理|`UI_SPEC §8` BM1-BM5 + 本文件 §5.21（**没有后端作业路由、没有 SSE**）|`web/static/app-batch.js`（`runOne` 跑链 + `batchTarget` + `pagesForDoc` + 报表下载）、`web/static/index.html`（批处理段字段）、`web/static/app-api.js`（`fsPickDir`/`exportUpload`）、`internal/api/pdf.go`（`fs/pick` 的 `dir` 分支）、`internal/api/save.go`（`{mkdirs}`）、`internal/fsx/list.go`（`ListPDFs`）、`tools/verify/batch-smoke.mjs --only=batch|
 |改打包/发布物|本文件 §4（PC1）|`build.ps1`（`Start-Package`：`autostamp-<rev>-win64.zip` = strip 窗口版重命名 `autostamp.exe` + `README.md`，25 MB 体积门）、`README.md`（随 zip 一起出货，必须保持准确）、`build1.ps1`/`buildm.ps1`（单 exe 出口 `dist\autostamp.exe`；极限压缩走 UPX，见 FACTS §4.3）|
-|改最近文件|`UI_SPEC §8` RF1|`internal/config/{types.go,sanitize.go,store.go}`（`RecentFiles`/`SetRecent`,P0 已有）、`web/static/app-shell.js`（`renderRecent`/`recentMenu`）、`web/static/index.html`（`#empty-recent`、`#recent-open`）|
 |改粘贴/拖拽装载|`UI_SPEC §8` PD1/PD2 + 本文件 §5.23（无新路由/新字段）|`web/static/app-shell.js`（`submitFiles`/`classifyLoad`/paste/dragover/drop/`state.loadLog`）、`web/static/index.html`（`#drop-hint`）、`web/static/style.css`（`[data-drag]`+`#drop-hint`）、`web/static/app-seal.js`（图片经 `seal/prepare`）、`tools/verify/shell-smoke.mjs`（装载断言）|
 |改预览渲染|`docs/FACTS.md` §1|`web/static/app-preview.js`、`web/static/vendor/pdfjs/`|
 |新增路由|本文件 §6|`internal/api/register.go`、`web/static/app-api.js`|
 |窗口/端口/浏览器回退|本文件 §5|`host_webview_windows.go`、`internal/app/`|
-|改 UI 契约 / 参数词表|`docs/UI_SPEC.md` + 本文件 §6 + `IMPLEMENTATION_PLAN.md` P0.5|`docs/ui/mockup.html`、`web/static/index.html`（面板标记 + `data-field`）、`web/static/app-shell.js`（字段读写/实例）、`web/static/app-overlay.js`、`internal/api/{pdf,seal,export}.go`|
+|改 UI 契约 / 参数词表 / 顶栏形态|`docs/UI_SPEC.md`（§2 词表、§4 i18n 键表、§6 契约 id、§7 驱动接口、§8 决策表含 HD1–HD3）+ 本文件 §6 + `IMPLEMENTATION_PLAN.md` P0.5|`docs/ui/mockup.html`、`web/static/index.html`（面板标记 + `data-field` + 图标按钮的 `data-i18n-title`）、`web/static/app-shell.js`（字段读写/实例/窗口标题 `probe('docTitle')`）、`web/static/app-i18n.js`（由 §4 生成）、`web/static/style.css`（版式固定 two-col，无密度切档）、`internal/config/{types,sanitize,patch}.go`（`ui.*` 词表：`lang`/`theme`，已无 `density`）、`main.go`（`windowTitle` = `AutoStamp <版本>`）、`internal/api/{pdf,seal,export}.go`|
 |改编译/测试流程|本文件 §4|`build.ps1`（任务分派 `Start-Dispatch`）、`tools/verify/*`|
 |改 UI 文案（i18n）|`UI_SPEC §4` 的 i18n 键表是**唯一来源**（`app-i18n.js` 由 `node tools/verify/gen-i18n.mjs` 生成，勿手改）|`docs/UI_SPEC.md` §4/§7、`web/static/app-shell.js` 的 `t()`、`web/static/app-i18n.js`|

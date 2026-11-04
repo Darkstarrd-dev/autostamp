@@ -12,7 +12,9 @@
 //   * every docs/UI_SPEC.md §6 contract id exists, and every UI_SPEC §2 field
 //     is represented by a data-field control (plus the reverse check)
 //   * every data-i18n key resolves to non-empty en + cn text
-//   * density modes, deep-link states (#crosspage), and ?lang=cn
+//   * the layout is fixed two-col (no density control anywhere) and the dropped
+//     topbar ids never come back; deep-link states (#crosspage) and ?lang=cn
+//   * the icon tooltips (data-i18n-title) carry en + cn twins
 //   * 1280x720 and 1440x900 stay free of horizontal overflow
 //   * settings round-trip: the shell's PATCH is visible in GET /api/settings,
 //     an out-of-range value is clamped and echoed back as a toast warning
@@ -231,31 +233,20 @@ async function main() {
   if (cross !== "save-modal") bad("setModal failed: " + cross);
   await evaluate("window.__autoStampShell.setModal(null)");
 
-  // ---------- density + i18n + theme ----------
-  for (const d of ["two-col", "single-col", "collapsed"]) {
-    const got = await pageErr(`window.__autoStampShell.setDensity(${JSON.stringify(d)})`);
-    cmp("density " + d, got, d);
-  }
-  await evaluate("window.__autoStampShell.setDensity('two-col')");
+  // ---------- fixed two-col layout + i18n + theme ----------
+  // D-L1 is gone: the panel width is a constant, not one of three density modes.
   const widths = await json(`(function(){
     var sb = document.querySelector("#right-sidebar");
     var main = document.querySelector("#app-main");
     return JSON.stringify({
       panel: Math.round(sb.getBoundingClientRect().width),
       hidden: getComputedStyle(sb).display === "none",
-      scrollW: main.scrollWidth,
-      clientW: main.clientWidth,
+      densityAttr: main.hasAttribute("data-density"),
     });
   })()`);
   if (widths.panel < 200 || widths.panel > 480) bad("panel width out of range: " + JSON.stringify(widths));
-  await evaluate("window.__autoStampShell.setDensity('collapsed')");
-  const collapsed = await json(`(function(){
-    var sb = document.querySelector("#right-sidebar");
-    return JSON.stringify({ hidden: getComputedStyle(sb).display === "none", over: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1 });
-  })()`);
-  if (!collapsed.hidden) bad("collapsed density must hide the panel");
-  if (collapsed.over) bad("collapsed density causes horizontal overflow");
-  await evaluate("window.__autoStampShell.setDensity('two-col')");
+  if (widths.hidden) bad("the panel is hidden: the layout is fixed two-col");
+  if (widths.densityAttr) bad("#app-main still carries a data-density attribute");
 
   for (const [w, h] of [[1280, 720], [1440, 900]]) {
     await chrome.setViewport(w, h);
@@ -272,6 +263,14 @@ async function main() {
   const emptyTwin = pairs.filter((p) => !p.en || !p.cn);
   if (emptyTwin.length) {
     bad("i18n keys with an empty twin: " + emptyTwin.slice(0, 10).map((p) => `${p.key}(${p.en}|${p.cn})`).join(" "));
+  }
+  // The icon buttons carry their accessible name through data-i18n-title, so the
+  // pair list has to report every one of them with an en + cn value.
+  const titlePairs = pairs.filter((p) => p.kind === "title");
+  if (!titlePairs.length) bad('i18nPairs() reports no kind "title" pair: the icon buttons have no bilingual tooltip');
+  const titleCtl = await pageErr("document.querySelectorAll('[data-i18n-title]').length");
+  if (typeof titleCtl === "number" && titleCtl !== titlePairs.length) {
+    bad(`[data-i18n-title] controls = ${titleCtl}, but i18nPairs title pairs = ${titlePairs.length}`);
   }
   // The catalog is the vocabulary: every UI_SPEC 4 key must be resolvable there
   // (toast/hint keys are used from JS, not always bound to a DOM element), and
@@ -319,6 +318,20 @@ async function main() {
     return out;
   })()`);
   if (phWrong && phWrong.length) bad("cn placeholder not applied: " + phWrong.join(" "));
+  const tipWrong = await pageErr(`(function(){
+    var cat = window.__autoStampI18n.CATALOG;
+    var out = [];
+    document.querySelectorAll('[data-i18n-title]').forEach(function(el){
+      var k = el.getAttribute('data-i18n-title');
+      var e = cat[k];
+      var want = e ? e.cn : el.getAttribute('data-i18n-title-cn');
+      if (want === null || want === undefined) return;
+      if (el.getAttribute('title') !== want) out.push(k + " title=" + JSON.stringify(el.getAttribute('title')));
+      if (el.getAttribute('aria-label') !== want) out.push(k + " aria-label=" + JSON.stringify(el.getAttribute('aria-label')));
+    });
+    return out;
+  })()`);
+  if (tipWrong && tipWrong.length) bad("cn tooltip not applied to title/aria-label: " + tipWrong.slice(0, 8).join(" | "));
   await evaluate("window.__autoStampShell.applyLang('en')");
   const enWrong = await renderedWrong("en");
   if (enWrong && enWrong.length) bad("en text not restored: " + enWrong.slice(0, 8).join(" | "));
@@ -342,7 +355,6 @@ async function main() {
   await new Promise((r) => setTimeout(r, 400));
   const persisted = await getJSON(url + "/api/settings");
   cmp("shell wrote ui.lang through POST /api/settings", persisted.data.settings.ui.lang, "cn");
-  cmp("shell wrote ui.density", persisted.data.settings.ui.density, "two-col");
   cmp("shell wrote theme", persisted.data.settings.ui.theme, "light");
 
   // Out-of-range value must be clamped server-side and warned in the UI.
@@ -467,8 +479,47 @@ async function main() {
   cmp("deep link #crosspage -> crosspage", deep, "crosspage");
   await evaluate("location.hash = '';");
 
+  // probe('version') is the pure version string now; the window title carries it
+  // because the topbar no longer has a version chip.
   const version = await pageErr("window.__autoStampShell.probe('version')");
-  truthy("topbar shows the health version", /autostamp/.test(version));
+  cmp("probe('version') == GET /api/health version", version, health.data.version);
+  cmp("document.title = AutoStamp <version>", await pageErr("window.__autoStampShell.probe('docTitle')"), "AutoStamp " + health.data.version);
+  // the dropped topbar pieces must stay gone (UI_SPEC §7 id contract)
+  const dropped = ["app-version", "density-seg", "btn-upload", "btn-export", "recent-open", "recent-menu", "recent-clear", "empty-recent", "app-logo", "app-title"];
+  const revived = await pageErr(`(function(){
+    var have = {};
+    window.__autoStampShell.ids().forEach(function(id){ have[id] = true; });
+    return ${JSON.stringify(dropped)}.filter(function(id){ return have[id]; });
+  })()`);
+  if (revived && revived.length) bad("removed topbar controls came back: " + revived.join(" "));
+  const chip = await pageErr("document.querySelector('#top-file').textContent");
+  if (!chip || !chip.includes(String(version))) bad(`#top-file does not carry the version: ${JSON.stringify(chip)}`);
+
+  // HD1 geometry: the open button owns the left edge, the title follows it, and
+  // the four icon controls sit on the right — with no leftover text labels.
+  const bar = await json(`(function(){
+    var r = function (sel) { var e = document.querySelector(sel); var b = e.getBoundingClientRect();
+      return { x: Math.round(b.x), right: Math.round(b.right), w: Math.round(b.width), h: Math.round(b.height), icons: e.querySelectorAll("svg.ic").length, text: e.textContent.trim().length }; };
+    return JSON.stringify({
+      top: Math.round(document.querySelector("#topbar").getBoundingClientRect().width),
+      open: r("#btn-open"), save: r("#btn-save"), help: r("#btn-shortcuts"),
+      lang: r("#lang-seg"), theme: r("#theme-seg"), title: r("#top-file")
+    });
+  })()`);
+  if (bar.open.x > 16) bad(`#btn-open is not at the left edge: ${JSON.stringify(bar.open)}`);
+  if (!(bar.title.x > bar.open.right)) bad(`the title does not follow the open button: ${JSON.stringify(bar)}`);
+  for (const k of ["save", "help", "lang", "theme"]) {
+    if (!(bar[k].x > bar.title.right)) bad(`#${k} is not on the right of the title: ${JSON.stringify(bar[k])}`);
+    if (bar[k].right > bar.top + 1) bad(`#${k} overflows the topbar width: ${JSON.stringify(bar[k])}`);
+  }
+  for (const k of ["open", "save", "help"]) {
+    if (bar[k].icons !== 1) bad(`#btn-${k === "help" ? "shortcuts" : k} has no inline svg icon: ${JSON.stringify(bar[k])}`);
+    if (bar[k].text !== 0) bad(`#btn-${k} must be icon-only, found ${bar[k].text} text chars`);
+    if (bar[k].w < 24 || bar[k].h < 24) bad(`icon button too small: ${k} ${JSON.stringify(bar[k])}`);
+  }
+  truthy(`the language switch shows two text choices (中/EN): ${JSON.stringify([bar.lang.text, bar.lang.icons])}`, bar.lang.text > 0 && bar.lang.icons === 0);
+  if (bar.theme.icons !== 2) bad(`the theme switch must be two svg icons (sun/moon): ${JSON.stringify(bar.theme)}`);
+  console.log("  topbar:", JSON.stringify({ top: bar.top, open: bar.open.x, title: bar.title.x, save: bar.save.x, help: bar.help.x, lang: bar.lang.x, theme: bar.theme.x, icons: [bar.open.icons, bar.save.icons, bar.help.icons, bar.theme.icons] }));
 
   // ---------- PD1/PD2: paste + drop load gate (UI_SPEC §8) ----------
   // Real File objects flow through real ClipboardEvent/DragEvent into the

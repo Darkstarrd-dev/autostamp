@@ -8,7 +8,7 @@
 //   * 文本层 span 计数(图片型必须为 0)与层框宽度 == 画布 CSS 宽(pdf.js OutputScale,FACTS §1.7)
 //   * 分页条 chip 数 == 页数,chip 内缩略图各自有像素(V2 形态)
 //   * 翻到第 2 页必须重新取字节(Range 请求带 session 头,否则 400 bad_session)
-//   * 密度切换改变容器宽 -> fit 重新计算(ResizeObserver)
+//   * 视口变窄改变 #preview-stage 容器宽 -> fit 重新计算(ResizeObserver)
 //   * vendor 资源 0 失败、页面 console 0 error
 // 口令、切分、印章落盘的断言属 P3/P4,不在此处。
 //
@@ -51,6 +51,10 @@ async function run(args, opts) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// NARROW is the second contract viewport used to prove fit re-renders when the
+// stage container changes width; the density control is gone, so the resize
+// itself is the trigger (Emulation.setDeviceMetricsOverride via cdp.setViewport).
+const NARROW = [1100, 760];
 
 // waitFor accepts sync or async predicates (CDP probes hand back promises).
 async function waitFor(fn, maxMs, msg) {
@@ -252,18 +256,28 @@ async function checkDocument(app, file, kind) {
     if (kind === "img") cmp(`${kind}: page 2 stays text-free`, second.layer.spans, 0);
   }
 
-  // a density change alters the container width: fit mode must re-render
-  const beforeFit = await app.evaluate("window.__autoStampPreview.probe('zoom')");
-  await app.evaluate(`document.querySelector('#density-seg [data-value="single-col"]').click()`);
-  await sleep(1600);
-  const after = await app.evaluate(
-    `(() => ({ density: window.__autoStampShell.probe('density'), zoom: window.__autoStampPreview.probe('zoom'), canvas: window.__autoStampPreview.probe('canvas') }))()`
+  // the stage container is what fit mode fits into: a narrower viewport has to
+  // re-fit and repaint the page (ResizeObserver), not just restate a stale scale.
+  const beforeFit = await app.evaluate(
+    `(() => ({ zoom: window.__autoStampPreview.probe('zoom'), stage: Math.round(document.querySelector('#preview-stage').getBoundingClientRect().width) }))()`
   );
-  cmp(`${kind}: density switched`, after.density, "single-col");
-  if (Math.abs(after.zoom - beforeFit) < 0.02) bad(`${kind}: fit zoom did not follow the container (before ${beforeFit} after ${after.zoom})`);
-  else console.log(`  ok ${kind}: fit ${Number(beforeFit).toFixed(3)} -> ${Number(after.zoom).toFixed(3)} after the density change`);
-  truthy(`${kind}: re-rendered canvas`, after.canvas.backing[0] > 100);
-  await app.evaluate(`document.querySelector('#density-seg [data-value="two-col"]').click()`);
+  await app.setViewport(NARROW[0], NARROW[1]);
+  let after = {};
+  try {
+    after = await waitFor(async () => {
+      const s = await app.evaluate(
+        `(() => ({ zoom: window.__autoStampPreview.probe('zoom'), stage: Math.round(document.querySelector('#preview-stage').getBoundingClientRect().width), canvas: window.__autoStampPreview.probe('canvas') }))()`
+      );
+      return s.stage !== beforeFit.stage && Math.abs(s.zoom - beforeFit.zoom) > 0.02 ? s : null;
+    }, 8000, `fit never re-rendered after a ${NARROW[0]}x${NARROW[1]} viewport`);
+  } catch (e) {
+    bad(`${kind}: ${e.message} (stage ${beforeFit.stage} -> ${JSON.stringify(after).slice(0, 120)})`);
+  }
+  if (after && after.canvas) {
+    console.log(`  ok ${kind}: fit ${Number(beforeFit.zoom).toFixed(3)} -> ${Number(after.zoom).toFixed(3)} after the ${NARROW[0]}x${NARROW[1]} viewport (stage ${beforeFit.stage}px -> ${after.stage}px)`);
+    truthy(`${kind}: re-rendered canvas`, after.canvas.backing[0] > 100);
+  }
+  await app.send("Emulation.clearDeviceMetricsOverride");
   await sleep(1200);
 }
 

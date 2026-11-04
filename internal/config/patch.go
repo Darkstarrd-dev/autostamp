@@ -17,9 +17,8 @@ type Patch struct {
 
 // PatchUI mirrors UI with pointer leaves.
 type PatchUI struct {
-	Lang    *string `json:"lang,omitempty"`
-	Theme   *string `json:"theme,omitempty"`
-	Density *string `json:"density,omitempty"`
+	Lang  *string `json:"lang,omitempty"`
+	Theme *string `json:"theme,omitempty"`
 }
 
 // PatchSecurity mirrors Security.
@@ -96,7 +95,6 @@ func Merge(s *Settings, p *Patch) {
 	if p.UI != nil {
 		setStr(&s.UI.Lang, p.UI.Lang)
 		setStr(&s.UI.Theme, p.UI.Theme)
-		setStr(&s.UI.Density, p.UI.Density)
 	}
 	if p.Security != nil && p.Security.StrictOrigin != nil {
 		s.Security.StrictOrigin = *p.Security.StrictOrigin

@@ -35,10 +35,6 @@ func Sanitize(s *Settings) error {
 		fail("ui.theme %q not in light|dark", s.UI.Theme)
 		s.UI.Theme = Default().UI.Theme
 	}
-	if s.UI.Density != "two-col" && s.UI.Density != "single-col" && s.UI.Density != "collapsed" {
-		fail("ui.density %q not in two-col|single-col|collapsed", s.UI.Density)
-		s.UI.Density = Default().UI.Density
-	}
 
 	if !inRange(s.Seal.ResampleDPI, 72, 600) {
 		fail("seal.resampleDpi %d out of 72..600", s.Seal.ResampleDPI)
@@ -140,8 +136,8 @@ func Sanitize(s *Settings) error {
 	}
 
 	// Batch is the front-end run-queue's own group (api.batch.*). The dpi/quality
-// values matter for real here (BM1): unlike the save panel's export group they
-// are applied per file, so a bad value silently becomes stamped output.
+	// values matter for real here (BM1): unlike the save panel's export group they
+	// are applied per file, so a bad value silently becomes stamped output.
 	bt := &s.Batch
 	if bt.DPI != "72" && bt.DPI != "150" && bt.DPI != "300" && bt.DPI != "custom" {
 		fail("batch.dpi %q not in 72|150|300|custom", bt.DPI)

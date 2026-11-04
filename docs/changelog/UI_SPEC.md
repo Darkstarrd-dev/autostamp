@@ -2,6 +2,43 @@
 
 > `docs/UI_SPEC.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-04 — §8 新增 HD4：显示版本 = `0.1-dev`（Go 伪版本不再进 UI）
+
+- **来源**：用户 2026-11-04 对话指令「版本为 0.1-dev」→ §8 新增 HD4 行（选项：沿用 Go 伪版本 /
+  固定 dev 横幅；已确认 = 固定 dev 横幅，取值 `0.1-dev`）。
+- **影响面**：四处同源的版本串（原生窗口标题栏 `AutoStamp 0.1-dev`、浏览器标签页 `document.title`、
+  顶栏 `#top-file`、`GET /api/health` 的 `version`）此前显示 Go 工具链给未打标签提交打的伪版本
+  `v0.0.0-20261103072915-f46b31ebafd1+dirty`，标题栏被 commit 串占满；`internal/app.pickVersion`
+  只认真实标签（`v1.2.3`、`v1.2.3-rc.1` 原样），伪版本 / `devel` / `+dirty` 一律回落 `devVersion`。
+  语义面（字段词表、§2、§6 id、§7 驱动接口）无改动；mock 的 `S.version` / `<title>` / `#top-file`
+  占位改 `0.1-dev`。门槛：`internal/app/version_test.go` 的版本取值表 + `shell-smoke` 的动态比对。
+
+## 2026-11-03 — 顶栏收尾（HD1/HD2/HD3）：§2 删 `ui.density`、§4 删 12 键、§6 删 6 个契约 id、§7 去 `setDensity`
+
+- **来源**：不是 ask 轮次，而是用户在 2026-11-03 对话里直接下的顶栏指令 → §8 新增 HD1（顶栏精简 +
+  图标化：删品牌文字 / 最近入口 / 顶栏上传 / 导出设置入口 / 密度切档 / 版本 chip，余下控件用内嵌 SVG +
+  `data-i18n-title` tooltip，打开左对齐、保存 + 快捷键 + 语言 + 主题右对齐）、HD2（`#top-file` = 窗口标题
+  文本：无文档 = `AutoStamp <版本>`，打开后追加 ` 文件名`；版本串写进原生窗口标题栏与浏览器标签页，
+  不新增控件）、HD3（版式固定 two-col）三行。
+- **作废**：L1（布局密度三档切档）与 RF1（最近文件 UI 入口）在原「已确认」格子里追加作废注记 ——
+  版式只剩 two-col、两个最近入口都删、`config.recentFiles` 后端继续记录但不再展示；表后段落写明
+  HD1/HD2/HD3 作废的是可见形态，字段/路由不变。
+- **契约面删除**：§2 的 `field=ui.density …` 行；§3 的「最近文件 · 入口」行，「顶栏 · 语言/主题/密度」
+  改成「顶栏 · 语言/主题」；§6 ui-ids 的 `btn-export`、`btn-upload`、`density-seg`、`empty-recent`、
+  `recent-menu`、`recent-open`（`app-logo`/`app-title`/`app-version`/`recent-clear` 本来就不在契约表里，
+  只是 mock/壳里的元素，删元素即无需登记）。§6 另补 `#top-file` 语义注记（窗口标题文本 + `title` 属性 =
+  完整路径 · 体积）与「`#app-main` 不再带版式属性」。
+- **i18n**：§4 删 12 键（`density.twoCol/singleCol/collapsed`、`ui.density.ctl/hint`、`recent.title/open/
+  clear/empty`、`app.export.btn`、`app.title`、`app.upload.btn` —— 最后一个是顶栏上传删除后的死键，
+  三处都没使用者），`lang.cn`/`lang.en` 的 en/cn 统一成 `中` / `EN`（与分段按钮文本一致，免得 i18n 覆盖
+  断言把「按钮文字 vs 目录值」判成 mismatch）。总数 282 → 270。
+- **驱动面**：§7 与 §7.1 的 `setDensity(d)` 删除；§7.1 `probe` 去 `density`、加 `docTitle`，`version`
+  改为返回纯版本串（health 的值），`i18nPairs()` 多一种 kind `title`（来自 `[data-i18n-title]`）。
+  深链 `/#<state>` 与 12 态状态机不变。
+- 同步文档：AGENTS §5.22 改写 + 新增 §5.24 顶栏契约事实 + §11 速查表（删「改最近文件」行、补
+  「改 UI 契约 / 参数词表」相关文件列）、`IMPLEMENTATION_PLAN` §10.1 登记本轮、`PROJECT_MAP`
+  （app-shell / style.css / app-i18n / shell-smoke 行）、README 功能表。
+
 ## 2026-11-03 — impeccable polish：导出段不再「假失效」+ `.seg.sm` 内边距（真 UI 扫描 8→0）
 
 - 用安装好的 impeccable skill 对真 exe 跑 `detect`（真链 http://127.0.0.1:PORT/，空文档态）得 8 条缺陷证据：

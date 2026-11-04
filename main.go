@@ -19,9 +19,6 @@ import (
 	"autostamp/internal/tmpstore"
 )
 
-// windowTitle is the WebView2/browser window title.
-const windowTitle = "AutoStamp"
-
 func main() {
 	var (
 		verbose   = flag.Bool("verbose", false, "调试日志（含静态资产请求）")
@@ -86,6 +83,12 @@ func main() {
 	url := srv.URL()
 	log.Info("ready", "url", url)
 
+	// The window title is the app name followed by the release version, so the
+	// build in front of the user is identifiable straight from the title bar.
+	// Only the version goes there; the commit and the Go toolchain stay in the
+	// startup banner and /api/health. The browser fallback mirrors this string
+	// through the page's own document.title, not through Go.
+	windowTitle := "AutoStamp " + build.Version
 	if *useWindow {
 		if err := openAppWindow(url, windowTitle, log); err == nil {
 			// The window owns the process lifetime: openAppWindow returned

@@ -1,8 +1,9 @@
 # AutoStamp — UI_SPEC（P0.5 UI 契约）
 
-> 最后核对：2026-11-03（P0.5 冻结的 §2 字段表 / §6 契约 id / §8 决策表已定；P2–P6 接线沿用
-> 2026-10-30/11-02 记录。本轮粘贴/拖拽装载契约：§4 新增 `load.*` 6 键并更新 `empty.hint`、
-> §5 注册 Ctrl+V、§6 新增 `drop-hint` 契约 id、§7.1 壳 probe 加 `load`、§8 PD1/PD2 已确认）。
+> 最后核对：2026-11-04（版本号取值定为 `0.1-dev`：§8 新增 HD4，伪版本不再进 UI；
+> 顶栏收尾的 2026-11-03 记录（§2 删 `ui.density` 字段行、§4 删 12 个键（282 → 270）、
+> §6 删 6 个契约 id、§7 驱动去 `setDensity`、§7.1 probe 加 `docTitle`、§8 新增 HD1/HD2/HD3，
+> L1/RF1 的 UI 形态已作废）沿用；P2–P6 接线记录沿用 2026-10-30/11-02）。
 > 本文是 **UI 语义唯一权威**：字段名/取值域/控件绑定/DOM id/状态机
 > 在此冻结；P0 起 `web/static/index.html` 必须照 §1 骨架与 §7 id 搭建，P1–P5 只换数据源。
 > 与 `AGENTS.md` §6 路由字段冲突时：先改本文 + §6（同一提交），再改代码。
@@ -56,7 +57,6 @@ save-confirm → replace-confirm`（`replaceOriginal=true`）→ 成功 toast �
 ```ui-fields
 field=ui.lang api=- type=segmented range=en|cn default=en nullable=no ctl=yes i18nkey=ui.lang.ctl decision=-
 field=ui.theme api=- type=segmented range=light|dark default=light nullable=no ctl=yes i18nkey=ui.theme.ctl decision=-
-field=ui.density api=- type=segmented range=two-col|single-col|collapsed default=two-col nullable=no ctl=yes i18nkey=ui.density.ctl decision=L1
 field=decision.assetIds api=- type=display range=5个 assetId chip default=- nullable=yes ctl=yes i18nkey=asset.hint decision=-
 field=api.fs.pick.filePath api=fs.pick.filePath type=text range=绝对路径 default=- nullable=no ctl=yes i18nkey=api.fs.pick.filePath.ctl decision=-
 field=api.fs.pick.multi api=fs.pick.multi type=toggle range=bool default=true nullable=no ctl=yes i18nkey=api.fs.pick.multi.ctl decision=-
@@ -159,7 +159,6 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 | 批处理段 · 并发 | `api.batch.concurrency` | number | 前端队列（不落请求） |
 | 批处理段 · 链路开关 | `api.batch.autoSplit` / `splitMode` / `rows` / `cols` / `crossPage` / `binding` / `startOffset` | toggle + select + number | `POST /api/pdf/split`；骑缝参数走预设 |
 | 印章段 · 载入/删除预设 | `api.seal.preset.select`（响应侧） | select + 两个按钮 | `GET/DELETE /api/seal/preset` |
-| 最近文件 · 入口 | （无字段，操作控件） | 启动页列表 + 顶栏下拉 | `POST /api/fs/pick`（直开授权）→ `POST /api/pdf/open` |
 | 实例段 · 列表 | instance（名称/模式/删除） | list + text | 内部状态 |
 | 叠加段 · 混合模式 | `api.apply.blend` | 分组 `<select>` | `/api/pdf/apply` |
 | 叠加段 · 透明度/明度/饱和度 | `api.apply.opacity/brightness/saturate` | 滑杆 + 数值（双向绑定） | 同上 / 仅预览 |
@@ -188,7 +187,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 | 保存弹窗 · 系统选择器 | `api.fs.pick.filePath` + `pathGrantId` | button + display chip | `/api/fs/pick` |
 | 保存弹窗 · 替换原文件 | `api.save.replaceOriginal` | toggle + 二次确认 | 同上 |
 | 口令弹窗 · PDF 口令 | `api.open.pw` | password | `/api/pdf/open` |
-| 顶栏 · 语言/主题/密度 | `ui.lang` / `ui.theme` / `ui.density` | segmented | 无（前端） |
+| 顶栏 · 语言/主题 | `ui.lang` / `ui.theme` | segmented | 无（前端） |
 | 空态 · 路径输入 | `api.fs.pick.filePath` | text | `/api/fs/pick` |
 | 资源钩子 · assetId | `decision.assetIds`（5 个 display chip，只显示句柄值，文案走 `title`） | 只读 | 响应侧 |
 | 预览区 · 页框 / 画布 / 文本层 | （无字段：渲染态，页尺寸来自 `pdf.open` 响应） | `#preview-stage` 内 JS 生成 `.page-frame` → `canvas.page-canvas` + `.textLayer` | `GET /api/pdf/raw?id=`（pdf.js 逐页取字节） |
@@ -198,7 +197,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 滑杆 + 数值必须**双向绑定**（同一 `data-field` 复用两次，mock 已实现 `bindPair`）；
 隐藏 `type=file` input 只作选择器触发器，不占字段。
 
-## 4. i18n 清单（key | en | cn；共 282 键，全部由 mock + 状态文案生成；`node tools/verify/gen-i18n.mjs` 打印同数）
+## 4. i18n 清单（key | en | cn；共 270 键，全部由 mock + 状态文案生成；`node tools/verify/gen-i18n.mjs` 打印同数）
 
 规则（AGENTS §7）：每个可见控件/文案必须有 `data-i18n` key，en/cn 两值非空；
 `data-i18n-cn`（及 `-placeholder`、`-title`）提供中文值，en 取元素自身文本或 `class="tag"` 的字段名。
@@ -272,12 +271,9 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |api.split.pages.hint|Same vocabulary as apply.pages.|与 apply.pages 同一词表。|
 |api.split.rows.ctl|split.rows|网格行数 rows|
 |api.split.rows.hint|rows >= 1.|rows >= 1；与 cols 一起决定等分网格。|
-|app.export.btn|Export|导出设置|
 |app.open.btn|Open PDF|打开 PDF|
 |app.save.btn|Save|保存|
 |app.shortcuts.btn|Shortcuts|快捷键|
-|app.title|AutoStamp|AutoStamp 印章|
-|app.upload.btn|Upload|上传文件|
 |split.undo.btn|Undo split|撤销切分|
 |apply.undo.btn|Undo stamping|撤销盖章|
 |apply.write.btn|Stamp into PDF|盖到 PDF|
@@ -301,9 +297,6 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |crosspage.binding.fixed|binding edge restored to right: a cross-page seal cannot stay on "no cross-page seal"|装订边已回到右缘：骑缝章不能停在「无骑缝章」|
 |crosspage.on|on|开|
 |del.hint|delete selected instance|删除选中的印章实例|
-|density.collapsed|Collapsed panel|面板可折叠|
-|density.singleCol|Single column|单栏上下|
-|density.twoCol|Preview + panel|左预览右面板|
 |dup.hint|duplicate instance|复制印章实例|
 |empty.hint|Drop or paste a PDF here to open it, or drop/paste images to load them as seals. You can also pick a file or type a path.|把这里拖入或粘贴（Ctrl+V）一个 PDF 即打开；拖入/粘贴图片装载为印章。也可以选择文件 / 直接填写路径。|
 |empty.msg|No PDF open|还没有打开 PDF|
@@ -340,8 +333,8 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |load.reject.multi.hint|open one PDF at a time; use the batch panel for many files|一次只打开一个 PDF；多个文件请用批处理面板|
 |load.reject.other.hint|only PDF files and images can be loaded here|这里只支持 PDF 文件与图片|
 |load.seals.ok|seal images loaded|图片已装载为印章|
-|lang.cn|中文|中文|
-|lang.en|EN|英文|
+|lang.cn|中|中|
+|lang.en|EN|EN|
 |modal.cancel|Cancel|取消|
 |modal.close|Close|关闭|
 |nudge.hint|move 1pt (Shift: 10pt)|移动 1pt（Shift = 10pt）|
@@ -415,8 +408,6 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |ui.lang.hint|Interface language; every label carries a key.|界面语言；每个标签都有 i18n key。|
 |ui.theme.ctl|Light / Dark|浅色 / 深色|
 |ui.theme.hint|Colour tokens (UI_SPEC 6) switch as one set.|配色令牌（UI_SPEC §6）一并切换。|
-|ui.density.ctl|Preview + panel / Single column / Collapsed panel|布局密度：左预览右面板 / 单栏 / 折叠|
-|ui.density.hint|Panel width mode; fits 1280x720 and 1440x900.|面板宽度模式（L1）；适配 1280x720 与 1440x900。|
 |ui.split.vetoedPages.hint|Click a page to veto its auto-split.|点击某页即否决其自动切分；否决页保持原样不切。|
 |warn.noText.hint|No extractable text layer: this file has only scanned images|无可抽取文字层：该文件只有扫描图像|
 |warn.render.hint|Page 3 has 33 MP: rendered at reduced scale|第 3 页 33 MP：已按缩略尺寸渲染|
@@ -485,10 +476,6 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |ok.preset.deleted|preset deleted|预设已删除|
 |warn.preset.name|preset name is empty|预设名不能为空|
 |warn.preset.noSeal|upload a seal image first|请先上传印章图片|
-|recent.title|Recent|最近打开|
-|recent.empty|no recent files|暂无最近文件|
-|recent.clear|Clear|清空|
-|recent.open|Open|打开|
 
 ## 5. 快捷键（mock 已注册，P1/P2 起在真实 UI 里同样注册）
 
@@ -511,11 +498,14 @@ P0/P1 的 `index.html` 必须使用下表 id（`ui-ids` 块 = `ui-contract.mjs` 
 新增 id 要先登记，mock 缺该 id 即报错。
 
 ```ui-ids
-app-main  app-root  apply-anchor  apply-blend  asset-hooks  batch-auto-split  batch-binding  batch-cols  batch-cross-page  batch-files  batch-pick-dir  batch-pick-files  batch-progress  batch-queue  batch-rows  batch-split-mode  batch-start  batch-start-offset  btn-export  btn-open  btn-save  btn-shortcuts  btn-upload  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  density-seg  drop-hint  empty-open  empty-path  empty-pick  empty-pick-filter  empty-pick-multi  empty-recent  empty-state  empty-upload  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-add  instance-delete  instance-duplicate  lang-seg  modal-layer  page-pager  panel  panel-actions  panel-batch  panel-crosspage  panel-export  panel-instances  panel-overlay  panel-position  panel-seal  panel-split  password-modal  pixel-readout  pos-center  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  recent-menu  recent-open  right-sidebar  save-cancel  save-confirm  save-modal  file-input  error-toast  save-open  save-pick  save-source  scale-pt  seal-despill-revert  seal-file-input  seal-instances  seal-meta  seal-preset-delete  seal-preset-load  seal-preset-name  seal-preset-save  seal-preset-select  seal-upload  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  split-apply  split-mode  split-veto  strip-previews  theme-seg  top-file  topbar
+app-main  app-root  apply-anchor  apply-blend  asset-hooks  batch-auto-split  batch-binding  batch-cols  batch-cross-page  batch-files  batch-pick-dir  batch-pick-files  batch-progress  batch-queue  batch-rows  batch-split-mode  batch-start  batch-start-offset  btn-open  btn-save  btn-shortcuts  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  drop-hint  empty-open  empty-path  empty-pick  empty-pick-filter  empty-pick-multi  empty-state  empty-upload  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-add  instance-delete  instance-duplicate  lang-seg  modal-layer  page-pager  panel  panel-actions  panel-batch  panel-crosspage  panel-export  panel-instances  panel-overlay  panel-position  panel-seal  panel-split  password-modal  pixel-readout  pos-center  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  right-sidebar  save-cancel  save-confirm  save-modal  file-input  error-toast  save-open  save-pick  save-source  scale-pt  seal-despill-revert  seal-file-input  seal-instances  seal-meta  seal-preset-delete  seal-preset-load  seal-preset-name  seal-preset-save  seal-preset-select  seal-upload  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  split-apply  split-mode  split-veto  strip-previews  theme-seg  top-file  topbar
 
 ```
 
 `#file-input` 是隐藏的 `<input type=file>` 选择器触发器，不占字段（§2 里没有 `data-field`）。
+
+`#top-file` 是**窗口标题文本**（HD2，2026-11-03）：无文档 = `AutoStamp <版本>`，打开后追加
+` 文件名`；其 `title` 属性 = 完整路径 · 体积。`#app-main` 不再带版式属性（固定 two-col，HD3）。
 
 `#preview-stage` 的页框与 `#page-pager` 的分页 chip 全部由 JS 生成（不占契约 id，靠
 `class` + `data-page`）；`#asset-hooks` 与 `pathGrantId` 的 chip 只显示句柄值本身，
@@ -525,7 +515,7 @@ app-main  app-root  apply-anchor  apply-blend  asset-hooks  batch-auto-split  ba
 ## 7. mock 驱动接口（verify 用）
 
 `window.__autoStampMock`：`STATES`、`setState(name)`、`verifyState(name)`、
-`setParams({api.x: v,…})`、`probe(name)`、`applyLang(lang)`、`applyTheme(t)`、`setDensity(d)`（`two-col` / `single-col` / `collapsed`）、
+`setParams({api.x: v,…})`、`probe(name)`、`applyLang(lang)`、`applyTheme(t)`、
 `i18n()`（DOM 快照）、`fields()`、`ids()`、`q()/qa()`、`setModal()/clearToast()`。
 `probe` 关键字：`state` `overflow` `images` `instances` `split` `strip` `pixel-blend` `estimate`。
 
@@ -536,8 +526,9 @@ app-main  app-root  apply-anchor  apply-blend  asset-hooks  batch-auto-split  ba
 `window.__autoStampShell`：`STATES`、`setState(name)`、`verifyState(name)`、
 `setParams({api.x: v,…})`（写控件并派发 `input`/`change`，因此走真实 persist 路径）、
 `fields()`（全部 `data-field` 控件快照；display-only `span` 不计）、`ids()`、
-`i18nPairs()`（每个 `data-i18n` 的 en+cn 原值）、`probe(name)`、
-`applyLang(lang)`、`applyTheme(t)`、`setDensity(d)`、`setModal(id)`、`clearToast()`、
+`i18nPairs()`（每个 `data-i18n` 的 en+cn 原值，另有 kind `title`：`[data-i18n-title]` 的图标按钮
+tooltip）、`probe(name)`、
+`applyLang(lang)`、`applyTheme(t)`、`setModal(id)`、`clearToast()`、
 `addInstance(name, params)`、`selectInstance(id)`、`deleteSelected()`、`duplicateSelected()`、
 `APPLY_FIELDS`、`defaultParams()`、`instanceById(id)`、`selectedInstance()`、
 `setParam(field, value)`（改**选中实例**的参数并派发 input/change，等价于滑杆改值）、
@@ -545,8 +536,9 @@ app-main  app-root  apply-anchor  apply-blend  asset-hooks  batch-auto-split  ba
 `adopt(info, pw)`（文档接管的唯一漏斗：状态翻转 + `assets.*` 记账 + `preview.open`；
 `pixel-matrix` 真链路驱动的就是它，而不是直接调预览模块）、
 `q()/qa()`、`t(key)`。
-`probe` 关键字：`state` `overflow` `density` `instances` `instanceCount` `selected`
-`modal` `toast` `lang` `theme` `version` `labels` `estimate`（导出体积预估，见 §7 E1）
+`probe` 关键字：`state` `overflow` `instances` `instanceCount` `selected`
+`modal` `toast` `lang` `theme` `version`（纯版本串）`docTitle`（窗口/标签页标题，HD2）`labels`
+`estimate`（导出体积预估，见 §7 E1）
 `load`（粘贴/拖拽装载读数：`{kind: pdf|seals|reject, reason, names, count}`，见 §8 PD1/PD2）。
 
 `window.__autoStampPreview`（`app-preview.js`）：`open(info)`、`setPassword(pw)`、`reload(pw)`、
@@ -596,7 +588,7 @@ FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 |D2|骑缝章装订边（三档）|right 单面右缘 / alternate 双面奇右偶左（左右属同一条分割）/ none 无骑缝章|已确认：三档可选（right / alternate / none）。原文「可选，1、单面仅右侧。2、双面奇偶分别左右，左右的是两个章分割。3、无骑缝章」；`left` 未列入，已移除|2026-10-29|ask 第 1 轮 d2-binding|
 |D3|自动切分触发|auto 判定 + 逐页 veto / 手动切点 / 一键否决|已确认：自动判定 + 逐页否决（`split.auto` 开，`#split-veto` 逐页勾选否决）|2026-10-29|ask 第 1 轮 d3-split|
 |D4|印章去白底|前端即时去背（可撤销）/ 仅预设时 / 不做|已确认：预览即时去背 + 可撤销（`seal.prepare.despill` 默认开，`revert` 按钮 + toast）|2026-10-29|ask 第 1 轮 d4-despill|
-|L1|布局密度|two-col / single-col / collapsed|已确认：two-col 默认（顶栏仍可切 single-col / collapsed）|2026-10-29|ask 第 1 轮 l1-density|
+|L1|布局密度|two-col / single-col / collapsed|已确认：two-col 默认（顶栏仍可切 single-col / collapsed）。**2026-11-03 作废（HD3）**：版式固定 two-col，切档控件与 `ui.density` 契约字段整条删除|2026-10-29|ask 第 1 轮 l1-density|
 |CP1|骑缝章预览形态|主画布 + 侧栏逐页条带 / 仅主画布 / 仅条带|已确认：逐页条带缩略图 + 主画布叠加（`#strip-previews` 与主画布同随 `apply.startOffset`）|2026-10-29|ask 第 1 轮 crosspreview|
 |I1|多印章实例形态|实例列表 + 新增/复制/重命名（推荐）/ 单实例覆盖式|已确认：列表 + 重命名（`#seal-instances` 行内改名 + normal/cross-page 徽章；新增/复制/删除按钮）|2026-10-29|ask 第 2 轮 i1-instances|
 |S1|保存/替换原文件确认|保存弹窗 + 二次确认（推荐）/ 无弹窗直接写 / 只替换时弹窗|已确认：保存弹窗（`#save-modal`：目标路径 + pathGrantId）+ 替换原文件时二次确认（`#confirm-modal`）|2026-10-29|ask 第 2 轮 s1-save|
@@ -615,7 +607,7 @@ FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 |W6|单页位图超过 90 MB 上限（PLAN P5）时的行为|提交前拦截 + 提示降 DPI（推荐）/ 服务端只告警不拒绝 / 前端自动降到 300 dpi|已确认：提交前拦截 —— 前端按体积预估（§E1，FACTS §4 换算）在发请求前挡住并提示降 DPI（i18n `warn.export.tooBig`）；服务端仍留硬限，超 90 MB/页回 400 `page_too_large`|2026-11-02|ask P5 轮 raster-limit|
 |PR1|印章预设存什么|图片 + `api.apply.*` 全套参数（推荐）/ 只存参数组（图片另选）/ 图片 + 参数 + 导出参数（工作预设）|已确认：图片 + 印章/骑缝参数（含 `seal.prepare.*` 去背选项），导出参数不进预设|2026-11-02|ask 第 6 轮 preset-scope|
 |PR2|预设库界面与导入导出|印章段内联：下拉 + 保存/另存/删除（推荐）/ 内联 + 两个 zip 按钮 / 独立缩略图面板|已确认：印章段内联 `#seal-preset-select` + `#seal-preset-load` + `#seal-preset-save` + `#seal-preset-delete`；不做 zip（`%APPDATA%\AutoStamp\seals\` 目录即数据）|2026-11-02|ask 第 6 轮 preset-ui|
-|RF1|最近文件入口形态|启动页列表 + 顶栏下拉（推荐）/ 只在启动页空态列表 / 右侧栏常驻面板|已确认：启动页 `#empty-recent` 列表 + 顶栏 `#recent-open` 下拉（`#recent-menu`），两处同一个数据源（`config.recentFiles`，最多 24 条，P0 已实现）|2026-11-02|ask 第 7 轮 recent-ui|
+|RF1|最近文件入口形态|启动页列表 + 顶栏下拉（推荐）/ 只在启动页空态列表 / 右侧栏常驻面板|已确认：启动页列表 + 顶栏下拉，两处同一个数据源（`config.recentFiles`，最多 24 条，P0 已实现）。**2026-11-03 作废（HD1）**：两个 UI 入口都删，`config.recentFiles` 后端继续记录但不再展示|2026-11-02|ask 第 7 轮 recent-ui|
 |BC1|批处理进度通道|面板内队列 + SSE 流（推荐）/ 队列 + 轮询 status / 无队列 UI 一次性任务|已确认：队列 `#batch-queue` + 每文件状态 排队/进行中/成功/失败。（原 `GET /api/batch/events` SSE 被 BM1 作废：批处理由前端逐文件跑链，进度就是前端队列状态，不再有 SSE 路由）|2026-11-02|ask 第 6 轮 batch-progress + 第 8 轮 batch-mode|
 |BC2|批处理输入与输出命名|多文件 + 目录，输出同级 `<名>_seal.pdf`（推荐）/ 输出写进 `out/` / 可选覆盖原文件|已确认：输入 = `fs/pick` 多选 + 目录；输出 = 与源同目录、同名加 `_seal`（派生产物，重跑可覆盖）；**绝不覆盖源文件**；失败项跳过并记错误码|2026-11-02|ask 第 6 轮 batch-io|
 |BC3|批处理是否带切分/骑缝|可选开关 `autoSplit` + `crossPage`（推荐）/ 只盖普通印章 / 强制 auto 切分|已确认：两个开关随任务走；`autoSplit` 带 `splitMode/rows/cols`（切分词表 = §2.2），`crossPage` 带 `binding/startOffset`|2026-11-02|ask 第 7 轮 batch-split|
@@ -629,9 +621,16 @@ FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 |OP1|P6 可选项（页眉页脚 / 多印章）|不做，登记为未采纳（推荐）/ 做页眉页脚|已确认：不做。多印章已由 P2 的多实例覆盖；页眉页脚不在产品需求 1–5 内|2026-11-02|ask 第 7 轮 optional-scope|
 |PD1|剪贴板装载（Ctrl+V）语义|只接受「单个 PDF」或「一张/多张图片」，其余不装载并告警（推荐）/ 任意文件都装 / 只有 PDF 可装|已确认（2026-11-03 用户任务明确请求 + 实现决定）：只接受两类 —— 单个 PDF → multipart 打开（adopt）；一张或多张图片 → 逐个 `seal/prepare`：单张设给选中实例（与「上传印章」同语义），多张时第一张设给选中实例、其余各**新增一个实例**按文件名命名装载；无文档（空态）只 prepare+元数据读数，不指派。焦点在输入框且剪贴板含 text/plain 时放行文本粘贴（路径框语义不受粘贴装载影响）。多个 PDF / PDF+图片混拼 / 其它文件 → toast 告警不装载|2026-11-03|用户任务要求 + 实现决定|
 |PD2|鼠标拖拽装载|窗口级 dragover/drop 与 PD1 同一 gate；`#preview[data-drag]` + `#drop-hint` 可见反馈（推荐）/ 只拖预览区 / 不加反馈|已确认（2026-11-03 用户任务明确请求）：窗口级装载同一 gate；dataTransfer 不含 Files 时不 preventDefault（纯文本拖拽不被劫持）；反馈 = 预览区高亮 + `#drop-hint`（§6 新契约 id）；装载图片走同一 seals 通道，装载 PDF 走 handleFiles（adopt 替换当前文档，与「上传」按钮同语义）|2026-11-03|用户任务要求|
+|HD1|顶栏有什么|保留全部按钮（品牌 / 最近 / 上传 / 导出设置 / 密度 / 版本 chip）/ 精简为一组图标控件|已确认（用户 2026-11-03 对话指令）：删品牌文字、最近文件入口、顶栏「上传」、「导出设置」入口、密度切档、版本 chip；余下控件全部图标化（内嵌 SVG 图标 + `data-i18n-title` tooltip，cn 孪生 `data-i18n-title-cn`），打开左对齐、保存 + 快捷键 + 语言 + 主题右对齐|2026-11-03|用户 2026-11-03 对话指令|
+|HD2|版本号和文件名显示在哪|顶栏文本承载 / 新增版本 chip / 只写窗口标题栏（标签页同源）|已确认（用户 2026-11-03 对话指令）：`#top-file` 就是窗口标题文本 —— 无文档 = `AutoStamp <版本>`，打开后追加 ` 文件名`；版本串同时写进原生窗口标题栏（Go `windowTitle`）与浏览器标签页（`document.title`）；**不新增任何控件**|2026-11-03|用户 2026-11-03 对话指令|
+|HD3|版式还可切换吗|固定 two-col / 保留 single-col 与 collapsed 切档|已确认（用户 2026-11-03 对话指令）：固定 two-col（CSS 基础规则就是两栏）；`ui.density` 字段、`[data-density=…]` 规则、`setDensity` 驱动接口全部删除，settings 的 patch 不再接受 `ui.density`|2026-11-03|用户 2026-11-03 对话指令|
+|HD4|未打标签的构建显示什么版本号|沿用 Go 伪版本（`v0.0.0-<日期>-<hash>+dirty`）/ 固定 dev 横幅|已确认（用户 2026-11-04 对话指令）：版本 = **`0.1-dev`**，`internal/app.pickVersion` 只认真实标签——伪版本、`devel`、`+dirty` 一律回落到 `devVersion`，标题栏不带 commit 串；真标签（`v1.2.3`、`v1.2.3-rc.1`）照旧直接显示|2026-11-04|用户 2026-11-04 对话指令|
 
 
 D2–D4、L1、CP1 已在 P0.5 第 1 轮确认（2026-10-29）；D1、I1、S1、E1 在第 2 轮确认（同日）。
+HD1/HD2/HD3/HD4 不是 ask 轮次，而是 2026-11-03/11-04 用户在对话里直接下的指令（顶栏收尾 +
+版本号取值），因此来源列写「用户 … 对话指令」；HD1/HD2/HD3 作废了 L1（切档控件）与
+RF1（最近文件 UI 入口）的可见形态，后端数据与字段不变。
 
 W5、W6 是 P5（光栅导出）开工前的落盘/保存语义，用第 5 轮确认（2026-11-02）。
 P6 的 PR1/PR2/RF1/BC1–BC3/PC1/OP1 是开工前的预设/批处理/打包语义,用第 6 轮（5 条）与

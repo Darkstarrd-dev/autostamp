@@ -28,9 +28,8 @@ type Settings struct {
 
 // UI is the client-side view state (ui.* in UI_SPEC §2; never sent to the API).
 type UI struct {
-	Lang    string `json:"lang"`    // en|cn
-	Theme   string `json:"theme"`   // light|dark
-	Density string `json:"density"` // two-col|single-col|collapsed
+	Lang  string `json:"lang"`  // en|cn
+	Theme string `json:"theme"` // light|dark
 }
 
 // Security gates the loopback hardening (AGENTS §5.11; P7 enforces it).

@@ -5,8 +5,8 @@ package config
 // break that tools/verify/ui-contract.mjs does not catch, so keep them synced.
 func Default() Settings {
 	return Settings{
-		Version:  SchemaVersion,
-		UI:       UI{Lang: "en", Theme: "light", Density: "two-col"},
+		Version: SchemaVersion,
+		UI:      UI{Lang: "en", Theme: "light"},
 		// P7: Origin enforcement ships on. The front-end is same-origin, so the
 		// only callers this rejects are cross-site POSTs from another page
 		// (AGENTS §5.11). Still patchable — a non-browser caller (curl, tests)
