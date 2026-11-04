@@ -9,7 +9,8 @@
 - 顶栏收尾行补实测：真壳（headless 真 exe，1440×900）顶栏几何 = `#btn-open` x=12（最左）、
   `#top-file` x=56、`save/shortcuts/lang/theme` = 1184/1228/1272/1353、svg 计数 1/1/1/2、
   图标按钮文本 0 字符；该行状态改「已实现（随本轮提交）」。
-- 顺带修掉「单 exe 出口」行的过期状态（`未 commit` → `commit f46b31e`）。
+- 两行顶栏/版本号的状态回填 `commit ff7ed61`（顺带修掉「单 exe 出口」行的过期状态：
+  `未 commit` → `commit f46b31e`）。
 
 ## 2026-11-03 — §10.1 登记：顶栏收尾（`UI_SPEC §8` HD1/HD2/HD3）
 
