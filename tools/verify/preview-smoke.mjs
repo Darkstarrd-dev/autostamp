@@ -9,6 +9,11 @@
 //   * 分页条 chip 数 == 页数,chip 内缩略图各自有像素(V2 形态)
 //   * 翻到第 2 页必须重新取字节(Range 请求带 session 头,否则 400 bad_session)
 //   * 视口变窄改变 #preview-stage 容器宽 -> fit 重新计算(ResizeObserver)
+//   * fit = 整页适配(V4:min(stageW/页W, stageH/页H),画布两向都不溢出容器)
+//   * 无滚动条 + 程序化平移(V5):#preview-stage overflow hidden;wheel /
+//     Space+方向键 / Space+左键拖动移动滚动偏移,原生 clamp 把页四边钉在容器
+//     四边(probe('pan') 报告 offset + clamp 边界);Space 不劫持壳的箭头步进
+//   * Ctrl + 鼠标中键回 fit(V6)
 //   * vendor 资源 0 失败、页面 console 0 error
 // 口令、切分、印章落盘的断言属 P3/P4,不在此处。
 //
@@ -194,6 +199,17 @@ async function checkDocument(app, file, kind) {
   truthy(`${kind}: the stage has no padding (HD7)`, frame.padding === "0px");
   console.log(`  ok ${kind}: page frame ${frame.radius} / stage padding ${frame.padding} (HD7)`);
 
+  // V4/V5: fit paints the whole page inside the stage in both directions,
+  // the stage never shows scrollbars, and the fresh view sits at the origin.
+  const viewport = await app.evaluate(
+    `(() => { const st = document.getElementById('preview-stage'), cs = getComputedStyle(st), p = window.__autoStampPreview; const b = st.getBoundingClientRect(); const pan = p.probe('pan'); return { ox: cs.overflowX, oy: cs.overflowY, pan, page: p.probe('canvas').css, stage: [Math.round(b.width), Math.round(b.height)] }; })()`
+  );
+  truthy(`${kind}: the stage hides its scrollbars (V5)`, viewport.ox === "hidden" && viewport.oy === "hidden");
+  truthy(`${kind}: fit keeps the page inside the stage both ways (V4)`, viewport.page[0] <= viewport.stage[0] + 1 && viewport.page[1] <= viewport.stage[1] + 1);
+  cmp(`${kind}: the opened view sits at the fit origin (V5)`, { x: viewport.pan.x, y: viewport.pan.y }, { x: 0, y: 0 });
+  truthy(`${kind}: fit opens with nothing to pan`, !viewport.pan.overflowing);
+  console.log(`  ok ${kind}: fit ${Number(probe.fit).toFixed(3)} page ${viewport.page.join("x")} <= stage ${viewport.stage.join("x")}`);
+
   const pagePixels = await app.evaluate(
     `(() => { const p = window.__autoStampPreview; const s = p.sample(60, 40, 480, 700); let white = 0, ink = 0; for (let i = 0; i < s.data.length; i += 4) { if (s.data[i] > 235 && s.data[i+1] > 235 && s.data[i+2] > 235) white++; else ink++; } return { ink, white }; })()`
   );
@@ -262,26 +278,111 @@ async function checkDocument(app, file, kind) {
     if (kind === "img") cmp(`${kind}: page 2 stays text-free`, second.layer.spans, 0);
   }
 
-  // the stage container is what fit mode fits into: a narrower viewport has to
-  // re-fit and repaint the page (ResizeObserver), not just restate a stale scale.
+  // V5/V6: zooming past fit overflows the stage; wheel, Space+arrows and
+  // Space+left-drag pan the offsets, the native clamp pins every page edge to
+  // the container edge, a plain middle click stays inert, and Ctrl + middle
+  // button returns the view to fit. Space must not hijack the shell's
+  // arrow-nudge (UI_SPEC §8 V5).
+  const zoomFit25 = await app.evaluate(
+    `(() => { const p = window.__autoStampPreview; const r = document.getElementById('preview-stage').getBoundingClientRect(); return Promise.resolve(p.zoomTo(p.probe('fitZoom') * 3.5)).then(() => ({ zoom: p.probe('zoom'), center: [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)] })); })()`
+  );
+  truthy(`${kind}: zoomTo renders far past fit`, zoomFit25.zoom > probe.zoom + 0.5 && zoomFit25.zoom < 7.95);
+  const panProbe = async () => app.evaluate("window.__autoStampPreview.probe('pan')");
+  let pv = await panProbe();
+  truthy(`${kind}: zooming past fit overflows both stage axes`, pv.overflowing && pv.maxX > 0 && pv.maxY > 0);
+  await app.send("Input.dispatchMouseEvent", { type: "mouseWheel", x: zoomFit25.center[0], y: zoomFit25.center[1], deltaX: 0, deltaY: 120 });
+  pv = await panProbe();
+  cmp(`${kind}: the wheel pans the view`, pv.y, 120);
+  await app.evaluate("window.__autoStampPreview.panStage(0, -99999)");
+  pv = await panProbe();
+  cmp(`${kind}: wheeling past the top pins the page top to the container (clamp)`, pv.y, 0);
+  await app.evaluate("window.__autoStampPreview.panStage(99999, 0)");
+  pv = await panProbe();
+  cmp(`${kind}: panning past the right pins the page right to the container (clamp)`, pv.x, pv.maxX);
+  await app.evaluate("window.__autoStampPreview.panStage(0, 99999)");
+  pv = await panProbe();
+  cmp(`${kind}: panning past the bottom pins the page bottom to the container (clamp)`, pv.y, pv.maxY);
+  await app.evaluate("window.__autoStampPreview.panStage(0, -99999)");
+  await app.evaluate("document.activeElement && document.activeElement.blur && document.activeElement.blur()");
+  await app.send("Input.dispatchKeyEvent", { type: "keyDown", key: " ", code: "Space" });
+  pv = await panProbe();
+  cmp(`${kind}: Space reports the pan modifier`, pv.space, true);
+  const yBeforeArrow = pv.y;
+  await app.send("Input.dispatchKeyEvent", { type: "keyDown", key: "ArrowDown", code: "ArrowDown" });
+  await app.send("Input.dispatchKeyEvent", { type: "keyUp", key: "ArrowDown", code: "ArrowDown" });
+  pv = await panProbe();
+  truthy(`${kind}: Space + ArrowDown pans by a page step`, pv.y > yBeforeArrow + 39 && pv.y <= pv.maxY);
+  // Space + left-drag grabs the view and drags it; the top edge still pins.
+  const cx = zoomFit25.center[0], cy = zoomFit25.center[1];
+  const xBeforeDrag = pv.x;
+  const yBeforeDrag = pv.y;
+  await app.send("Input.dispatchMouseEvent", { type: "mousePressed", x: cx, y: cy, button: "left", clickCount: 1, buttons: 1 });
+  await app.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: cx + 20, y: cy + 10, button: "left", buttons: 1 });
+  await app.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: cx + 20, y: cy + 10, button: "left", clickCount: 1, buttons: 0 });
+  pv = await panProbe();
+  cmp(`${kind}: Space + left-drag moves the view horizontally`, pv.x, xBeforeDrag - 20);
+  cmp(`${kind}: Space + left-drag moves the view vertically`, pv.y, yBeforeDrag - 10);
+  cmp(`${kind}: panning never selects a stamp instance`, await app.evaluate("window.__autoStampShell.probe('state')"), "opened");
+  // The shell's arrow-nudge must stay quiet while Space is held: with an
+  // instance selected, Space + arrow pans the view and leaves offset alone.
+  await app.evaluate("window.__autoStampShell.addInstance()");
+  await sleep(250);
+  const offBefore = await app.evaluate(`(() => { const i = window.__autoStampShell.selectedInstance(); return i ? String(i.params["api.apply.offset"] || "") : ""; })()`);
+  const xBeforeNudge = pv.x;
+  await app.send("Input.dispatchKeyEvent", { type: "keyDown", key: "ArrowRight", code: "ArrowRight" });
+  await app.send("Input.dispatchKeyEvent", { type: "keyUp", key: "ArrowRight", code: "ArrowRight" });
+  pv = await panProbe();
+  const offAfter = await app.evaluate(`(() => { const i = window.__autoStampShell.selectedInstance(); return i ? String(i.params["api.apply.offset"] || "") : ""; })()`);
+  truthy(`${kind}: Space + arrow pans the view, not the selected instance`, pv.x > xBeforeNudge && pv.x <= pv.maxX && offBefore === offAfter);
+  await app.send("Input.dispatchKeyEvent", { type: "keyUp", key: " ", code: "Space" });
+  pv = await panProbe();
+  cmp(`${kind}: releasing Space clears the pan modifier`, pv.space, false);
+  // V6: a plain middle click stays inert...
+  await app.send("Input.dispatchMouseEvent", { type: "mousePressed", x: cx, y: cy, button: "middle", clickCount: 1, buttons: 4 });
+  await app.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: cx, y: cy, button: "middle", clickCount: 1, buttons: 0 });
+  const midPlain = await app.evaluate("(() => ({ zoom: window.__autoStampPreview.probe('zoom'), pan: window.__autoStampPreview.probe('pan') }))()");
+  cmp(`${kind}: a plain middle click keeps the zoom`, midPlain.zoom, zoomFit25.zoom);
+  cmp(`${kind}: a plain middle click keeps the pan offsets`, { x: midPlain.pan.x, y: midPlain.pan.y }, { x: pv.x, y: pv.y });
+  // ...and Ctrl + middle button returns to fit (new frame -> offsets zeroed).
+  await app.send("Input.dispatchMouseEvent", { type: "mousePressed", x: cx, y: cy, button: "middle", clickCount: 1, buttons: 4, modifiers: 2 });
+  await app.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: cx, y: cy, button: "middle", clickCount: 1, buttons: 0, modifiers: 2 });
+  await sleep(600);
+  const refit = await app.evaluate(
+    `(() => { const p = window.__autoStampPreview, st = document.getElementById('preview-stage'), b = st.getBoundingClientRect(); return { zoom: p.probe('zoom'), fit: p.probe('fitZoom'), pan: p.probe('pan'), page: p.probe('canvas').css, stage: [Math.round(b.width), Math.round(b.height)] }; })()`
+  );
+  cmp(`${kind}: Ctrl + middle click returns to fit (V6)`, refit.zoom, refit.fit);
+  cmp(`${kind}: the fit reset zeroes the offsets`, { x: refit.pan.x, y: refit.pan.y }, { x: 0, y: 0 });
+  truthy(`${kind}: fit again keeps the page inside the stage`, refit.page[0] <= refit.stage[0] + 1 && refit.page[1] <= refit.stage[1] + 1);
+  await app.evaluate("window.__autoStampShell.deleteSelected()");
+  await sleep(200);
+
+  // the stage container is what fit mode fits into (V4: both axes); a
+  // narrower viewport has to re-fit and repaint the page (ResizeObserver),
+  // not just restate a stale scale. The canvas backing store changing size
+  // is the proof that the ResizeObserver re-render actually ran.
   const beforeFit = await app.evaluate(
-    `(() => ({ zoom: window.__autoStampPreview.probe('zoom'), stage: Math.round(document.querySelector('#preview-stage').getBoundingClientRect().width) }))()`
+    `(() => ({ zoom: window.__autoStampPreview.probe('zoom'), stage: Math.round(document.querySelector('#preview-stage').getBoundingClientRect().width), canvas: window.__autoStampPreview.probe('canvas') }))()`
   );
   await app.setViewport(NARROW[0], NARROW[1]);
   let after = {};
   try {
     after = await waitFor(async () => {
       const s = await app.evaluate(
-        `(() => ({ zoom: window.__autoStampPreview.probe('zoom'), stage: Math.round(document.querySelector('#preview-stage').getBoundingClientRect().width), canvas: window.__autoStampPreview.probe('canvas') }))()`
+        `(() => ({ zoom: window.__autoStampPreview.probe('zoom'), fit: window.__autoStampPreview.probe('fitZoom'), stage: Math.round(document.querySelector('#preview-stage').getBoundingClientRect().width), canvas: window.__autoStampPreview.probe('canvas') }))()`
       );
-      return s.stage !== beforeFit.stage && Math.abs(s.zoom - beforeFit.zoom) > 0.02 ? s : null;
+      return s.stage !== beforeFit.stage && s.canvas && beforeFit.canvas && s.canvas.backing[0] !== beforeFit.canvas.backing[0] ? s : null;
     }, 8000, `fit never re-rendered after a ${NARROW[0]}x${NARROW[1]} viewport`);
   } catch (e) {
-    bad(`${kind}: ${e.message} (stage ${beforeFit.stage} -> ${JSON.stringify(after).slice(0, 120)})`);
+    let dbg = null;
+    try {
+      dbg = await app.evaluate("(() => { const st = document.querySelector('#preview-stage'), p = window.__autoStampPreview; return { stageW: Math.round(st.getBoundingClientRect().width), clientW: st.clientWidth, scrollW: st.scrollWidth, zoom: p.probe('zoom'), fit: p.probe('fitZoom'), state: window.__autoStampShell.probe('state') }; })()");
+    } catch {}
+    bad(`${kind}: ${e.message} (stage ${beforeFit.stage} -> ${JSON.stringify(after).slice(0, 120)} dbg=${JSON.stringify(dbg)})`);
   }
   if (after && after.canvas) {
     console.log(`  ok ${kind}: fit ${Number(beforeFit.zoom).toFixed(3)} -> ${Number(after.zoom).toFixed(3)} after the ${NARROW[0]}x${NARROW[1]} viewport (stage ${beforeFit.stage}px -> ${after.stage}px)`);
     truthy(`${kind}: re-rendered canvas`, after.canvas.backing[0] > 100);
+    truthy(`${kind}: the re-rendered zoom follows the fit probe`, Math.abs(after.zoom - after.fit) < 1e-9);
   }
   await app.send("Emulation.clearDeviceMetricsOverride");
   await sleep(1200);

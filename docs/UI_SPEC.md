@@ -1,11 +1,15 @@
 # AutoStamp — UI_SPEC（P0.5 UI 契约）
 
-> 最后核对：2026-11-04（§8 新增 HD4–HD7：显示版本 = `0.1-dev`、顶栏去文本 + 按钮重排、
-> 启动页装载入口精简、左列预览出血；§4 删 2 键（270 → 268：`empty.open.btn`、`empty.upload.btn`）+
-> 改 1 键（`empty.pick.btn` = Open file / 打开文件）、§6 ui-ids 删 4 个 id
-> （`top-file`、`empty-upload`、`empty-open`、`file-input`，93 → 89）。顶栏收尾的
-> 2026-11-03 记录（§2 删 `ui.density`、§4 删 12 键、§6 删 6 个顶栏 id、§7 去 `setDensity`、
-> §7.1 加 `docTitle`、HD1/HD2/HD3，L1/RF1 的 UI 形态作废）沿用；P2–P6 接线记录沿用 2026-10-30/11-02）。
+> 最后核对：2026-11-04（§8 新增 V4–V6：fit = **整页适配**（保比例，不再是仅适配宽）、
+> 左主区**无滚动条** + Space+方向键 / Space+左键拖动 / 滚轮 平移且四边被原生 clamp 钉死、
+> Ctrl+鼠标中键 = 恢复 fit；§4 增 2 键（268 → 270：`view.pan.hint`、`view.fit.hint`）、
+> §5 增两行、§7.1 预览接口增 `panStage` 与 `probe('pan')`；修复面：实例 ghost 双绘制
+> （`instance-canvas` 不挂 DOM，仅 probe 背板）与 brightness/saturate 复核（代码链路正确，
+> ghost 是用户感觉「两滑杆结果相同」的成因）。HD4–HD7（版本 = `0.1-dev`、顶栏去文本、
+> 启动页入口、左列出血；§4 删 2 键 + 改 1 键、§6 ui-ids 删 4 个 id 93 → 89）沿用；
+> 顶栏收尾的 2026-11-03 记录（§2 删 `ui.density`、§4 删 12 键、§6 删 6 个顶栏 id、
+> §7 去 `setDensity`、§7.1 加 `docTitle`、HD1/HD2/HD3，L1/RF1 的 UI 形态作废）沿用；
+> P2–P6 接线记录沿用 2026-10-30/11-02）。
 > 本文是 **UI 语义唯一权威**：字段名/取值域/控件绑定/DOM id/状态机
 > 在此冻结；P0 起 `web/static/index.html` 必须照 §1 骨架与 §7 id 搭建，P1–P5 只换数据源。
 > 与 `AGENTS.md` §6 路由字段冲突时：先改本文 + §6（同一提交），再改代码。
@@ -199,7 +203,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 滑杆 + 数值必须**双向绑定**（同一 `data-field` 复用两次，mock 已实现 `bindPair`）；
 隐藏 `type=file` input（HD6 后只剩 `#seal-file-input`，印章图片选择器）只作触发器，不占字段。
 
-## 4. i18n 清单（key | en | cn；共 268 键，全部由 mock + 状态文案生成；`node tools/verify/gen-i18n.mjs` 打印同数）
+## 4. i18n 清单（key | en | cn；共 270 键，全部由 mock + 状态文案生成；`node tools/verify/gen-i18n.mjs` 打印同数）
 
 规则（AGENTS §7）：每个可见控件/文案必须有 `data-i18n` key，en/cn 两值非空；
 `data-i18n-cn`（及 `-placeholder`、`-title`）提供中文值，en 取元素自身文本或 `class="tag"` 的字段名。
@@ -409,6 +413,8 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |ui.theme.ctl|Light / Dark|浅色 / 深色|
 |ui.theme.hint|Colour tokens (UI_SPEC 6) switch as one set.|配色令牌（UI_SPEC §6）一并切换。|
 |ui.split.vetoedPages.hint|Click a page to veto its auto-split.|点击某页即否决其自动切分；否决页保持原样不切。|
+|view.fit.hint|restore fit (Ctrl+middle click)|恢复整页适配（Ctrl+鼠标中键）|
+|view.pan.hint|pan the view (Space + arrows / Space + left-drag / wheel)|平移视图（Space+方向键 / Space+左键拖动 / 滚轮）|
 |warn.noText.hint|No extractable text layer: this file has only scanned images|无可抽取文字层：该文件只有扫描图像|
 |warn.render.hint|Page 3 has 33 MP: rendered at reduced scale|第 3 页 33 MP：已按缩略尺寸渲染|
 |warn.export.tooBig|page bitmap exceeds the 90 MB cap: lower DPI to 300 or fewer pages|单页位图超过 90 MB 上限：请把 DPI 降到 300 或少选几页|
@@ -490,6 +496,8 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |+ / −|scale ±0.01|scale|
 |1..9 / PgUp/PgDn|跳页|current|
 |Ctrl+滚轮|按中心缩放（P1 = 预览视图缩放；P2 起光标在选中实例上时 = `apply.scale`，见 §8 V3）|scale / 视图|
+|Space + 方向键 / Space + 左键拖动 / 滚轮（无 Ctrl）|平移视图；页四边不会越过容器四边（V4/V5）|视图|
+|Ctrl + 鼠标中键|回到 fit（整页适配，V6）|视图|
 |Esc / ?|关闭弹窗、清除 toast / 快捷键表|—|
 
 ## 6. 契约 DOM id
@@ -506,6 +514,11 @@ app-main  app-root  apply-anchor  apply-blend  asset-hooks  batch-auto-split  ba
 全部图标 + `data-i18n-title` tooltip。版本与打开后的文件名只写在**窗口标题**里 —— 原生标题栏
 （Go `windowTitle`）与浏览器标签页（`document.title`）同一个串 `AutoStamp <版本> [文件名]`（HD2 修订）。
 `#app-main` 不带版式属性（固定 two-col，HD3）；左列的 `#preview` 无内边距、无圆角（HD7）。
+
+`#preview-stage` **无滚动条**（`overflow: hidden`，V5）：缩放超过容器时平移走程序化
+滚动偏移（`app-preview.js` 的 `bindPan`：Space+方向键 / Space+左键拖动 / 滚轮；
+浏览器对 `scrollTop/scrollLeft` 的原生 clamp 就是「页四边不超出容器四边」的规则）；
+fit 为整页适配（V4），`#page-frame` 永远完整可见。
 
 `#preview-stage` 的页框与 `#page-pager` 的分页 chip 全部由 JS 生成（不占契约 id，靠
 `class` + `data-page`）；`#asset-hooks` 与 `pathGrantId` 的 chip 只显示句柄值本身，
@@ -542,9 +555,11 @@ tooltip）、`probe(name)`、
 `load`（粘贴/拖拽装载读数：`{kind: pdf|seals|reject, reason, names, count}`，见 §8 PD1/PD2）。
 
 `window.__autoStampPreview`（`app-preview.js`）：`open(info)`、`setPassword(pw)`、`reload(pw)`、
-`close()`、`goTo(n)`、`next()`、`prev()`、`zoomBy(step)`、`zoomTo(v)`、`fit()`、`pageCount()`、
-`pageMeta(n)`、`sample(x,y,w,h)`（`x,y,w,h` 为 PDF 点，返回 RGBA + 换算后的像素矩形）、
+`close()`、`goTo(n)`、`next()`、`prev()`、`zoomBy(step)`、`zoomTo(v)`、`fit()`、`panStage(dx,dy)`
+（V5 的程序化平移，越界值由浏览器 clamp）、`pageCount()`、`pageMeta(n)`、
+`sample(x,y,w,h)`（`x,y,w,h` 为 PDF 点，返回 RGBA + 换算后的像素矩形）、
 `probe(name)`：`page` `pageCount` `asset` `zoom` `fitZoom` `dpr` `canvas` `textLayer` `reduced`
+`pan`（V5：滚动偏移 + clamp 边界 `maxX/maxY` + `space`/`overflowing` 读数）
 `splitPreview`（P3 切分预览：`on` `marks` `boxes` `parts`，`marks` 按 `split.mode` 画在页框上）。
 `window.__autoStampTextLayer`（`app-textlayer.js`）：`attach({pdfjs,pageObj,viewport,frame,dpr})`、
 `count(pageObj)`。`window.__autoStampPager`（`app-pager.js`）：`build()`、`refresh()`。
@@ -562,7 +577,8 @@ tooltip）、`probe(name)`、
 `rectFor(inst)`、`beginDrag/moveDrag/endDrag`、
 `probe(name)`：`rects` `strips` `view` `affordance`（选中实例的包围盒 + 句柄数）、`drag`
 （`moveDown/centerDown/rotDown` 命中诊断）、`instancePixels`（该实例四角的本机
-alpha/预乘 RGB，见 §11 P2 反算规则）、`selected`、`filter`（`ctx.filter` 读数，
+alpha/预乘 RGB，见 §11 P2 反算规则；实例画布是**不挂 DOM 的 probe 背板**——
+页面 canvas 是唯一被用户看到的合成面，ghost 双绘制已于 2026-11-04 修复）、`selected`、`filter`（`ctx.filter` 读数，
 FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 `pixelsForRect(info, rect)` 两个纯函数供 verify 脚本算像素。
 
@@ -628,6 +644,9 @@ FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 |HD5|顶栏要不要文本、按钮怎么排|保留 `#top-file` 标题文本 / 顶栏只剩图标按钮|已确认（用户 2026-11-04 对话指令）：**顶栏没有任何文本**，`#top-file` 删除（作废 HD2 的顶栏承载：版本 + 打开后的文件名只写在原生标题栏与浏览器标签页）；顺序 = 左簇「打开 + 保存」相邻贴着左边缘，右簇「语言 → 主题 → 快捷键」，**快捷键最右**（在明暗切档右侧）|2026-11-04|用户 2026-11-04 对话指令|
 |HD6|启动页装载入口形态|上传 + 选择 + 路径 + 打开 四个控件 / 只留「打开文件」+ 路径框|已确认（用户 2026-11-04 对话指令）：删「上传文件」按钮（`#empty-upload`）与路径框右侧的「打开」按钮（`#empty-open`）；「选择文件」改名 **「打开文件」**（`empty.pick.btn` = Open file / 打开文件）；路径框回车仍走 `openByPath`；隐藏 `#file-input` 及其 change 监听随上传入口一起去掉（已无触发者），拖放/粘贴装载继续喂 `submitFiles`|2026-11-04|用户 2026-11-04 对话指令|
 |HD7|左列预览保留圆角与外边距吗|出血占满左容器 / 保留卡片式内缩|已确认（用户 2026-11-04 对话指令）：`#empty-state` 去 `margin: 24px` + `border-radius: 8px`（占满左列），`#preview-stage` 内边距 `18px` → `0`，`.page-frame` 圆角 `2px` → `0`；虚线框仍作拖放反馈（`#preview[data-drag]` + `#drop-hint` 不变）|2026-11-04|用户 2026-11-04 对话指令|
+|V4|fit 到底适配什么|整页适配（宽+高取小，保比例，推荐）/ 仅适配宽（P1 原状）|已确认（用户 2026-11-04 对话指令，人工验收修正 2）：fit = `min(stageWidth/pageW, stageHeight/pageH)`，加载/打开默认 fit，页在两个方向都不超出容器；ResizeObserver 的 re-fit 同时盯宽高（`stageHeight()` 新增）|2026-11-04|用户 2026-11-04 对话指令|
+|V5|左主区滚动条 + 平移语义|无滚动条 + Space 组合平移（推荐）/ 保留原生滚动条 / 只做键盘不加拖拽|已确认（用户 2026-11-04 对话指令，修正 1+3）：`#preview-stage` `overflow: hidden`（无滚动条）；缩放超出容器时平移 = 程序化滚动偏移 —— **Space+方向键**、**Space+左键拖动**（capture+stopPropagation，不劫持印章选择/拖动）、无 Ctrl 滚轮；`scrollTop/scrollLeft` 的原生 clamp 保证「图片上下左右边不会超出容器上下左右边」；Space 按住时吞掉其原生（滚动/按钮激活），输入框内不启用|2026-11-04|用户 2026-11-04 对话指令|
+|V6|非 fit 时怎么一键回 fit|Ctrl+鼠标中键（推荐）/ 双击 / 全局快捷键|已确认（用户 2026-11-04 对话指令，修正 4）：**Ctrl+鼠标中键** → `fit()`（`state.zoom = 0`）；`pointerdown` capture 同时 `preventDefault` 吃掉浏览器的 autoscroll|2026-11-04|用户 2026-11-04 对话指令|
 
 
 D2–D4、L1、CP1 已在 P0.5 第 1 轮确认（2026-10-29）；D1、I1、S1、E1 在第 2 轮确认（同日）。
@@ -635,6 +654,11 @@ HD1–HD7 不是 ask 轮次，而是 2026-11-03/11-04 用户在对话里直接�
 版本号取值 + 启动页入口 + 左列出血），因此来源列写「用户 … 对话指令」；HD1/HD2/HD3 作废了
 L1（切档控件）与 RF1（最近文件 UI 入口）的可见形态，后端数据与字段不变；HD5 作废 HD2 的
 「顶栏文本承载」半边（`#top-file` 删除，窗口标题仍在）。
+
+V4–V6 同样是 2026-11-04 用户在人工端到端验收里直接下的修正指令（fit 整页、无滚动条 +
+Space 平移、Ctrl+中键回 fit）；同一轮的「印章 ghost 双绘制」与「明度/饱和度滑杆」是
+缺陷修复，不改语义，故不进本表（ghost = `instance-canvas` 不挂 DOM，明度/饱和度复核
+结论见 `IMPLEMENTATION_PLAN` §10.1）。V4 作废了 P1 时代的「fit = 仅适配宽」语义。
 
 W5、W6 是 P5（光栅导出）开工前的落盘/保存语义，用第 5 轮确认（2026-11-02）。
 P6 的 PR1/PR2/RF1/BC1–BC3/PC1/OP1 是开工前的预设/批处理/打包语义,用第 6 轮（5 条）与

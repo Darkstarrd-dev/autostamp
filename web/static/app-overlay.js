@@ -16,9 +16,11 @@
 //
 // The affordance DOM mirrors docs/ui/mockup.html (§6): one .instance wrapper per
 // stamp instance, holding the .sel-box with five .handle [data-handle=nw|ne|sw|se|rot].
-// The mock paints its fake seal into `.instance-seal`; the real app composites the
-// seal on the *page* canvas instead (repaint + the FACTS §1.3 pixel parity), because
-// a second layer would dilute the blend - so the wrapper carries the affordance only.
+// The mock paints its fake seal into `.instance-seal`; the real app composites
+// the seal on the *page* canvas instead (repaint + the FACTS §1.3 pixel parity),
+// because a second layer would dilute the blend - so the wrapper carries the
+// affordance only, and the per-instance canvas stays offscreen as the probe-only
+// backing surface for probe('instancePixels').
 // Box visibility is state-gated (css: html[data-state=stamp-*]); cross-page instances
 // hide it, because their strip is positioned by the panel's startOffset (UI_SPEC §8
 // CP1), not by dragging.
@@ -321,8 +323,12 @@
       label.dataset.i18nCn = "选中印章实例的位置";
       label.textContent = "Selected stamp instance position";
       box.append(label);
+      // probe-only backing surface; deliberately NOT appended to the wrapper.
+      // Attaching it used to paint the seal a second time next to the page
+      // canvas composite (the 25%-ghost bug, 2026-11-04: the DOM copy draws
+      // the seal at natural size inside the fit-scaled box, so only the top
+      // left portion is visible and it lands over the real composite).
       const canvas = doc.createElement("canvas");
-      canvas.className = "instance-canvas";
       canvas.dataset.instance = String(inst.id);
       canvas.dataset.role = "stamp-canvas";
       const handles = [];
@@ -335,7 +341,7 @@
         box.append(h);
         handles.push(h);
       }
-      wrap.append(canvas, box);
+      wrap.append(box);
       layer.append(wrap);
       state.nodes.set(inst.id, { wrap, canvas, box, handles });
       bindAffordance(box);
@@ -347,8 +353,8 @@
     }
   }
 
-  // layoutNodes sizes each instance canvas + the box to the painted rect, in
-  // device pixels for the canvas (AGENTS: page canvas size = CSS px x DPR).
+  // layoutNodes sizes each selection box to the painted rect, and refreshes
+  // the offscreen probe canvas for the instance (device pixels = CSS px x DPR).
   function layoutNodes() {
     const s = shell();
     if (!s) return;
@@ -357,25 +363,23 @@
       if (!rect) continue;
       const wCss = Math.max(1, Math.round(rect.w * state.scale));
       const hCss = Math.max(1, Math.round(rect.h * state.scale));
-      node.canvas.width = Math.round(wCss * state.dpr);
-      node.canvas.height = Math.round(hCss * state.dpr);
-      node.canvas.style.left = `${rect.x * state.scale}px`;
-      node.canvas.style.top = `${rect.y * state.scale}px`;
-      node.canvas.style.width = `${wCss}px`;
-      node.canvas.style.height = `${hCss}px`;
-      node.box.style.left = node.canvas.style.left;
-      node.box.style.top = node.canvas.style.top;
+      node.box.style.left = `${rect.x * state.scale}px`;
+      node.box.style.top = `${rect.y * state.scale}px`;
       node.box.style.width = `${wCss}px`;
       node.box.style.height = `${hCss}px`;
+      // The backing canvas keeps the device-pixel box of the rect so the
+      // instancePixels probe reads the same seal the page canvas shows.
+      node.canvas.width = Math.round(wCss * state.dpr);
+      node.canvas.height = Math.round(hCss * state.dpr);
       drawInstanceCanvas(node.canvas, id);
     }
     void s;
   }
 
-  // drawInstanceCanvas paints one instance onto its own canvas. It is the same
-  // drawing code as the page composite (drawSeal) so the affordance and the
-  // preview can never diverge; it also gives the verify script a per-instance
-  // pixel sample to assert against.
+  // drawInstanceCanvas paints one instance onto its offscreen probe canvas. It
+  // runs the same drawing code as the page composite (drawSeal) so the probe
+  // can never diverge from what the user sees; the canvas itself is never
+  // attached to the document (single-draw contract).
   function drawInstanceCanvas(canvas, id) {
     const s = shell();
     const inst = s && s.instanceById(id);
@@ -693,6 +697,8 @@
       case "filter":
         return state.ctx ? state.ctx.filter || "none" : null;
       case "instancePixels": {
+        // offscreen per-instance canvases (not in the DOM; the page canvas is
+        // the only painted surface).
         const out = [];
         for (const [id, node] of state.nodes.entries()) {
           const c = node.canvas;

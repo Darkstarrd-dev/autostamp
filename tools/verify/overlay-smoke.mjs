@@ -24,6 +24,12 @@
 //   6. the pages field limits which pages get a rect;
 //   7. the ctx.filter leak guard (docs/FACTS §1.4) plus a two-instance case that
 //     would fail if the first instance's filter bled into the second.
+//   8. brightness/saturate are two filters, not one: each slider gets its
+//     own hand-composite pixel (the filter applies to the source, same
+//     equation as the matrix), so a collapsed single filter cannot pass;
+//   9. one composite surface: #stamp-layer carries affordances only, the
+//     per-instance backing stays offscreen (probe('instancePixels')), and no
+//     canvas is attached inside #stamp-layer (the ghost double-draw is gone).
 //
 // Usage: node tools/verify/overlay-smoke.mjs [--reuse-build] [--keep-profile]
 //        [--only=<check-id>]
@@ -563,9 +569,9 @@ async function main() {
 
   // 7) pointer wiring: drag, corner, rotate
   if (wants("drag")) {
-    // the page is taller than the viewport in fit-width mode, so the seal has
-    // to be scrolled into view before pointer events can hit it: #preview-stage
-    // is the scroll container, so the maths is done against its own client box.
+    // V4 fit puts the whole page on screen, so the seal is normally already
+    // in view; the maths below recentres it when it is not (programmatic
+    // offsets are the V5 pan channel, and they clamp at the container edges).
     await app.evaluate(shellEval(`(() => {
       const st = document.querySelector('#preview-stage');
       const c = document.querySelector('#preview-stage canvas.page-canvas');
@@ -747,6 +753,47 @@ async function main() {
       await app.evaluate(shellEval("s.deleteSelected()"));
       await sleep(200);
     }
+
+    // The two sliders are two filters, not one: brightness and saturate each
+    // have to move the composite on their own (same parity point, same
+    // equation, filter applied to the source). The ghost double-draw used to
+    // mask exactly this, so the pin is also the regression guard for the fix.
+    const fx = SEAL.x + wantRect.w / 2;
+    const fy = SEAL.y + wantRect.h / 2;
+    const CS2 = srcColor ? srcColor.rgb : GRAD_MID;
+    const CB2 = BLOCKS[0].rgb;
+    const clamp255 = (v) => Math.max(0, Math.min(255, Math.round(v)));
+    const fBright = (c, b) => c.map((v) => clamp255(v * b));
+    const fSaturate = (c, s) => {
+      const m = [
+        0.213 + 0.787 * s, 0.715 - 0.715 * s, 0.072 - 0.072 * s,
+        0.213 - 0.213 * s, 0.715 + 0.285 * s, 0.072 - 0.072 * s,
+        0.213 - 0.213 * s, 0.715 - 0.715 * s, 0.072 + 0.928 * s,
+      ];
+      return [0, 1, 2].map((i) => clamp255(m[3 * i] * c[0] + m[3 * i + 1] * c[1] + m[3 * i + 2] * c[2]));
+    };
+    await setParams(app, { "api.apply.brightness": 1, "api.apply.saturate": 1, "api.apply.blend": "multiply", "api.apply.opacity": 1, "api.apply.offset": SEAL.offset, "api.apply.scale": SEAL.scale, "api.apply.pages": "all", "api.apply.crossPage": false });
+    await sleep(220);
+    const base2 = await sampleAt(app, fx, fy, "composite");
+    nearPixel("filter baseline @ multiply", base2.rgb, expectPixel(CB2, CS2, 1, "multiply"), 2);
+    await setParams(app, { "api.apply.brightness": 0.5 });
+    await sleep(200);
+    const pxB = await sampleAt(app, fx, fy, "composite");
+    nearPixel("brightness 0.5 moves the composite on its own", pxB.rgb, expectPixel(CB2, fBright(CS2, 0.5), 1, "multiply"), 2);
+    await setParams(app, { "api.apply.brightness": 1, "api.apply.saturate": 0.5 });
+    await sleep(200);
+    const pxS = await sampleAt(app, fx, fy, "composite");
+    nearPixel("saturate 0.5 moves the composite on its own", pxS.rgb, expectPixel(CB2, fSaturate(CS2, 0.5), 1, "multiply"), 2);
+    truthy("the two filters stay distinct", pxB.rgb.some((v, i) => Math.abs(v - pxS.rgb[i]) > 3));
+
+    // one composite surface: the stamp-layer carries affordances only.
+    const dom = await app.evaluate(
+      `(() => ({ stampCanvases: document.querySelectorAll('#stamp-layer canvas').length, pageCanvases: document.querySelectorAll('#preview-stage canvas.page-canvas').length }))()`
+    );
+    cmp("no composite canvas hangs in the stamp-layer (ghost fix)", dom.stampCanvases, 0);
+    cmp("the page canvas is the single painted surface", dom.pageCanvases, 1);
+    const backs = await app.evaluate(shellEval("o.probe('instancePixels')"));
+    truthy(`the per-instance backing surfaces stay offscreen (${backs ? backs.length : "none"})`, Array.isArray(backs) && backs.length >= 1 && backs[0].w > 1);
     await setParams(app, { "api.apply.brightness": 1, "api.apply.saturate": 1 });
   }
 

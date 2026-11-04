@@ -31,7 +31,7 @@
     asset: null, // {assetId,name,pageCount,pages[]} straight from POST /api/pdf/open
     doc: null, // PDFDocumentProxy
     page: 1,
-    zoom: 0, // 0 == fit-width
+    zoom: 0, // 0 == fit-page (the whole page fits the stage; V4, UI_SPEC §8)
     pw: "", // password typed by the user, kept so Retry re-opens once
     renderTask: null,
     layer: null,
@@ -151,27 +151,44 @@
     return pageObj.getViewport({ scale: 1 });
   }
 
-  // stageWidth measures the layout box the page has to fit into. A hidden
-  // container (html[data-state=empty] sets #preview-stage to display:none,
-  // style.css) reports width 0, which is *not* a guessable number: it returns
-  // 0 and the caller defers the paint to the ResizeObserver below.
+  // stageWidth/stageHeight measure the layout box the page has to fit into. A
+  // hidden container (html[data-state=empty] sets #preview-stage to display:none,
+  // style.css) reports width/height 0, which is *not* a guessable number: the
+  // callers return 0 and the ResizeObserver below defers the paint.
   function stageWidth() {
     const stage = q("#preview-stage");
     if (!stage) return 0;
     const box = stage.getBoundingClientRect();
     if (box.width <= 0) return 0;
     // The stage is a flex container with padding; the frame needs a little
-    // slack so the horizontal scrollbar does not appear for a fitted page.
+    // slack (the 8 px below) away from the border edge. The stage has no
+    // scrollbars any more (V5: overflow hidden in style.css), so the slack is
+    // purely visual, not a scrollbar reservation.
     const style = getComputedStyle(stage);
     const pad = parseFloat(style.paddingLeft || 0) + parseFloat(style.paddingRight || 0);
     return Math.floor(box.width - pad - 8);
   }
 
-  // fitZoom: scale that makes the current page's width fill the stage.
+  function stageHeight() {
+    const stage = q("#preview-stage");
+    if (!stage) return 0;
+    const box = stage.getBoundingClientRect();
+    if (box.height <= 0) return 0;
+    const style = getComputedStyle(stage);
+    const pad = parseFloat(style.paddingTop || 0) + parseFloat(style.paddingBottom || 0);
+    return Math.floor(box.height - pad - 8);
+  }
+
+  // fitZoom: the scale that fits the *whole* page into the stage, aspect kept
+  // (V4 revises the old fit-width semantics, UI_SPEC §8): neither page
+  // dimension may overflow the container at fit, which is also why the stage
+  // stays scrollbar-free (V5).
   function fitZoom(pageObj) {
     const vp = baseViewport(pageObj);
     const w = stageWidth();
-    return vp.width > 0 && w > 0 ? w / vp.width : 0;
+    const h = stageHeight();
+    if (!(vp.width > 0 && vp.height > 0) || w <= 0 || h <= 0) return 0;
+    return Math.min(w / vp.width, h / vp.height);
   }
 
   function zoomValue(pageObj) {
@@ -180,6 +197,7 @@
 
   let stageObserver = null;
   let lastStageWidth = 0;
+  let lastStageHeight = 0;
 
   function cancelPending() {
     if (state.renderTask) {
@@ -193,10 +211,10 @@
   }
 
   // observeStage watches the container, not the page: a window resize, the
-  // density switch (single-col / collapsed) or the empty->opened transition all
-  // change the width the page has to fit into, and a fit-mode page has to be
-  // re-fitted. An explicit zoom (Ctrl+wheel, + / -) is kept as-is; the fit note
-  // is what gets recomputed instead.
+  // panel collapse or the empty->opened transition all change the box the page
+  // has to fit into, and a fit-mode page has to be re-fitted (both directions,
+  // V4). An explicit zoom (Ctrl+wheel, + / -) is kept as-is; the fit note is
+  // what gets recomputed instead.
   function observeStage() {
     if (stageObserver || typeof ResizeObserver !== "function") return;
     const stage = q("#preview-stage");
@@ -204,8 +222,11 @@
     stageObserver = new ResizeObserver(() => {
       if (!state.doc) return;
       const w = stageWidth();
-      if (w <= 0 || Math.abs(w - lastStageWidth) <= 2) return;
+      const h = stageHeight();
+      if (w <= 0 || h <= 0) return;
+      if (Math.abs(w - lastStageWidth) <= 2 && Math.abs(h - lastStageHeight) <= 2) return;
       lastStageWidth = w;
+      lastStageHeight = h;
       if (state.zoom > 0 && !state.pendingFit) {
         // Explicit zoom: the page stays where the user put it, only the fit note
         // and the MP readout go stale, so they are what gets refreshed.
@@ -412,6 +433,134 @@
     return renderCurrent();
   }
 
+  // ---------- panning + fit-reset (V4–V6, UI_SPEC §8) ----------
+  // The stage shows no scrollbars (V5: overflow hidden, style.css). When the
+  // page is zoomed beyond the container the view pans programmatically:
+  // Space + arrow keys, Space + left-drag, and the wheel. All of them move
+  // scrollLeft/scrollTop, and the browser's own offset clamping pins the page
+  // edges to the container edges - a pan can never drag an image edge across
+  // the container edge to reveal empty stage background (V5).
+  // Ctrl + middle button restores the fit (V6).
+  const pan = { space: false, pointer: null };
+
+  function panStage(dx, dy) {
+    const stage = q("#preview-stage");
+    if (!stage) return false;
+    const x0 = stage.scrollLeft;
+    const y0 = stage.scrollTop;
+    stage.scrollLeft = x0 + dx;
+    stage.scrollTop = y0 + dy;
+    // out-of-range assignments clamp natively: this is the edge rule.
+    return stage.scrollLeft !== x0 || stage.scrollTop !== y0;
+  }
+
+  function endPanDrag() {
+    const stage = q("#preview-stage");
+    if (!pan.pointer) return;
+    pan.pointer = null;
+    if (stage) {
+      delete stage.dataset.pan;
+      if (pan.space !== undefined && pan.space) stage.dataset.pan = "space";
+    }
+  }
+
+  function bindPan() {
+    const stage = q("#preview-stage");
+    if (!stage || stage.dataset.panBound) return;
+    stage.dataset.panBound = "1";
+
+    const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+
+    // Capture phase on purpose: the shell's ←↑↓→ nudge (stamp position) and
+    // the stage's own select-on-press must stay quiet while Space is held.
+    doc.addEventListener(
+      "keydown",
+      (e) => {
+        if (/^(INPUT|SELECT|TEXTAREA)$/.test((e.target && e.target.tagName) || "")) return;
+        if (e.code === "Space" && !e.ctrlKey && !e.altKey && !e.metaKey) {
+          // Space is the pan modifier; swallow its native half (page scroll,
+          // focused-button activation) while it is held.
+          if (!pan.space) {
+            pan.space = true;
+            stage.dataset.pan = "space";
+          }
+          e.preventDefault();
+          return;
+        }
+        if (pan.space && ARROWS[e.key]) {
+          e.preventDefault();
+          e.stopPropagation();
+          const step = Math.max(40, Math.round(Math.min(stage.clientWidth, stage.clientHeight) * 0.15));
+          panStage(ARROWS[e.key][0] * step, ARROWS[e.key][1] * step);
+        }
+      },
+      true
+    );
+    doc.addEventListener("keyup", (e) => {
+      if (e.code !== "Space" || !pan.space) return;
+      pan.space = false;
+      endPanDrag();
+      delete stage.dataset.pan;
+    });
+    // Losing the window while Space is held must not leave a stuck modifier.
+    window.addEventListener("blur", () => {
+      pan.space = false;
+      endPanDrag();
+      delete stage.dataset.pan;
+    });
+
+    stage.addEventListener(
+      "pointerdown",
+      (e) => {
+        // V6: Ctrl + middle button = back to fit (also kills the autoscroll).
+        if (e.button === 1 && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          e.stopPropagation();
+          fit();
+          return;
+        }
+        // V5: Space + left button = grab-pan the stage, not the stamp.
+        if (pan.space && e.button === 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          pan.pointer = { id: e.pointerId, x: e.clientX, y: e.clientY, left: stage.scrollLeft, top: stage.scrollTop };
+          stage.dataset.pan = "drag";
+          if (stage.setPointerCapture) {
+            try {
+              stage.setPointerCapture(e.pointerId);
+            } catch {
+              /* capture is a nicety */
+            }
+          }
+        }
+      },
+      true
+    );
+    stage.addEventListener("pointermove", (e) => {
+      if (!pan.pointer || e.pointerId !== pan.pointer.id) return;
+      e.preventDefault();
+      stage.scrollLeft = pan.pointer.left + (pan.pointer.x - e.clientX);
+      stage.scrollTop = pan.pointer.top + (pan.pointer.y - e.clientY);
+    });
+    const stopPan = (e) => {
+      if (pan.pointer && e.pointerId === pan.pointer.id) endPanDrag();
+    };
+    stage.addEventListener("pointerup", stopPan);
+    stage.addEventListener("pointercancel", stopPan);
+
+    // Plain wheel pans the view (the old native scroll kept working without a
+    // visible scrollbar); Ctrl+wheel stays the zoom gesture (V3, app-shell).
+    stage.addEventListener(
+      "wheel",
+      (e) => {
+        if (e.ctrlKey || e.metaKey) return;
+        e.preventDefault();
+        panStage(e.deltaX || 0, e.deltaY || 0);
+      },
+      { passive: false }
+    );
+  }
+
   // ---------- pixel probes (AGENTS §8) ----------
 
   // sample returns the RGBA of a PDF-unit square patch anchored in the current
@@ -474,6 +623,20 @@
       }
       case "reduced":
         return state.lastScaleNote;
+      case "pan": {
+        // The pan contract (V5): offset + native clamp bounds, so the verify
+        // scripts can assert the edges never cross the container edges.
+        const stage = q("#preview-stage");
+        if (!stage) return null;
+        return {
+          x: Math.round(stage.scrollLeft),
+          y: Math.round(stage.scrollTop),
+          maxX: Math.max(0, stage.scrollWidth - stage.clientWidth),
+          maxY: Math.max(0, stage.scrollHeight - stage.clientHeight),
+          space: pan.space,
+          overflowing: stage.scrollWidth > stage.clientWidth || stage.scrollHeight > stage.clientHeight,
+        };
+      }
       default:
         throw new Error(`unknown preview probe: ${name}`);
     }
@@ -512,6 +675,7 @@
     zoomBy,
     zoomTo,
     fit,
+    panStage,
     // The overlay repaints without re-fetching the document.
     redraw: renderCurrent,
     pageCount,
@@ -532,4 +696,7 @@
     const vp = { width: canvas.width / state.dpr, height: canvas.height / state.dpr };
     updateReadout(meta, vp, zoomValueOf(meta), Boolean(state.lastScaleNote));
   });
+
+  // The pan/fit gestures bind once against the static stage markup.
+  bindPan();
 })();

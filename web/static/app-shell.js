@@ -528,6 +528,8 @@
     ["+ / −", "scale.hint"],
     ["1..9 / PgUp/PgDn", "page.hint"],
     ["Ctrl+wheel", "scale.hint"],
+    ["Space + ←↑↓→ / Space + 左键拖动", "view.pan.hint"],
+    ["Ctrl + 鼠标中键", "view.fit.hint"],
     ["Esc / ?", "esc.hint", "shortcuts.hint"],
   ];
 

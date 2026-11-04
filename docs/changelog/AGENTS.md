@@ -2,6 +2,23 @@
 
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+
+## 2026-11-04 — 新增 §5.27（预览视口 V4–V6 + ghost 修复）+ §8.9/§8.10 断言扩充 + §11 视口行
+
+- **新增 §5.27（预览视口契约，用户 2026-11-04 人工验收修正指令）**：fit = 整页适配
+  （`fitZoom = min(stageWidth/pageW, stageHeight/pageH)`，保比例，打开默认 fit）；
+  `#preview-stage` `overflow: hidden` = 无滚动条；缩放超容器时平移走程序化偏移
+  （Space+方向键 / Space+左键拖动 / 无 Ctrl 滚轮；原生 clamp = 「四边不超出容器四边」）；
+  Ctrl+鼠标中键 = `fit()`；实例画布不挂 DOM（只作 `probe('instancePixels')` 背板），
+  旧版 DOM 双绘制 = 「完整印章 + 左上角副本」ghost 的根因，已根除。
+  `brightness/saturate` 复核结论：滑杆链路本就分离，视觉不可辨是 ghost 覆盖所致。
+- **§8.9**：preview-smoke 断言补 fit = 整页、V5 平移（Space 组合 + clamp 边界 +
+  不劫持印章步进）、V6 Ctrl+中键回 fit。
+- **§8.10**：overlay-smoke 断言补 filter 语义（brightness/saturate 独立生效 +
+  无挂 DOM 实例画布）。
+- **§11**：「改预览渲染」行扩成「改预览渲染/视口」（`fitZoom/stageHeight`、`bindPan`、
+  `probe('pan')`、`panStage`）；「改叠加层/印章通道」行写明实例画布 probe 背板语义。
+
 ## 2026-11-04 — §5.24 改写 + 新增 §5.25/§5.26（HD5/HD6/HD7 当前态）+ §4/§5.23/§8/§11 同步
 
 - **§5.24 改写为当前态**：顶栏**没有任何文本**（HD5：`#top-file` 已删，作废 HD2 的顶栏承载半边）；

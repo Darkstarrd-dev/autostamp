@@ -2,6 +2,13 @@
 
 > `PROJECT_MAP.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+
+## 2026-11-04 — 视口 V4–V6：`app-preview.js`（fit 整页 + `bindPan`）+ `app-overlay.js`（实例画布 probe 背板）
+
+- 头「最后核对」追加本轮：`fitZoom = min(stageWidth, stageHeight)`（打开默认 fit，两向不溢出）、
+  `bindPan`（无滚动条 + Space 平移 + Ctrl+中键 fit + `probe('pan')`）、叠加层「页面 canvas 唯一
+  可见合成面、实例画布不挂 DOM」。§11 速查新增「改预览渲染/视口」行。
+
 ## 2026-11-04 — 顶栏去文本 / 启动页入口 / 左列出血：`index.html`、`app-shell.js`、`style.css`、`app-i18n.js`、三行 verify
 
 - 头「最后核对」→ 2026-11-04，并把顶栏收尾（HD1–HD3）降为 2026-11-03 增量；**本轮 = HD4–HD7**

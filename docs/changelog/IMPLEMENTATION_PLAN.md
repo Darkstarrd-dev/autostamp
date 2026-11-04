@@ -2,6 +2,19 @@
 
 > `docs/IMPLEMENTATION_PLAN.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+
+## 2026-11-04 — §10.1 登记：人工验收修正（V4–V6 + ghost + 明度/饱和度复核）
+
+- 头「最后核对」改为：本轮 = V4–V6（fit 整页 / 无滚动条 + Space 平移 / Ctrl+中键回 fit）+
+  印章 ghost 双绘制修复 + 明度/饱和度复核；引用 AGENTS §5.27，i18n 268 → 270。
+- §10.1 新行「人工验收修正：视口 V4–V6 + ghost 修复 + 明度/饱和度复核」：来源 = 用户
+  2026-11-04 对话指令（`UI_SPEC §8` V4/V5/V6）。
+- 门槛回填（同条目最终态）：`build.ps1 -Task vet,test,verify` = 失败 0 / 跳过 0（116.07 s）；
+  `preview-smoke` 新 fit/平移/clamp/Ctrl+中键断言全绿（fitZoom 0.726、clamp 边界 235/1519、
+  re-fit 1042→720 由 canvas backing 变化证明）；`overlay-smoke` filter 手算钉死
+  （baseline [56,13,58]、brightness 0.5 → [28,7,29]、saturate 0.5 → [41,19,42]）+ ghost 缺位
+  （`#stamp-layer` canvas = 0）；`ui-contract` = 89 id / 270 键三方一致。实测数字全部登记进 §10.1 行。
+
 ## 2026-11-04 — §10.1 登记：启动页入口 + 顶栏去文本 + 左列出血（HD5/HD6/HD7）
 
 - §10.1 新行「启动页入口精简 + 顶栏去文本 + 左列出血（HD5/HD6/HD7）」：来源 = 用户 2026-11-04

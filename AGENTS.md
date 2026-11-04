@@ -267,6 +267,18 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
 26. **左列预览出血（HD7，用户 2026-11-04 对话指令）**：左列不再卡片式内缩 —— `#empty-state` 去
     `margin: 24px` + `border-radius: 8px`（占满左列，虚线框保留）、`#preview-stage` 内边距 `18px` →
     `0`、`.page-frame` 圆角 `2px` → `0`；拖放反馈不变（`#preview[data-drag]` + `#drop-hint`）。
+27. **预览视口契约（V4–V6 + ghost 修复，用户 2026-11-04 人工验收修正指令）**：fit =
+    **整页适配**（`fitZoom = min(stageWidth/pageW, stageHeight/pageH)`，保比例，打开默认 fit，
+    两向都不超出容器）；`#preview-stage` `overflow: hidden` = **无滚动条**；缩放超出容器时
+    平移走程序化偏移（`app-preview.js` 的 `bindPan`：Space+方向键 / Space+左键拖动（capture
+    +`stopPropagation`，不劫持印章选择/拖动）/ 无 Ctrl 滚轮），浏览器对 `scroll[Left|Top]` 的
+    原生 clamp 就是「图片上下左右边不会超出容器上下左右边」；**Ctrl+鼠标中键** = `fit()`
+    （同时 `preventDefault` 吃掉 autoscroll）。探针 `probe('pan')` 暴露偏移 + clamp 边界。
+    叠加层单绘制契约：`.instance` 只挂 `sel-box`，**实例画布不挂 DOM**（只是
+    `probe('instancePixels')` 的背板）——旧版把印章同时画进 DOM 实例画布（按 natural size
+    溢出选中框，只露出左上部分）造成「完整印章 + 左上角副本」ghost 双绘制，已修复。
+    `brightness/saturate` 复核：链路本来就分离（滑杆写 `api.apply.brightness/saturate`，
+    `drawSeal` 拼 `ctx.filter`），用户感觉「两滑杆结果相同」的根因就是 ghost——修掉后差异明显。
 
 ## 6. HTTP 契约（`/api/*`，全部 JSON；字段在 **P0.5 与用户确认后**才冻结，改动必须同步本文、`docs/UI_SPEC.md` 与前端）
 
@@ -355,14 +367,19 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
      `Page.printToPDF` 现场生成四类样本（英文多页文字 / 中文 CID / 混合型 / 图片型无文字），
      真 exe + 真 UI（`#empty-path` 回车通道，HD6）跑一遍：断言画布有真实像素、
      `getTextContent` 条数（图片型必须为 0）、`.textLayer` span 计数与层框宽度 == 画布 CSS 宽、
-     翻页与分页条 chip 数、缩放后 backing store 尺寸变化、vendor 资源 0 失败（FACTS §1.7）。
+     翻页与分页条 chip 数、缩放后 backing store 尺寸变化、**fit = 整页（两向不超出容器，
+     fitZoom == probe('fitZoom')）**、**V5 平移：Space+方向键 / Space+左键拖动移动滚动偏移且
+     停在 `probe('pan')` 的 clamp 边界、Space+箭头不劫持印章步进**、**V6 Ctrl+中键回 fit**、
+     vendor 资源 0 失败（FACTS §1.7）。
   10. P2 叠加预览（P2 起常驻）：`node tools/verify/overlay-smoke.mjs` — 真 exe + 真 UI，
       分段令牌 `--only=<open|geometry|despill|matrix|drag|strip|filter|export>`（缺省全跑）。
       断言：上传印章 → 16 模式 ×{1.0,0.6,0.3}（脚本页内独立重算再与真实画布比，absdiff ≤ 1）、
       alpha 预乘规则、去背 alpha/bbox 计数、几何（fit 缩放、四角→`scale`、拖拽→`offset`、
       旋转手柄→`rotation`、滚轮只在光标位于选中实例内时改 `scale`）、骑缝条带
       （宽 = 页宽 10%、`startOffset` 位移误差 0、`alternate` 条带数 == 页数、逐页列对齐 ≤1 px）、
-      `ctx.filter` 复位读数、导出体积预估 == FACTS §4（含 vector 忽略 DPI/质量）。
+      `ctx.filter` 复位读数、**filter 语义：`brightness` 与 `saturate` 的 CSS filter 独立生效
+      （两滑杆分别改像素、公式与滤镜矩阵手算比对，且 `#stamp-layer` 内无挂 DOM 的实例画布
+      = ghost 双绘制已根除）**、导出体积预估 == FACTS §4（含 vector 忽略 DPI/质量）。
       **改前端后必须去掉 `--reuse-build`**（该旗标复用 `dist/autostamp-overlay-smoke.exe`，
       旧嵌入副本会让新代码看不到 —— 2026-10-30 实测踩过的坑）。
   11. P2 像素等值性：`node tools/verify/pixel-matrix.mjs`（分段 `--only=matrix|chain`）=
@@ -427,7 +444,7 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
 |任务|先读|涉及文件|
 |---|---|---|
 |改切分/骑缝几何|`docs/FACTS.md` §2.3 + §1.8|`internal/pdfcore/split.go`（词表含 `vetoPages`/`splitPages`）、`sealimg.go`（落盘条带）、`web/static/app-preview.js`（`drawSplitMarks` 切点预览）、`web/static/app-overlay.js`（`stripGeometryFor/stripRectsFor` 条带）、`web/static/app-shell.js`（`#split-veto` 逐页否决、`#split-undo`）|
-|改叠加层/印章通道|`docs/FACTS.md` §1.8 + §1.3 + §1.9|`web/static/app-overlay.js`（合成/affordance/滚轮/快照 `state.surface`）、`web/static/app-seal.js`（上传/去背/撤销）、`web/static/app-shell.js`（`sealIdFor`/`restoreInstanceSeals`）、`internal/api/seal.go`|
+|改叠加层/印章通道|`docs/FACTS.md` §1.8 + §1.3 + §1.9|`web/static/app-overlay.js`（合成/affordance/滚轮/快照 `state.surface`；实例画布只作 probe 背板、不挂 DOM——单绘制契约 §5.27）、`web/static/app-seal.js`（上传/去背/撤销）、`web/static/app-shell.js`（`sealIdFor`/`restoreInstanceSeals`）、`internal/api/seal.go`|
 |改落盘/撤销/保存|`UI_SPEC §8` W1-W4 + 本文件 §5.16/§5.17 + FACTS §1.9 §2.6|`internal/api/apply.go`、`internal/api/save.go`、`internal/pdfcore/{apply,stamp,blend,validate,pxdims,pages}.go`、`web/static/app-shell.js`（`stampIntoPDF`/`undoRoute`/`submitSave`）、`tools/verify/apply-smoke.mjs`|
 |改导出体积预估|`docs/FACTS.md` §4|`web/static/app-shell.js`（`computeEstimate/refreshEstimate`、`probe('estimate')`）|
 |改混合模式/透明度|`docs/FACTS.md` §1.2/§1.3/§2.2|`internal/pdfcore/blend.go`、`web/static/app-overlay.js`|
@@ -436,7 +453,7 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
 |改批处理|`UI_SPEC §8` BM1-BM5 + 本文件 §5.21（**没有后端作业路由、没有 SSE**）|`web/static/app-batch.js`（`runOne` 跑链 + `batchTarget` + `pagesForDoc` + 报表下载）、`web/static/index.html`（批处理段字段）、`web/static/app-api.js`（`fsPickDir`/`exportUpload`）、`internal/api/pdf.go`（`fs/pick` 的 `dir` 分支）、`internal/api/save.go`（`{mkdirs}`）、`internal/fsx/list.go`（`ListPDFs`）、`tools/verify/batch-smoke.mjs --only=batch|
 |改打包/发布物|本文件 §4（PC1）|`build.ps1`（`Start-Package`：`autostamp-<rev>-win64.zip` = strip 窗口版重命名 `autostamp.exe` + `README.md`，25 MB 体积门）、`README.md`（随 zip 一起出货，必须保持准确）、`build1.ps1`/`buildm.ps1`（单 exe 出口 `dist\autostamp.exe`；极限压缩走 UPX，见 FACTS §4.3）|
 |改粘贴/拖拽装载|`UI_SPEC §8` PD1/PD2 + 本文件 §5.23/§5.25（无新路由/新字段）|`web/static/app-shell.js`（`submitFiles`/`classifyLoad`/paste/dragover/drop/`state.loadLog`）、`web/static/index.html`（`#drop-hint`；装载入口 = `#empty-pick` + `#empty-path` 回车，无隐藏 `file-input`）、`web/static/style.css`（`[data-drag]`+`#drop-hint`）、`web/static/app-seal.js`（图片经 `seal/prepare`）、`tools/verify/shell-smoke.mjs`（装载断言）|
-|改预览渲染|`docs/FACTS.md` §1|`web/static/app-preview.js`、`web/static/vendor/pdfjs/`|
+|改预览渲染/视口（fit、平移、fit 复位）|`UI_SPEC §8` V4–V6 + 本文件 §5.27 + `docs/FACTS.md` §1|`web/static/app-preview.js`（`fitZoom/stageHeight`、`bindPan`、`probe('pan')`、`panStage`）、`web/static/style.css`（`#preview-stage` `overflow: hidden` + `[data-pan]` cursor）、`tools/verify/preview-smoke.mjs`（fit/平移/fit 复位断言）、`web/static/vendor/pdfjs/`|
 |新增路由|本文件 §6|`internal/api/register.go`、`web/static/app-api.js`|
 |窗口/端口/浏览器回退|本文件 §5|`host_webview_windows.go`、`internal/app/`|
 |改 UI 契约 / 参数词表 / 顶栏形态|`docs/UI_SPEC.md`（§2 词表、§4 i18n 键表、§6 契约 id、§7 驱动接口、§8 决策表含 HD1–HD7）+ 本文件 §6 + `IMPLEMENTATION_PLAN.md` P0.5|`docs/ui/mockup.html`、`web/static/index.html`（面板标记 + `data-field` + 图标按钮的 `data-i18n-title`；顶栏无文本，启动页入口 = `#empty-pick` + `#empty-path`）、`web/static/app-shell.js`（字段读写/实例/窗口标题 `setDocTitle()` + `probe('docTitle')`/路径框 Enter → `openByPath`）、`web/static/app-i18n.js`（由 §4 生成）、`web/static/style.css`（版式固定 two-col、无密度切档；左列出血 = `#empty-state` 无 margin/radius + `#preview-stage` padding 0 + `.page-frame` 无 radius）、`internal/config/{types,sanitize,patch}.go`（`ui.*` 词表：`lang`/`theme`，已无 `density`）、`main.go`（`windowTitle` = `AutoStamp <版本>`）、`internal/api/{pdf,seal,export}.go`|

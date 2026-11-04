@@ -2,6 +2,21 @@
 
 > `docs/UI_SPEC.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+
+## 2026-11-04 — §8 新增 V4/V5/V6：fit 整页 + 无滚动条/Space 平移 + Ctrl+中键回 fit
+
+- **来源**：人工端到端验收轮的用户 2026-11-04 修正指令（同一轮的 ghost/滑杆两项是缺陷修复，
+  不进本表，见 PLAN §10.1 与 changelog 同期条目）。
+- **V4**：fit 从「仅适配宽」改为**整页适配**（`min(w/h)`，保比例，打开默认 fit），ResizeObserver
+  re-fit 同时盯宽高。V4 作废 P1 时代语义。
+- **V5**：`#preview-stage` `overflow: hidden`（无滚动条）+ 平移走程序化偏移（Space+方向键 /
+  Space+左键拖动 / 滚轮）；原生 clamp = 「页四边不超出容器四边」。§6 段新增无滚动条说明。
+- **V6**：Ctrl+鼠标中键 = 回 fit（capture `pointerdown` + `preventDefault` 吃掉 autoscroll）。
+- **§5 快捷键表**新增「Space + 方向键 / Space + 左键拖动 / 滚轮」与「Ctrl + 鼠标中键」两行。
+- **§4 增 2 键**（268 → 270：`view.pan.hint`、`view.fit.hint`；`app-shell.js` 的快捷键表行）。
+- **§7.1**：预览接口补 `panStage(dx,dy)` 与 `probe('pan')`；叠加层 `instancePixels` 注明实例
+  画布是不挂 DOM 的 probe 背板（ghost 修复）。
+
 ## 2026-11-04 — §8 新增 HD5/HD6/HD7：顶栏去文本 + 启动页装载入口精简 + 左列出血
 
 - **来源**：不是 ask 轮次，而是用户 2026-11-04 对话里的三条指令 → §8 新增 HD5（顶栏不要文本、
