@@ -2,6 +2,31 @@
 
 > `PROJECT_MAP.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-04 — 顶栏去文本 / 启动页入口 / 左列出血：`index.html`、`app-shell.js`、`style.css`、`app-i18n.js`、三行 verify
+
+- 头「最后核对」→ 2026-11-04，并把顶栏收尾（HD1–HD3）降为 2026-11-03 增量；**本轮 = HD4–HD7**
+  （版本号 `0.1-dev`、顶栏去文本 + 按钮重排、启动页只留「打开文件」+ 路径框 Enter、左列出血；
+  `UI_SPEC §6` 删 4 个契约 id、i18n 270 → 268）。
+- `index.html` 行：顶栏（`#topbar`）**没有任何文本**（HD5）= `#btn-open`+`#btn-save` 左簇、
+  `#lang-seg`+`#theme-seg`+`#btn-shortcuts` 右簇；启动页装载入口 = `#empty-pick`（「打开文件」）
+  + `#empty-path` 路径框（HD6）。
+- `app-shell.js` 行：「窗口标题」改成 `setDocTitle()`（原生标题栏与 `document.title` 同串 =
+  `AutoStamp <版本> [文件名]`；`probe('docTitle')`），不再提 `#top-file`；打开流程补
+  `#empty-path` 的 `keydown` Enter → `openByPath`（HD6）。
+- `style.css` 行：补**左列出血**（HD7：`#empty-state` 无 `margin`/`border-radius`、
+  `#preview-stage` `padding: 0`、`.page-frame` 无圆角）与 `.file-chip` 规则随顶栏文本删除。
+- `app-i18n.js` 行：270 键 → **268 键**（`empty.pick.btn` = Open file / 打开文件；
+  `empty.open.btn`、`empty.upload.btn` 已删）。
+- verify 三行：`ui-contract` 写「`UI_SPEC §6` 的 89 个契约 id 与 mock + 壳 markup 三方一致」；
+  `shell-smoke` 补顶栏收尾守卫（删件 id 未复活 = `top-file`/`empty-upload`/`empty-open`/
+  `file-input`、顶栏图标几何 = `#btn-open` 左缘 / `#btn-save` 相邻 / `#btn-shortcuts` 最右、
+  「顶栏无文本」计数、固定 two-col）；`preview-smoke` 的打开通道 = `#empty-path` 回车（HD6）。
+- `ui-smoke` 行不再钉「i18n 196 键」这个过期计数，改成「i18n 全覆盖（每个 `data-i18n`
+  解析出非空 en/cn，`[data-i18n-title]` 必须有 cn 孪生）」；`ui-contract` 行同步 89 个契约 id。
+- `README.md` 功能表第 7 项（随 zip 出货，必须准确）同步：顶栏无任何文本、左簇/右簇顺序、
+  版本与文件名只写窗口标题栏、打开入口 = 顶栏「打开」/启动页「打开文件」/路径框回车/拖放粘贴、
+  左列预览占满整列。
+
 ## 2026-11-04 — `internal/app` 版本行：`version.go` 记 `pickVersion`，新增 `version_test.go`
 
 - `version.go` 行补记 `pickVersion`（只认真实标签，伪版本/`devel`/`+dirty` 回落 `devVersion` =
@@ -12,7 +37,7 @@
 ## 2026-11-03 — 顶栏收尾同步：`app-shell.js` / `style.css` / `app-i18n.js` / `shell-smoke` 行
 
 - `app-shell.js` 行去掉「密度切换（`two-col`/`single-col`/`collapsed`）」，改记**窗口标题**
-  （`document.title` 与 `#top-file` 同串 = `AutoStamp <版本>` + 文件名；`probe('docTitle')`），
+  （`document.title` 与 `#top-file` 同串 = `AutoStamp <版本>` + 文件名；`probe('docTitle')`；`#top-file` 这一行 2026-11-04 起就是「窗口标题（`setDocTitle()`…）」，元素本身已删），
   i18n 片段补 `data-i18n-title`；`SetRecent 读回` 随最近文件 UI 入口删除一起去掉
   （`internal/api/pdf.go` 的 `SetRecent` 仍在，见 §2 行）。
 - `style.css` 行改成「版式**固定 two-col** 双栏 + 图标按钮 tooltip」（密度切档规则已删）；

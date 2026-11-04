@@ -8,6 +8,8 @@
 //   * 1280x720 and 1440x900 must not produce horizontal overflow
 //   * every data-i18n key must resolve to non-empty en+cn text
 //   * slider↔number pairing and segmented controls must actually write the field
+//   * the empty state keeps one load entry (#empty-pick) and opens on Enter (HD6),
+//     with the left column bleeding to its edges (HD7)
 //
 // Usage: node tools/verify/ui-smoke.mjs [--keep-profile]
 // Exit: 0 = pass.
@@ -135,6 +137,60 @@ async function main() {
     cmp(`${w}x${h} fixed two-col layout`, [fixed.sidebarW === 380, fixed.overflow], [true, false]);
     if (fixed.densityAttr || fixed.densityCtl) bad(`${w}x${h}: the density control/density attribute is still live`);
   }
+
+  // 3c. the empty state is the load contract (HD6: one entry + Enter in the path
+  // box) and the left column bleeds (HD7: no margin/rounding on the empty stage
+  // or the page frames); the removed ids stay dead (HD5/HD6).
+  const load = await evaluate(`
+    (function () {
+      var m = window.__autoStampMock;
+      var cs = function (sel) { return getComputedStyle(m.q(sel)); };
+      var out = {};
+      out.deadIds = ["top-file", "empty-open", "empty-upload", "file-input"].filter(function (id) { return document.getElementById(id); });
+      var bar = document.querySelector("#topbar");
+      var stray = [];
+      for (var n = bar.firstChild; n; n = n.nextSibling) {
+        if (n.nodeType === 3 && n.nodeValue.trim()) stray.push(n.nodeValue.trim());
+      }
+      Array.prototype.forEach.call(bar.children, function (el) {
+        if (el.tagName === "BUTTON" || el.matches(".seg, .spacer")) return;
+        if (el.textContent.trim()) stray.push((el.id || el.className) + ": " + el.textContent.trim());
+      });
+      out.barStray = stray;
+      m.setState("opened");
+      out.bleed = {
+        emptyMargin: cs("#empty-state").marginTop,
+        emptyRadius: cs("#empty-state").borderTopLeftRadius,
+        emptyBorder: cs("#empty-state").borderTopStyle,
+        stagePadding: cs("#preview-stage").paddingLeft,
+        frameRadius: cs(".page-frame").borderTopLeftRadius
+      };
+      m.setState("empty");
+      var box = m.q("#empty-path");
+      box.value = "verify-typed.pdf";
+      var ev = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+      box.dispatchEvent(ev);
+      out.prevented = ev.defaultPrevented;
+      out.typedState = m.probe("state");
+      m.setState("empty");
+      box.value = "";
+      box.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+      out.blankState = m.probe("state");
+      m.setState("empty");
+      out.pickEn = m.q("#empty-pick").textContent.trim();
+      m.applyLang("cn");
+      out.pickCn = m.q("#empty-pick").textContent.trim();
+      m.applyLang("en");
+      return out;
+    })()`);
+  if (load.deadIds.length) bad("ids deleted by HD5/HD6 are back in the mock: " + load.deadIds.join(" "));
+  if (load.barStray.length) bad("the mock topbar carries stray text (HD5): " + load.barStray.join(" | "));
+  cmp("the only empty-state load entry is #empty-pick (Open file/打开文件)", [load.pickEn, load.pickCn], ["Open file", "打开文件"]);
+  cmp("HD6: Enter opens the typed path, an empty box never opens",
+    [load.prevented, load.typedState, load.blankState], [true, "opened", "empty"]);
+  cmp("HD7: empty stage bleeds into the column, dashed border kept",
+    [load.bleed.emptyMargin, load.bleed.emptyRadius, load.bleed.emptyBorder, load.bleed.stagePadding, load.bleed.frameRadius],
+    ["0px", "0px", "dashed", "0px", "0px"]);
 
   // 4. i18n coverage: every key resolves to non-empty en and cn
   await evaluate('window.__autoStampMock.applyLang("en")');

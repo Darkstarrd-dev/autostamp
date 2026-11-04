@@ -2,13 +2,35 @@
 
 > `docs/IMPLEMENTATION_PLAN.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-04 — §10.1 登记：启动页入口 + 顶栏去文本 + 左列出血（HD5/HD6/HD7）
+
+- §10.1 新行「启动页入口精简 + 顶栏去文本 + 左列出血（HD5/HD6/HD7）」：来源 = 用户 2026-11-04
+  对话指令，状态 = 已实现（门槛未跑，实测待回填）。第四列按同行写法写全：契约面（§6 ui-ids 删
+  `top-file`、`empty-upload`、`empty-open`、`file-input`，93 → 89；§4 删 `empty.open.btn` +
+  `empty.upload.btn`，270 → 268；`empty.pick.btn` = Open file / 打开文件）、前端面
+  （`index.html` 顶栏无文本 + 快捷键最右；`app-shell.js` 的 `setDocTitle()` 与 `#empty-path`
+  Enter → `openByPath`；`style.css` 的左列出血 + `.file-chip` 删除；`app-i18n.js` = 268 键；
+  `app-api.js` 注释）、mock 面（`docs/ui/mockup.html` 镜像）、门槛清单（`vet,test,verify` 的
+  `ui-contract` / `shell-smoke` / `ui-smoke` / `preview-smoke` / `overlay-smoke`）。
+  「实测/验证（回填）」留占位：真壳顶栏几何（`#btn-open` 左缘 / `#btn-save` 相邻 /
+  `#btn-shortcuts` 最右）、「顶栏无文本」计数、真 UI 打开通道 = 门槛跑完回填。
+- 顶栏收尾行（HD1/HD2/HD3）状态不变（仍「已实现，commit `ff7ed61`」），实测列补一句注记：
+  当时的几何读数保留原值，`#top-file`（x=56）已在 2026-11-04 被 HD5 删除，指向新行。
+- 版本号行（HD4）：「四处同源」→「三处同源」（原生窗口标题栏 / 浏览器标签页 / `/api/health`；
+  `#top-file` 当时还在承载，HD5 之后删除），mock 占位措辞去掉 `#top-file`。
+- P1 实测块里「真 UI 打开（空态 `#empty-path` + `#empty-open`）」→「`#empty-path` 的回车通道
+  （HD6）」，与 `preview-smoke` 改后的通道一致。
+- 头「最后核对」重写：顶栏收尾（HD1–HD3 + commit `ff7ed61`）降为 2026-11-03 增量，
+  **本轮 = 启动页入口 + 顶栏去文本 + 左列出血**，指向 §10.1。
+
 ## 2026-11-04 — §10.1 登记版本号取值（HD4）+ 顶栏行补真壳几何读数
 
 - §10.1 新行：版本 = `0.1-dev`，`internal/app.pickVersion` 不再让 Go 的伪版本进 UI；
   门槛 = `version_test.go`（版本取值表）+ `shell-smoke` 的 `probe('version')`/`docTitle` 动态比对。
 - 顶栏收尾行补实测：真壳（headless 真 exe，1440×900）顶栏几何 = `#btn-open` x=12（最左）、
-  `#top-file` x=56、`save/shortcuts/lang/theme` = 1184/1228/1272/1353、svg 计数 1/1/1/2、
-  图标按钮文本 0 字符；该行状态改「已实现（随本轮提交）」。
+  `save/shortcuts/lang/theme` = 1184/1228/1272/1353、svg 计数 1/1/1/2、
+  图标按钮文本 0 字符；该行状态改「已实现（随本轮提交）」。`#top-file` x=56 是当时的读数，
+  同日 HD5 已删该元素（新行里写的是 HD5 之后的几何）。
 - 两行顶栏/版本号的状态回填 `commit ff7ed61`（顺带修掉「单 exe 出口」行的过期状态：
   `未 commit` → `commit f46b31e`）。
 
@@ -121,7 +143,7 @@
   `internal/webx/session.go`、`internal/fsx/pick*.go`、`internal/pdfcore/read.go`。
 - 验收要求从「三类样本」扩成四类（英文多页文字 / 中文 CID / 混合型 / 图片型无文字），
   并在 P1 小节新增「P1 实测」块：样本由 CDP `Page.printToPDF` 现场生成（54,763 /
-  186,950 / 23,935 / 46,043 B，不落仓库）、真 UI 通道（`#empty-path` + `#empty-open`）、
+  186,950 / 23,935 / 46,043 B，不落仓库）、真 UI 通道（`#empty-path` + `#empty-open`；后者 2026-11-04 起改成路径框回车，HD6）、
   会话令牌 + Range 的具体返回值、vendor `SHA256.txt` 206 项（README 改动后要重生成清单）。
 - 顶部「最后核对」改为「P0 + P0.5 + P1 完成；当前阶段 = P2」。
 

@@ -119,7 +119,7 @@
     return envelopeOf(res, path);
   }
 
-  // uploadPDF is the drag/drop and file-input channel: multipart/form-data with
+  // uploadPDF is the drag/drop and paste channel: multipart/form-data with
   // a `file` field. The route is wrapped in MaxBytesHandler (256 MiB,
   // AGENTS §5.11), so an oversized drop is refused before it ever lands.
   async function uploadPDF(file, pw) {

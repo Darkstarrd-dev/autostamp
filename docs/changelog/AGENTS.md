@@ -2,6 +2,32 @@
 
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-04 — §5.24 改写 + 新增 §5.25/§5.26（HD5/HD6/HD7 当前态）+ §4/§5.23/§8/§11 同步
+
+- **§5.24 改写为当前态**：顶栏**没有任何文本**（HD5：`#top-file` 已删，作废 HD2 的顶栏承载半边）；
+  左簇 = 「打开」+「保存」相邻贴着左边缘，右簇 = 语言 → 主题 → 快捷键，**快捷键最右**；版本 +
+  打开后的文件名只写在窗口标题（前端 `setDocTitle()` 写 `document.title`，与 Go `windowTitle`
+  同一个串），`#top-file` 的 `title` 属性（完整路径 · 体积）随元素一起消失。图标按钮、
+  固定 two-col、`probe('docTitle')` 等既有事实沿用。
+- **新增 §5.25（启动页装载入口，HD6）**：入口只有三个 —— `#empty-pick`「打开文件」（与顶栏「打开」
+  同一个 `pickAndOpen()`，`empty.pick.btn` = Open file / 打开文件）、`#empty-path` 路径框（**回车**
+  = `keydown` Enter + `e.preventDefault()` → `openByPath()`）、窗口级拖放/粘贴（`submitFiles` →
+  `handleFiles` multipart）。「上传文件」按钮 `#empty-upload`、「打开」按钮 `#empty-open`、隐藏
+  `<input id="file-input">` 与其 change 监听全部删除：`UI_SPEC §6` 的契约 id 93 → 89、§4 删
+  `empty.open.btn` + `empty.upload.btn`（270 → 268，`top.file.hint` 保留）。无新路由/新字段。
+- **新增 §5.26（左列预览出血，HD7）**：`#empty-state` 去 `margin: 24px` + `border-radius: 8px`、
+  `#preview-stage` 内边距 `18px` → `0`、`.page-frame` 圆角 → `0`；拖放反馈仍是
+  `#preview[data-drag]` + `#drop-hint`。
+- **§5.23**：装载漏斗的「与『上传』按钮同语义」措辞改掉（该按钮已不存在）—— 单个 PDF 改成
+  「与窗口级拖放同一条 multipart 链」，并指向 §5.25 说明「打开文件」走的是 `fs/pick` grant。
+- **§4 版本条目**：「四处同源」→「三处同源」（原生窗口标题栏 / 浏览器标签页 / `/api/health`），
+  并写明 `#top-file` 已删（§5.24）。
+- **§8 验证清单第 9 项**：P1 的真 UI 通道 = 「`#empty-path` 回车」，不再是「`#empty-path` +
+  `#empty-open`」。
+- **§11**：「改粘贴/拖拽装载」行补启动页入口（`#empty-pick` + `#empty-path` 回车，无隐藏
+  `file-input`）并指向 §5.25；「改 UI 契约 / 参数词表 / 顶栏形态」行的决策表指向 HD1–HD7，
+  文件面补 `setDocTitle()` + `probe('docTitle')`、路径框 Enter → `openByPath`、左列出血的三条 CSS。
+
 ## 2026-11-04 — §4 版本条目补 `pickVersion` 规则（显示版本 = `0.1-dev`）
 
 - §4 的「版本用 Go 自动 VCS 注入」条目补一段：`internal/app.pickVersion` 只认真实标签，未打标签时
@@ -17,8 +43,8 @@
 - **新增 §5.24**：顶栏 = 「打开」（左）+「保存」「快捷键」+ 语言/主题分段（右），全是图标按钮
   （内嵌 SVG + `data-i18n-title`，cn 孪生 `data-i18n-title-cn`，`applyLang` 写 `title` + `aria-label`）；
   品牌文字 / 最近入口 / 顶栏上传 / 导出设置入口 / 密度切档 / 版本 chip 都已删（启动页 `#empty-upload`
-  保留）；`#top-file` = 窗口标题文本（`AutoStamp <版本>` + 打开后的文件名），版本串同时写进原生窗口
-  标题栏（Go `windowTitle`）与标签页（`document.title`）；版式固定 two-col，`ui.density` 契约字段与
+  当时还保留，2026-11-04 随 HD6 删除）；`#top-file` = 窗口标题文本（`AutoStamp <版本>` + 打开后的文件名），版本串同时写进原生窗口
+  标题栏（Go `windowTitle`）与标签页（`document.title`）；`#top-file` 本身已在 2026-11-04 随 HD5 删除；版式固定 two-col，`ui.density` 契约字段与
   `[data-density=…]` 规则删除，`setDensity()` / `probe('density')` 由 `probe('docTitle')` 取代。
 - **§7 + §8 第 7 项**：验证清单去掉「密度切换」，改成断言窗口标题（`probe('docTitle')`）与图标按钮
   `data-i18n-title` tooltip 的 i18n 覆盖。

@@ -88,11 +88,6 @@ button { cursor: pointer; color: inherit; }
   grid-area: topbar; display: flex; align-items: center; gap: var(--gap);
   padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface-2);
 }
-/* HD2: one left-aligned title string — AutoStamp <version> [filename] */
-#topbar .file-chip {
-  font: var(--mono); color: var(--muted); max-width: min(56ch, 45vw);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
 .spacer { margin-left: auto; }
 .btn {
   border: 1px solid var(--border); background: var(--surface);
@@ -125,9 +120,11 @@ input[type="text"] { width: 100%; }
 
 /* ---- preview ---- */
 #preview { grid-area: preview; min-width: 0; position: relative; display: flex; flex-direction: column; background: var(--stage-bg); }
+/* HD7 (2026-11-04): the empty card bleeds into the whole left column - no margin,
+   no radius; the dashed border stays as the drop-target affordance. */
 #empty-state {
-  flex: 1; display: none; margin: 24px; border: 2px dashed var(--border);
-  border-radius: 8px; background: var(--surface); padding: 28px; text-align: center;
+  flex: 1; display: none; border: 2px dashed var(--border);
+  background: var(--surface); padding: 28px; text-align: center;
 }
 #empty-state .msg { font-size: 16px; margin-bottom: 6px; }
 #empty-state .hint { color: var(--muted); margin-bottom: 16px; }
@@ -160,12 +157,9 @@ html:not([data-state="empty"]) #preview[data-drag="on"] .page-frame { outline: 2
 
 #preview-stage {
   position: relative; flex: 1; min-height: 0; overflow: auto;
-  display: flex; gap: 22px; align-items: flex-start; justify-content: center; padding: 18px;
+  display: flex; gap: 22px; align-items: flex-start; justify-content: center; padding: 0;
 }
-.page-frame {
-  position: relative; flex: none; background: #fff; box-shadow: var(--shadow);
-  border-radius: 2px;
-}
+.page-frame { position: relative; flex: none; background: #fff; box-shadow: var(--shadow); }
 .page-frame canvas.page-canvas { display: block; }
 .page-frame[data-half="left"]::after, .page-frame[data-half="right"]::after {
   content: attr(data-half); position: absolute; top: -18px; left: 0;
@@ -301,26 +295,21 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
 <div id="app-root">
 <section id="app-main">
 
-  <!-- HD1 (2026-11-03): the topbar carries only the document title plus four
-       icon-labelled controls. The brand mark, the file-history entry, the two
-       file-transfer buttons and the layout-width selector are gone; the layout
-       is fixed to two columns (HD3). The version string is a mock placeholder; the shell
-       reads it from GET /api/health. -->
+  <!-- HD1 + HD5 (2026-11-04): the topbar carries no text at all - not even the
+       window-title mirror. Left cluster = open + save; right cluster = language,
+       theme, shortcuts, with the shortcuts button rightmost. The version and the
+       opened file's name live in the window title only (HD2 revised); the mock
+       version string is a placeholder, the shell reads it from GET /api/health. -->
   <header id="topbar">
     <button id="btn-open" class="btn icon" type="button" title="Open PDF" aria-label="Open PDF"
       data-i18n-title="app.open.btn" data-i18n-title-cn="打开 PDF">
       <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a1 1 0 0 1 .95 1.31l-1.4 5.6A2 2 0 0 1 17.6 18H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v4" /></svg>
     </button>
-    <span id="top-file" class="file-chip">AutoStamp 0.1-dev</span>
-    <span class="spacer"></span>
     <button id="btn-save" class="btn primary icon" type="button" title="Save" aria-label="Save"
       data-i18n-title="app.save.btn" data-i18n-title-cn="保存">
       <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" /><path d="M17 21v-8H7v8" /><path d="M7 3v5h8" /></svg>
     </button>
-    <button id="btn-shortcuts" class="btn ghost icon" type="button" title="Shortcuts" aria-label="Shortcuts"
-      data-i18n-title="app.shortcuts.btn" data-i18n-title-cn="快捷键">
-      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 8h.01" /></svg>
-    </button>
+    <span class="spacer"></span>
     <div class="seg sm" id="lang-seg" role="group" data-field="ui.lang">
       <button type="button" data-value="cn" aria-pressed="false" data-i18n="lang.cn" data-i18n-cn="中">中</button>
       <button type="button" data-value="en" aria-pressed="true" data-i18n="lang.en" data-i18n-cn="EN">EN</button>
@@ -335,17 +324,19 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
         <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></svg>
       </button>
     </div>
+    <button id="btn-shortcuts" class="btn ghost icon" type="button" title="Shortcuts" aria-label="Shortcuts"
+      data-i18n-title="app.shortcuts.btn" data-i18n-title-cn="快捷键">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 8h.01" /></svg>
+    </button>
   </header>
 
   <section id="preview">
     <div id="empty-state">
       <div class="msg" data-i18n="empty.msg" data-i18n-cn="还没有打开 PDF">No PDF open</div>
-      <div class="hint" data-i18n="empty.hint" data-i18n-cn="把这里拖入或粘贴（Ctrl+V）一个 PDF 即打开；拖入/粘贴图片装载为印章。也可以选择文件 / 直接填写路径。">Drop or paste a PDF here to open it, or drop/paste images to load them as seals. You can also pick a file or type a path.</div>
+      <div class="hint" data-i18n="empty.hint" data-i18n-cn="把这里拖入或粘贴（Ctrl+V）一个 PDF 即打开；拖入/粘贴图片装载为印章。也可以「打开文件」/ 直接填写路径。">Drop or paste a PDF here to open it, or drop/paste images to load them as seals. You can also open a file or type its path.</div>
       <div class="btnrow">
-        <button id="empty-pick" class="btn primary" data-i18n="empty.pick.btn" data-i18n-cn="选择文件">Pick file</button>
-        <button id="empty-upload" class="btn" data-i18n="empty.upload.btn" data-i18n-cn="上传文件">Upload</button>
+        <button id="empty-pick" class="btn primary" data-i18n="empty.pick.btn" data-i18n-cn="打开文件">Open file</button>
         <input id="empty-path" data-field="api.fs.pick.filePath" type="text" size="30" data-i18n-placeholder="empty.path.placeholder" data-i18n-cn-placeholder="C:\docs\contract.pdf" value="C:\docs\contract.pdf">
-        <button id="empty-open" class="btn" data-i18n="empty.open.btn" data-i18n-cn="打开">Open</button>
       </div>
       <div class="row pick-opts">
         <span class="opt-label" data-i18n="api.fs.pick.filePath.ctl" data-i18n-cn="打开路径">Open by path</span>
@@ -850,7 +841,6 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
       </div>
     </form>
   </aside>
-<input id="file-input" type="file" accept=".pdf" hidden>
 <div id="error-toast" data-i18n="asset.hint" data-i18n-cn="提示条">notice</div>
 <div id="modal-layer">
   <div class="scrim"></div>
@@ -1289,18 +1279,20 @@ window.__autoStampMock = (function () {
     });
   }
 
+  // setDocTitle mirrors app-shell.js (HD2, revised by HD5): the window title is
+  // "AutoStamp <version>", then the open file's name. The topbar has no text of
+  // its own, so document.title carries both for the browser tab.
+  function setDocTitle() {
+    var base = "AutoStamp" + (S.version ? " " + S.version : "");
+    var path = String(S.p["fs.pick.filePath"] || "");
+    document.title = S.fileOpen ? base + " " + path.split(/[\\/]/).pop() : base;
+  }
   // ---------- layout / readouts ----------
   function layout() {
     buildStage(); buildPager(); buildInstances(); buildVeto(); buildStrips();
     q("#preview-ruler").textContent =
       viewBox().w.toFixed(1) + " x " + viewBox().h.toFixed(1) + " pt";
-    // HD2: the topbar line is the window title string, not a translated hint:
-    // AutoStamp <version> plus the open file's name, path/size in the tooltip.
-    var base = "AutoStamp" + (S.version ? " " + S.version : "");
-    var chip = q("#top-file");
-    var path = String(S.p["fs.pick.filePath"] || "");
-    chip.textContent = S.fileOpen ? base + " " + path.split(/[\\/]/).pop() : base;
-    chip.title = S.fileOpen ? path + " · 1.4 MB" : "GET /api/health";
+    setDocTitle();
   }
   function readouts() {
     var g = S.geo[S.selId];
@@ -1779,11 +1771,22 @@ window.__autoStampMock = (function () {
     q("#batch-export-json").addEventListener("click", function () {
       toast("batch.done", "batch finished: batch-report.json downloaded (Blob)", "ok");
     });
-    q("#btn-open").addEventListener("click", function () { q("#file-input").click(); });
-    q("#empty-pick").addEventListener("click", function () { q("#file-input").click(); });
-    q("#empty-open").addEventListener("click", function () { setState("opened"); });
-    q("#empty-upload").addEventListener("click", function () { setState("opened"); });
-    q("#file-input").addEventListener("change", function () { setState("opened"); });
+    // The two load channels mirror app-shell.js: the native picker (#btn-open /
+    // #empty-pick -> pickAndOpen) and the typed path box (#empty-path, whose
+    // Enter key opens via openByPath). Drag and paste land in the funnel below.
+    function pickAndOpen() { setState("opened"); }
+    function openByPath() {
+      var path = String(q("#empty-path").value || "").trim();
+      if (!path) { q("#empty-path").focus(); return; }
+      setState("opened");
+    }
+    q("#btn-open").addEventListener("click", pickAndOpen);
+    q("#empty-pick").addEventListener("click", pickAndOpen);
+    q("#empty-path").addEventListener("keydown", function (e) {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      openByPath();
+    });
     // PD1/PD2 load gate (mirrors app-shell.js): only "one PDF" or "images only".
     function loadClassify(files) {
       var isImg = function (f) { return (f.type || "").indexOf("image/") === 0 || /\.(png|jpe?g|gif|bmp|webp|tiff?)$/i.test(f.name || ""); };
@@ -1983,8 +1986,8 @@ window.__autoStampMock = (function () {
   function boot() {
     initFixtures();
     applyTheme(S.theme); applyLang(S.lang);
-    // HD2: the browser tab title mirrors main.go's native window title.
-    document.title = "AutoStamp" + (S.version ? " " + S.version : "");
+    // The browser tab title mirrors main.go's native window title.
+    setDocTitle();
     wireControls(); wireStage(); wireKeys(); buildShortcuts();
     var h = (location.hash || "").replace(/^#/, "");
     setState(h || "empty");

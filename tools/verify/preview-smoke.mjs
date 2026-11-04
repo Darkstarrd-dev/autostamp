@@ -3,7 +3,7 @@
 //
 // 与 shell-smoke.mjs 的分工:那边查壳的契约 / i18n / 状态机,这里查「真 PDF 真打开」
 // 那条路径 —— 现场生成四类样本 PDF(CDP Page.printToPDF),用真 exe + 真 UI
-// (空态的 #empty-path + #empty-open 通道打开),再对渲染结果做数值断言:
+// (空态的 #empty-path + 回车 通道打开,HD6:路径框不再配 Open 按钮),再对渲染结果做数值断言:
 //   * 画布有真实像素(不是空 canvas)
 //   * 文本层 span 计数(图片型必须为 0)与层框宽度 == 画布 CSS 宽(pdf.js OutputScale,FACTS §1.7)
 //   * 分页条 chip 数 == 页数,chip 内缩略图各自有像素(V2 形态)
@@ -159,7 +159,7 @@ async function mixedPdf(gen) {
 async function checkDocument(app, file, kind) {
   console.log(`\n[${kind}] ${file}`);
   const filled = await app.evaluate(
-    `(() => { const i = document.getElementById('empty-path'); i.value = ${JSON.stringify(file)}; document.getElementById('empty-open').click(); return i.value; })()`
+    `(() => { const i = document.getElementById('empty-path'); i.value = ${JSON.stringify(file)}; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); return i.value; })()`
   );
   if (!filled) bad(`${kind}: the typed-path channel did not receive the path`);
   await waitFor(async () => (await app.evaluate(PROBE_CANVAS_READY)) === true, 25000, `${kind}: the page frame never painted a sized canvas`);
@@ -187,6 +187,12 @@ async function checkDocument(app, file, kind) {
   truthy(`${kind}: ruler shows the pt page size`, /\d{3}\.\d . 8\d\d\.\d pt/.test(probe.ruler));
   truthy(`${kind}: readout shows px + scale`, /\d+ . \d+ px . scale \d\.\d+/.test(probe.readout));
   truthy(`${kind}: server page meta size`, probe.meta && probe.meta.width > 400 && probe.meta.height > 700);
+  const frame = await app.evaluate(
+    `(() => { const s = getComputedStyle(document.querySelector(".page-frame")), st = getComputedStyle(document.getElementById("preview-stage")); return { radius: s.borderTopLeftRadius, padding: st.paddingLeft }; })()`
+  );
+  truthy(`${kind}: page frames keep square corners (HD7)`, frame.radius === "0px");
+  truthy(`${kind}: the stage has no padding (HD7)`, frame.padding === "0px");
+  console.log(`  ok ${kind}: page frame ${frame.radius} / stage padding ${frame.padding} (HD7)`);
 
   const pagePixels = await app.evaluate(
     `(() => { const p = window.__autoStampPreview; const s = p.sample(60, 40, 480, 700); let white = 0, ink = 0; for (let i = 0; i < s.data.length; i += 4) { if (s.data[i] > 235 && s.data[i+1] > 235 && s.data[i+2] > 235) white++; else ink++; } return { ink, white }; })()`

@@ -362,9 +362,10 @@ async function main() {
   if (blendNames.length < 16) bad(`blend vocabulary: expected >=16 modes, got ${blendNames.length}`);
   console.log(`overlay-smoke: ${blendNames.length} blend modes in the panel`);
 
-  // 3) open the document through the real UI channel
+  // 3) open the document through the real UI channel: the typed path box opens on
+  // Enter now that the empty state has no path/Open button pair (HD6).
   await app.evaluate(
-    `(() => { const i = document.getElementById('empty-path'); i.value = ${JSON.stringify(docFile)}; document.getElementById('empty-open').click(); return true; })()`
+    `(() => { const i = document.getElementById('empty-path'); i.value = ${JSON.stringify(docFile)}; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); return i.value === ${JSON.stringify(docFile)}; })()`
   );
   await waitFor(
     async () => (await app.evaluate(shellEval("p.probe('canvas') && p.probe('canvas').backing[0] > 100"))) === true,

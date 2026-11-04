@@ -11,9 +11,11 @@
 //   * the shell loads with 0 console errors and no failed subresource
 //   * every docs/UI_SPEC.md §6 contract id exists, and every UI_SPEC §2 field
 //     is represented by a data-field control (plus the reverse check)
+//   * the typed path box opens a document on Enter (HD6: no Open button beside it)
 //   * every data-i18n key resolves to non-empty en + cn text
-//   * the layout is fixed two-col (no density control anywhere) and the dropped
-//     topbar ids never come back; deep-link states (#crosspage) and ?lang=cn
+//   * the layout is fixed two-col (no density control anywhere), the topbar is
+//     icon-only with no text at all (HD5), and dropped ids never come back
+//     (deep-link states #crosspage and ?lang=cn stay checked)
 //   * the icon tooltips (data-i18n-title) carry en + cn twins
 //   * 1280x720 and 1440x900 stay free of horizontal overflow
 //   * settings round-trip: the shell's PATCH is visible in GET /api/settings,
@@ -31,7 +33,7 @@
 // Exit: 0 = pass.
 
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -247,6 +249,25 @@ async function main() {
   if (widths.panel < 200 || widths.panel > 480) bad("panel width out of range: " + JSON.stringify(widths));
   if (widths.hidden) bad("the panel is hidden: the layout is fixed two-col");
   if (widths.densityAttr) bad("#app-main still carries a data-density attribute");
+
+  // HD7 (2026-11-04): the left column bleeds - the empty card has no inset and
+  // the stage has no padding, so pages sit flush against the container.
+  const bleed = await json(`(function(){
+    var back = document.documentElement.dataset.state || "empty";
+    window.__autoStampShell.setState("empty");
+    var read = function (sel) {
+      var c = getComputedStyle(document.querySelector(sel));
+      return { margin: c.margin, radius: c.borderTopLeftRadius, border: c.borderTopStyle, padding: c.paddingLeft };
+    };
+    var out = { empty: read("#empty-state"), stage: read("#preview-stage") };
+    window.__autoStampShell.setState(back);
+    return JSON.stringify(out);
+  })()`);
+  if (bleed.empty.margin !== "0px") bad("the empty card still carries a margin (HD7): " + bleed.empty.margin);
+  if (bleed.empty.radius !== "0px") bad("the empty card still carries a border-radius (HD7): " + bleed.empty.radius);
+  if (bleed.empty.border !== "dashed") bad("the drop affordance border is gone: " + bleed.empty.border);
+  if (bleed.stage.padding !== "0px") bad("#preview-stage still has padding (HD7): " + bleed.stage.padding);
+  console.log("  bleed:", JSON.stringify(bleed));
 
   for (const [w, h] of [[1280, 720], [1440, 900]]) {
     await chrome.setViewport(w, h);
@@ -479,47 +500,65 @@ async function main() {
   cmp("deep link #crosspage -> crosspage", deep, "crosspage");
   await evaluate("location.hash = '';");
 
-  // probe('version') is the pure version string now; the window title carries it
-  // because the topbar no longer has a version chip.
+  // probe('version') is the pure version string; the version and the opened file
+  // name live in document.title (and the native caption), never in the topbar (HD5).
   const version = await pageErr("window.__autoStampShell.probe('version')");
   cmp("probe('version') == GET /api/health version", version, health.data.version);
   cmp("document.title = AutoStamp <version>", await pageErr("window.__autoStampShell.probe('docTitle')"), "AutoStamp " + health.data.version);
-  // the dropped topbar pieces must stay gone (UI_SPEC §7 id contract)
-  const dropped = ["app-version", "density-seg", "btn-upload", "btn-export", "recent-open", "recent-menu", "recent-clear", "empty-recent", "app-logo", "app-title"];
+  // the dropped ids must stay gone (UI_SPEC §6/§7 id contract; HD5 drops the
+  // chip, HD6 drops the extra load entries and the hidden file input)
+  const dropped = ["app-version", "density-seg", "btn-upload", "btn-export", "recent-open", "recent-menu", "recent-clear", "empty-recent", "app-logo", "app-title", "top-file", "empty-upload", "empty-open", "file-input"];
   const revived = await pageErr(`(function(){
     var have = {};
     window.__autoStampShell.ids().forEach(function(id){ have[id] = true; });
     return ${JSON.stringify(dropped)}.filter(function(id){ return have[id]; });
   })()`);
-  if (revived && revived.length) bad("removed topbar controls came back: " + revived.join(" "));
-  const chip = await pageErr("document.querySelector('#top-file').textContent");
-  if (!chip || !chip.includes(String(version))) bad(`#top-file does not carry the version: ${JSON.stringify(chip)}`);
+  if (revived && revived.length) bad("dropped ids came back: " + revived.join(" "));
+  // HD5: the topbar is icon-only — no text node outside the controls, and no
+  // element of its own carries a label (the old version/file chip is gone).
+  const stray = await json(`(function(){
+    var bar = document.querySelector("#topbar");
+    var out = [];
+    for (var n = bar.firstChild; n; n = n.nextSibling) {
+      if (n.nodeType === 3 && n.nodeValue.trim()) out.push("text node: " + n.nodeValue.trim());
+    }
+    Array.prototype.forEach.call(bar.children, function (el) {
+      if (el.tagName === "BUTTON" || el.matches(".seg, .spacer")) return;
+      if (el.textContent.trim()) out.push(el.tagName.toLowerCase() + "#" + el.id + ": " + el.textContent.trim());
+    });
+    return JSON.stringify(out);
+  })()`);
+  if (stray && stray.length) bad("the topbar carries stray text: " + stray.join(" | "));
 
-  // HD1 geometry: the open button owns the left edge, the title follows it, and
-  // the four icon controls sit on the right — with no leftover text labels.
+  // HD5 geometry: open + save sit side by side against the left edge, and the
+  // language/theme/shortcuts cluster shares one row with shortcuts rightmost.
   const bar = await json(`(function(){
     var r = function (sel) { var e = document.querySelector(sel); var b = e.getBoundingClientRect();
-      return { x: Math.round(b.x), right: Math.round(b.right), w: Math.round(b.width), h: Math.round(b.height), icons: e.querySelectorAll("svg.ic").length, text: e.textContent.trim().length }; };
+      return { x: Math.round(b.x), right: Math.round(b.right), w: Math.round(b.width), h: Math.round(b.height),
+        cy: Math.round(b.y + b.height / 2), icons: e.querySelectorAll("svg.ic").length, text: e.textContent.trim().length }; };
+    var tb = document.querySelector("#topbar").getBoundingClientRect();
     return JSON.stringify({
-      top: Math.round(document.querySelector("#topbar").getBoundingClientRect().width),
-      open: r("#btn-open"), save: r("#btn-save"), help: r("#btn-shortcuts"),
-      lang: r("#lang-seg"), theme: r("#theme-seg"), title: r("#top-file")
+      right: Math.round(tb.right),
+      open: r("#btn-open"), save: r("#btn-save"), shortcuts: r("#btn-shortcuts"),
+      lang: r("#lang-seg"), theme: r("#theme-seg")
     });
   })()`);
-  if (bar.open.x > 16) bad(`#btn-open is not at the left edge: ${JSON.stringify(bar.open)}`);
-  if (!(bar.title.x > bar.open.right)) bad(`the title does not follow the open button: ${JSON.stringify(bar)}`);
-  for (const k of ["save", "help", "lang", "theme"]) {
-    if (!(bar[k].x > bar.title.right)) bad(`#${k} is not on the right of the title: ${JSON.stringify(bar[k])}`);
-    if (bar[k].right > bar.top + 1) bad(`#${k} overflows the topbar width: ${JSON.stringify(bar[k])}`);
-  }
-  for (const k of ["open", "save", "help"]) {
-    if (bar[k].icons !== 1) bad(`#btn-${k === "help" ? "shortcuts" : k} has no inline svg icon: ${JSON.stringify(bar[k])}`);
+  if (bar.open.x >= 30) bad(`#btn-open is not at the left edge: ${JSON.stringify(bar.open)}`);
+  if (bar.save.x > bar.right / 2) bad(`#btn-save is not in the left half of the topbar: ${JSON.stringify([bar.save.x, bar.right])}`);
+  if (!(bar.save.right > bar.open.right)) bad(`#btn-save does not follow #btn-open: ${JSON.stringify([bar.open, bar.save])}`);
+  if (bar.save.x - bar.open.right >= 24) bad(`the two icon buttons are not adjacent (gap ${bar.save.x - bar.open.right}): ${JSON.stringify([bar.open.right, bar.save.x])}`);
+  const rows = [bar.lang.cy, bar.theme.cy, bar.shortcuts.cy];
+  if (Math.max(...rows) - Math.min(...rows) > 4) bad(`the right cluster is not one row: ${JSON.stringify({ lang: bar.lang.cy, theme: bar.theme.cy, shortcuts: bar.shortcuts.cy })}`);
+  if (!(bar.shortcuts.x > bar.theme.right)) bad(`#btn-shortcuts is not right of the theme switch: ${JSON.stringify([bar.theme.right, bar.shortcuts.x])}`);
+  if (bar.right - bar.shortcuts.right >= 24) bad(`#btn-shortcuts is not the rightmost control (topbar right ${bar.right}, button right ${bar.shortcuts.right})`);
+  for (const k of ["open", "save", "shortcuts"]) {
+    if (bar[k].icons !== 1) bad(`#btn-${k} must hold exactly one inline svg icon: ${JSON.stringify(bar[k])}`);
     if (bar[k].text !== 0) bad(`#btn-${k} must be icon-only, found ${bar[k].text} text chars`);
     if (bar[k].w < 24 || bar[k].h < 24) bad(`icon button too small: ${k} ${JSON.stringify(bar[k])}`);
   }
   truthy(`the language switch shows two text choices (中/EN): ${JSON.stringify([bar.lang.text, bar.lang.icons])}`, bar.lang.text > 0 && bar.lang.icons === 0);
   if (bar.theme.icons !== 2) bad(`the theme switch must be two svg icons (sun/moon): ${JSON.stringify(bar.theme)}`);
-  console.log("  topbar:", JSON.stringify({ top: bar.top, open: bar.open.x, title: bar.title.x, save: bar.save.x, help: bar.help.x, lang: bar.lang.x, theme: bar.theme.x, icons: [bar.open.icons, bar.save.icons, bar.help.icons, bar.theme.icons] }));
+  console.log("  topbar:", JSON.stringify({ right: bar.right, open: bar.open.x, save: bar.save.x, lang: bar.lang.x, theme: bar.theme.x, shortcuts: bar.shortcuts.right, icons: [bar.open.icons, bar.save.icons, bar.shortcuts.icons, bar.theme.icons] }));
 
   // ---------- PD1/PD2: paste + drop load gate (UI_SPEC §8) ----------
   // Real File objects flow through real ClipboardEvent/DragEvent into the
@@ -594,7 +633,7 @@ async function main() {
       var l = s.probe("load") || {};
       return l.kind === "pdf" && s.probe("state") === "opened" && s.probe("chain").current !== out.pdfBefore;
     }, 8000);
-    out.fileChip = document.querySelector("#top-file").textContent;
+    out.docTitle = s.probe("docTitle");
     out.pageCount = window.__autoStampPreview ? window.__autoStampPreview.probe("pageCount") : -1;
 
     // The shell keeps instances across document switches (W2 clears only
@@ -645,7 +684,8 @@ async function main() {
   truthy("foreign file drop refused (PD2 other)", gate.other && gate.other.load.kind === "reject" && gate.other.load.reason === "other");
   truthy("foreign refusal toast names the allowlist", /只支持|only PDF/.test(gate.otherToast.text || ""));
   truthy("single PDF drop opened the document (PD2)", gate.pdfOpened === true && gate.pdfDrop.during === true && gate.pdfDrop.after === "off" && gate.pageCount >= 1);
-  truthy("the opened document is titled from the drop name", /pasted one\.pdf/.test(gate.fileChip || ""));
+  truthy(`the document title carries version + drop name (HD5): ${JSON.stringify(gate.docTitle)}`,
+    gate.docTitle === "AutoStamp " + version + " pasted one.pdf");
   truthy("pasted image prepared a seal (PD1)", gate.pastePng1 === true && gate.sealReady === true && gate.sealCount1 >= 1);
   truthy("pasted image assigned to the selected instance (PD1/I1)", gate.assigned === true);
   truthy("pasting two images adds exactly one named instance for the extra image (I1)", gate.multiSeals === true
@@ -656,6 +696,36 @@ async function main() {
   truthy("text paste in a focused field stays untouched (PD1)", gate.passthrough === false && gate.kindAfterPaste === "seals");
   truthy("file drops are always prevented from default navigation (PD2)", gate.pdfDrop.prevented === true);
   truthy("drop-hint affordance ships in the shell (PD2)", gate.dropHint === true);
+
+  // ---------- HD6: the typed path box is a load channel on its own ----------
+  // The empty state has no Open button any more, so Enter on #empty-path must go
+  // through /api/fs/pick (filePath) -> grant -> open, and the title must follow.
+  const typedPath = join(sandbox, "typed-open.pdf");
+  writeFileSync(typedPath, Buffer.from(pdfB64, "base64"));
+  const typed = await json(`(async function () {
+    var s = window.__autoStampShell;
+    var box = document.querySelector("#empty-path");
+    box.value = ${JSON.stringify(typedPath)};
+    var ev = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    box.dispatchEvent(ev);
+    var out = { before: s.probe("chain").current };
+    out.prevented = ev.defaultPrevented;
+    out.opened = await new Promise(function (res) {
+      var t0 = Date.now();
+      var iv = setInterval(function () {
+        var done = s.probe("state") === "opened" && s.probe("chain").current !== out.before;
+        if (done) { clearInterval(iv); res(true); }
+        else if (Date.now() - t0 > 8000) { clearInterval(iv); res(false); }
+      }, 100);
+    });
+    out.docTitle = s.probe("docTitle");
+    out.pageCount = window.__autoStampPreview ? window.__autoStampPreview.probe("pageCount") : -1;
+    out.toastText = (s.probe("toast") || {}).text || "";
+    return JSON.stringify(out);
+  })()`);
+  truthy(`Enter in #empty-path opened the typed file with no button (HD6): toast=${JSON.stringify(typed.toastText)} title=${JSON.stringify(typed.docTitle)}`,
+    typed.prevented === true && typed.opened === true && typed.pageCount >= 1
+      && /^AutoStamp .*typed-open\.pdf$/.test(typed.docTitle || ""));
 
   // The save click above is deliberate: with no document open the shell must
   // refuse locally, so *nothing* may reach the network (asserted below).

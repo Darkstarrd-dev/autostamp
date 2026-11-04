@@ -4,7 +4,7 @@
 // Checks that docs/ui/mockup.html, docs/UI_SPEC.md and AGENTS.md §6 agree:
 //   mock data-field  <->  UI_SPEC §2 field table  <->  AGENTS §6 route prefixes
 // plus state names, i18n keys (UI_SPEC §4: the mock plus web/static/index.html),
-// the DOM id contract (UI_SPEC §7), fixture presence, and structural guards
+// the DOM id contract (UI_SPEC §6), fixture presence, and structural guards
 // (no pdf.js annotation-save channel).
 //
 // Usage: node tools/verify/ui-contract.mjs
@@ -173,8 +173,8 @@ for (const f of fieldNames) {
 // and the control convention <field-minus-api.>.ctl/hint for api.* fields.
 for (const k of mockI18nKeys) if (!i18nSet.has(k)) bad("E-I18N-MOCK", `mock key "${k}" missing from UI_SPEC §4`);
 // web/static/index.html is the other half of the same vocabulary: a key the real
-// shell binds (the top-file hint inside #save-source / #confirm-path) is in use
-// even when the design artifact no longer hosts it.
+// shell binds (the path hint that #save-source / #confirm-path show when no file
+// is open) is in use even when the design artifact no longer hosts it.
 const shellMarkup = read("web/static/index.html");
 const shellI18nKeys = [...new Set([...shellMarkup.matchAll(/data-i18n(?:-title|-placeholder)?="([^"]+)"/g)].map((m) => m[1]))];
 const usedKeys = new Set([...mockI18nKeys, ...mockPlaceholders, ...dynKeys, ...shellI18nKeys]);
@@ -182,6 +182,18 @@ for (const i of i18n) {
   if (!i.en || !i.cn) bad("E-I18N-EMPTY", `UI_SPEC §4 key "${i.key}" has empty en/cn`);
   if (!usedKeys.has(i.key)) bad("E-I18N-UNUSED", `UI_SPEC §4 key "${i.key}" not used in mock`);
 }
+
+// HD6: the empty state keeps exactly one load entry, and the two deleted buttons'
+// keys must stay out of the vocabulary.
+const pickBtn = i18n.find((i) => i.key === "empty.pick.btn");
+if (!pickBtn || pickBtn.en !== "Open file" || pickBtn.cn !== "打开文件")
+  bad("E-I18N-PICK", `empty.pick.btn must be "Open file"/"打开文件", got ${JSON.stringify(pickBtn)}`);
+for (const k of ["empty.open.btn", "empty.upload.btn"])
+  if (i18nSet.has(k)) bad("E-I18N-GONE", `dropped key "${k}" is back in UI_SPEC §4`);
+// top.file.hint survives as the save/confirm path hint, bound on both elements.
+const hintRows = [...shellMarkup.matchAll(/id="(save-source|confirm-path)"[^>]*data-i18n="([^"]+)"/g)];
+if (hintRows.length !== 2 || hintRows.some((m) => m[2] !== "top.file.hint"))
+  bad("E-I18N-HINT", `#save-source / #confirm-path must both bind top.file.hint, got ${JSON.stringify(hintRows.map((m) => [m[1], m[2]]))}`);
 for (const k of dynKeys) if (!i18nSet.has(k)) bad("E-I18N-DYN", `dynamic mock key "${k}" missing from UI_SPEC §4`);
 for (const m of mock.matchAll(/data-i18n-cn="([^"]*)"/g)) if (!m[1].trim()) bad("E-I18N-CN", "empty data-i18n-cn in mock");
 for (const m of mock.matchAll(/data-i18n-cn-placeholder="([^"]*)"/g)) if (!m[1].trim()) bad("E-I18N-CN", "empty data-i18n-cn-placeholder");
@@ -211,6 +223,13 @@ for (const s of mockStates) {
 for (const id of ids) if (!mockIds.includes(id)) bad("E-ID-MISS", `contract id "#${id}" not found in mock`);
 const dup = ids.filter((id) => (mock.match(new RegExp(`id="${id}"`, "g")) || []).length > 1);
 if (dup.length) bad("E-ID-DUP", `duplicate ids in mock: ${dup.join(", ")}`);
+// HD5/HD6 deleted these ids: neither the design artifact nor the shell may revive
+// them (the §6 block above already proves they are not contract ids).
+for (const [where, html] of [["mock", mock], ["web/static/index.html", shellMarkup]]) {
+  for (const id of ["top-file", "empty-upload", "empty-open", "file-input"]) {
+    if (html.includes(`id="${id}"`)) bad("E-ID-GONE", `deleted id "#${id}" is still in ${where}`);
+  }
+}
 
 // decision table: rows must carry a confirmation record or an explicit pending marker
 const decisionRows = spec.match(/^\|D[0-9]+\|.*$/gm) || [];

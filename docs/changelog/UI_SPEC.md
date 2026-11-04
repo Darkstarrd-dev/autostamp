@@ -2,16 +2,40 @@
 
 > `docs/UI_SPEC.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-04 — §8 新增 HD5/HD6/HD7：顶栏去文本 + 启动页装载入口精简 + 左列出血
+
+- **来源**：不是 ask 轮次，而是用户 2026-11-04 对话里的三条指令 → §8 新增 HD5（顶栏不要文本、
+  按钮怎么排）、HD6（启动页装载入口形态）、HD7（左列预览要不要内缩）三行。HD5 作废 HD2 的
+  「顶栏文本承载」半边（`#top-file` 删除，窗口标题仍在），表后段落写明这一点；HD1/HD3/HD4 沿用。
+- **§6 ui-ids**：删 4 个 id —— `top-file`、`empty-upload`、`empty-open`、`file-input`，
+  93 → **89**。§6 段落重写：顶栏**没有任何文本**，左簇 = 打开 + 保存相邻贴左缘，右簇 =
+  语言 → 主题 → 快捷键（**快捷键最右**，在明暗切档右侧），全部图标 + `data-i18n-title`；
+  版本 + 打开后的文件名只写在窗口标题（原生 `windowTitle` 与 `document.title` 同一个串）；
+  `#app-main` 不带版式属性（HD3）、左列的 `#preview` 无内边距无圆角（HD7）。
+- **§4 i18n**：删 `empty.open.btn`、`empty.upload.btn` 两键（270 → **268**），`empty.pick.btn`
+  改成 Open file / 打开文件（「选择文件」→「打开文件」）；`top.file.hint` **保留**（仍用于
+  `#save-source` / `#confirm-path` 的路径提示）。
+- **驱动面**：不变。`probe('version')` 仍是纯版本串、`probe('docTitle')` 仍读窗口/标签页标题；
+  没有新 probe、新字段、新路由；12 态状态机与深链不变。
+- **同步**：前端 `web/static/{index.html,style.css,app-shell.js,app-api.js,app-i18n.js}`
+  （`setDocTitle()`、`#empty-path` 的 `keydown` Enter → `openByPath`、删隐藏 `<input id="file-input">`
+  及其 change 监听、删 `.file-chip`、左列出血）；`docs/ui/mockup.html` 镜像同一契约（删那 4 个元素
+  与监听 + `.file-chip` 规则、`#empty-pick` = Open file / 打开文件、`#empty-path` Enter、HD7 出血、
+  顶栏无文本节点）；`tools/verify/{ui-contract,shell-smoke,preview-smoke,overlay-smoke}.mjs`
+  （89 id + 268 键三方一致、「删件 id 未复活」守卫、顶栏图标几何 + 「顶栏无文本」计数、
+  真 UI 打开通道改走 `#empty-path` 回车）；AGENTS §5.24–§5.26 + §11、`PROJECT_MAP`、
+  `IMPLEMENTATION_PLAN` §10.1、README 功能表。
+
 ## 2026-11-04 — §8 新增 HD4：显示版本 = `0.1-dev`（Go 伪版本不再进 UI）
 
 - **来源**：用户 2026-11-04 对话指令「版本为 0.1-dev」→ §8 新增 HD4 行（选项：沿用 Go 伪版本 /
   固定 dev 横幅；已确认 = 固定 dev 横幅，取值 `0.1-dev`）。
-- **影响面**：四处同源的版本串（原生窗口标题栏 `AutoStamp 0.1-dev`、浏览器标签页 `document.title`、
-  顶栏 `#top-file`、`GET /api/health` 的 `version`）此前显示 Go 工具链给未打标签提交打的伪版本
+- **影响面**：当时四处同源的版本串（原生窗口标题栏 `AutoStamp 0.1-dev`、浏览器标签页 `document.title`、
+  顶栏 `#top-file`、`GET /api/health` 的 `version`；`#top-file` 已于同日 HD5 删除，现为三处同源）此前显示 Go 工具链给未打标签提交打的伪版本
   `v0.0.0-20261103072915-f46b31ebafd1+dirty`，标题栏被 commit 串占满；`internal/app.pickVersion`
   只认真实标签（`v1.2.3`、`v1.2.3-rc.1` 原样），伪版本 / `devel` / `+dirty` 一律回落 `devVersion`。
   语义面（字段词表、§2、§6 id、§7 驱动接口）无改动；mock 的 `S.version` / `<title>` / `#top-file`
-  占位改 `0.1-dev`。门槛：`internal/app/version_test.go` 的版本取值表 + `shell-smoke` 的动态比对。
+  占位改 `0.1-dev`（`#top-file` 那份同日随 HD5 删除）。门槛：`internal/app/version_test.go` 的版本取值表 + `shell-smoke` 的动态比对。
 
 ## 2026-11-03 — 顶栏收尾（HD1/HD2/HD3）：§2 删 `ui.density`、§4 删 12 键、§6 删 6 个契约 id、§7 去 `setDensity`
 
@@ -19,7 +43,7 @@
   图标化：删品牌文字 / 最近入口 / 顶栏上传 / 导出设置入口 / 密度切档 / 版本 chip，余下控件用内嵌 SVG +
   `data-i18n-title` tooltip，打开左对齐、保存 + 快捷键 + 语言 + 主题右对齐）、HD2（`#top-file` = 窗口标题
   文本：无文档 = `AutoStamp <版本>`，打开后追加 ` 文件名`；版本串写进原生窗口标题栏与浏览器标签页，
-  不新增控件）、HD3（版式固定 two-col）三行。
+  不新增控件）、HD3（版式固定 two-col）三行。（HD2 的「顶栏承载文本」半边 2026-11-04 随 HD5 撤掉。）
 - **作废**：L1（布局密度三档切档）与 RF1（最近文件 UI 入口）在原「已确认」格子里追加作废注记 ——
   版式只剩 two-col、两个最近入口都删、`config.recentFiles` 后端继续记录但不再展示；表后段落写明
   HD1/HD2/HD3 作废的是可见形态，字段/路由不变。
@@ -27,7 +51,7 @@
   改成「顶栏 · 语言/主题」；§6 ui-ids 的 `btn-export`、`btn-upload`、`density-seg`、`empty-recent`、
   `recent-menu`、`recent-open`（`app-logo`/`app-title`/`app-version`/`recent-clear` 本来就不在契约表里，
   只是 mock/壳里的元素，删元素即无需登记）。§6 另补 `#top-file` 语义注记（窗口标题文本 + `title` 属性 =
-  完整路径 · 体积）与「`#app-main` 不再带版式属性」。
+  完整路径 · 体积）与「`#app-main` 不再带版式属性」（`#top-file` 与那条注记已在 2026-11-04 随 HD5 撤掉，见上面第一条）。
 - **i18n**：§4 删 12 键（`density.twoCol/singleCol/collapsed`、`ui.density.ctl/hint`、`recent.title/open/
   clear/empty`、`app.export.btn`、`app.title`、`app.upload.btn` —— 最后一个是顶栏上传删除后的死键，
   三处都没使用者），`lang.cn`/`lang.en` 的 en/cn 统一成 `中` / `EN`（与分段按钮文本一致，免得 i18n 覆盖

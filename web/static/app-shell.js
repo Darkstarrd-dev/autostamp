@@ -145,10 +145,9 @@
     qa("#lang-seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.value === state.lang)));
     renderInstances();
     persist("ui", { lang: state.lang });
-    // The readouts whose text is dynamic (the file chip, the assetId chips) are
-    // rebuilt after the generic i18n pass, so the numbers survive a language
-    // switch instead of being overwritten by the label alone.
-    renderFileChip();
+    // The readouts whose text is dynamic (the assetId chips) are rebuilt after
+    // the generic i18n pass, so the numbers survive a language switch instead
+    // of being overwritten by the label alone.
     renderAssetHooks();
     doc.dispatchEvent(new CustomEvent("autostamp:lang", { detail: { lang: state.lang } }));
     return state.lang;
@@ -747,21 +746,18 @@
       setState("save-confirm");
     });
     q("#confirm-ok").addEventListener("click", () => submitSave(true));
-    // --- P1 open channel: picker / upload / path box / drag and drop (AGENTS §6) ---
+    // --- P1 open channel: picker / path box / drag and drop (AGENTS §6) ---
+    // HD6 (2026-11-04): the upload button (#empty-upload -> the hidden
+    // #file-input) and the path box's Open button (#empty-open) are gone. The
+    // path box opens on Enter; drag/paste still feed submitFiles below, so no
+    // hidden <input type=file> is left in the document.
     q("#btn-open").addEventListener("click", () => pickAndOpen());
     q("#empty-pick").addEventListener("click", () => pickAndOpen());
-    q("#empty-upload").addEventListener("click", () => q("#file-input").click());
-    q("#empty-open").addEventListener("click", () => openByPath());
     q("#empty-path").addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
         openByPath();
       }
-    });
-    q("#file-input").addEventListener("change", (e) => {
-      handleFiles(e.target.files);
-      // Reset so picking the same file again after a failed open still fires.
-      e.target.value = "";
     });
     // PD2 (UI_SPEC §8): window-level load gate. Only drags that carry files
     // are intercepted - pure text drags (the one type that never has "Files")
@@ -1140,10 +1136,10 @@
 
   // ---------- open: the local-file channel (P1, AGENTS §6) ----------
   //
-  // Three ways in: the native picker (#btn-open / #empty-pick), the upload
-  // channel (#empty-upload → the hidden #file-input, plus drag/drop), and the
-  // typed path box (#empty-path + #empty-open). Every one of them lands in
-  // adopt(), which is the only place that changes the document state.
+  // Two ways in: the native picker (#btn-open / #empty-pick) and the typed path
+  // box (#empty-path, Enter -> openByPath). Drag and paste land in the same
+  // submitFiles funnel. Every channel ends in adopt(), which is the only place
+  // that changes the document state.
 
   // pickAndOpen asks the server to show the native dialog. A cancel is normal
   // (no toast), an unsupported platform gets a toast plus focus on the path box.
@@ -1201,9 +1197,8 @@
     }
   }
 
-  // handleFiles is the upload-channel PDF route: it is reached from the
-  // upload buttons (#file-input accepts .pdf only) and from the paste/drop
-  // gate below, which has already rejected everything but a single PDF.
+  // handleFiles is the multipart upload route: it is reached from the paste/drop
+  // gate below, which has already rejected everything but a single PDF (PD1/PD2).
   async function handleFiles(files) {
     const list = Array.from(files || []);
     if (!list.length) return;
@@ -1401,7 +1396,7 @@
     }
     state.vetoed = new Set();
     refreshEstimate();
-    renderFileChip();
+    setDocTitle();
     renderAssetHooks();
     renderVetoChips();
     // The state flips *before* the first paint on purpose: #preview-stage is
@@ -1747,15 +1742,12 @@
     return rot === 0 ? { width: w, height: h } : { width: h, height: w };
   }
 
-  // renderFileChip paints the topbar title (HD2): the app name plus the version
-  // while nothing is open, and the opened file's name appended after it. The
-  // full path and size stay in the tooltip so the visible line never wraps.
-  function renderFileChip() {
-    const el = q("#top-file");
-    if (!el) return;
+  // setDocTitle writes the window title (HD2, revised by HD5): main.go builds the
+  // native caption from the same string, and document.title carries it for the
+  // browser tab. The topbar no longer mirrors it - it has no text at all.
+  function setDocTitle() {
     const base = `AutoStamp${state.version ? ` ${state.version}` : ""}`;
-    el.textContent = state.file ? `${base} ${state.file.name}` : base;
-    el.title = state.file ? `${state.file.path} · ${formatBytes(state.file.size)}` : "GET /api/health";
+    doc.title = state.file ? `${base} ${state.file.name}` : base;
   }
 
   // formatBytes keeps the units language-neutral (KB/MB are not i18n strings).
@@ -1809,12 +1801,11 @@
     applyHash();
     api.health()
       .then((h) => {
-        // HD2: the version rides the window title — the native caption for the
+        // HD2: the version rides the window title - the native caption for the
         // WebView2 window (main.go builds it) and document.title here for the
-        // browser fallback — and the topbar title string mirrors it.
+        // browser fallback.
         state.version = h.version || "";
-        doc.title = `AutoStamp ${state.version}`.trim();
-        renderFileChip();
+        setDocTitle();
         if (h.name !== "autostamp") toast("warn", `foreign app on this port: ${h.name}`);
       })
     api.settings()

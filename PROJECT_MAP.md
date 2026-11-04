@@ -1,11 +1,13 @@
 # PROJECT_MAP.md — AutoStamp 代码地图
 
-> 最后核对：2026-11-03（**P0–P7 全绿**，出货件 = `build.ps1 -Task stripped,package` 的
-> `dist\autostamp-<rev>-win64.zip`。同日增量：PD1/PD2 粘贴/拖拽装载 gate（AGENTS §5.23）、
+> 最后核对：2026-11-04（**P0–P7 全绿**，出货件 = `build.ps1 -Task stripped,package` 的
+> `dist\autostamp-<rev>-win64.zip`。2026-11-03 增量：PD1/PD2 粘贴/拖拽装载 gate（AGENTS §5.23）、
 > impeccable polish（导出段淡化删除 + `.seg.sm` 内边距）、单 exe 出口 `build1.ps1` + UPX 极限压缩
-> `buildm.ps1`（FACTS §4.3）、**本轮顶栏收尾**（AGENTS §5.24 + `UI_SPEC §8` HD1–HD3：顶栏只剩图标控件、
-> `#top-file` = `AutoStamp <版本>` + 文件名、版式密度字段与切档删除、最近文件的两个 UI 入口删除而
-> 后端 `config.recentFiles` 保留）。P6/P7 的 `internal/presetstore`、`seal_preset.go` 四路由、`fsx` 的
+> `buildm.ps1`（FACTS §4.3）、顶栏收尾（AGENTS §5.24 + `UI_SPEC §8` HD1–HD3：顶栏只剩图标控件、
+> 版式密度字段与切档删除、最近文件的两个 UI 入口删除而
+> 后端 `config.recentFiles` 保留）。**本轮 2026-11-04 = HD4–HD7**（版本号 `0.1-dev`、顶栏去文本 +
+> 按钮重排（快捷键最右）、启动页装载入口只留「打开文件」+ 路径框 Enter、左列预览出血；AGENTS §5.24–
+> §5.26、`UI_SPEC §6` 删 4 个契约 id、i18n 270 → 268）。P6/P7 的 `internal/presetstore`、`seal_preset.go` 四路由、`fsx` 的
 > `PickDirs`/`ListMatching`、`fs/pick{dir:true}`、`save{mkdirs:true}`、前端批处理跑链（AGENTS §5.21 BM1，
 > **没有后端作业路由/SSE**）、`strictOrigin` 默认开 + `nosniff` 都在下面的表里。`app-crosspage.js`
 > 这个计划名从未创建，真实形态在 `app-overlay.js` + `app-shell.js`。
@@ -75,8 +77,8 @@
 |---|---|
 |`web/embed.go`|`//go:embed all:static`；`RegisterStatic`：`GET /` → `index.html`（CSP 见下）、`/vendor/*`（长缓存）、`app-*.js`/`style.css`/`favicon.svg`；遍历/未知路径 → 404；`.mjs` → `text/javascript`|
 |`web/embed_test.go`|断言：嵌入文件存在、`GET /` 返回壳且**无内联 `<script>`**、CSP 指令逐条（`default-src 'self'`/`script-src 'self'`/`style-src 'self' 'unsafe-inline'`/`object-src 'none'`/`base-uri 'none'`）、`Cache-Control: no-cache`、`nosniff`、遍历拒绝、`.mjs` MIME|
-|`web/static/index.html`|壳 DOM（id/`data-field`/`data-i18n` 即契约，`UI_SPEC §6`）；无内联脚本（CSP）。`#preview-stage` **刻意留空**：`app-preview.js` 渲染首个 `page-frame`（canvas + `.textLayer`）后才有内容，P2 在其内加实例叠层；`#asset-hooks` / `pathGrantId` 的 chip 只显示句柄值，本地化文案走 `title`|
-|`web/static/app-shell.js`|IIFE + `window.__autoStampShell`：状态机 12 态、i18n（`data-i18n`、`data-i18n-placeholder`、图标按钮的 `data-i18n-title` 各自独立生效）、**窗口标题**（`document.title` 与 `#top-file` 同串 = `AutoStamp <版本>` + 打开后的文件名；`probe('docTitle')`）、实例列表（增/删/复制/改名 + 选中）、**P2 印章通道**（`sealIdFor`/`restoreInstanceSeals`/`applyTo`、`#stamp-layer` 由 overlay 拥有）、参数控件 ↔ `settings` 持久（`{"patch":{…}}`）、**导出体积预估**（`computeEstimate`/`refreshEstimate`，前端按 FACTS §4 表 × 页面积缩放，无请求；`probe('estimate')`）、P1 打开流程（`pickAndOpen`/`openByPath`/`handleFiles`/`openGrant`/`retryOpen`/`adopt` + 密码弹窗 + 拖放）、`probe()`/`fields()`/`ids()` 给 verify、深链 `#<state>`、toast/modals、`/api/health` 版本校验、`autostamp:lang`/`autostamp:open`/`autostamp:page`/`autostamp:param`/`autostamp:seal`/`autostamp:instance` 事件（跨模块同步）|
+|`web/static/index.html`|壳 DOM（id/`data-field`/`data-i18n` 即契约，`UI_SPEC §6`）；无内联脚本（CSP）。顶栏（`#topbar`）**没有任何文本**（HD5）：`#btn-open`+`#btn-save` 左簇、`#lang-seg`+`#theme-seg`+`#btn-shortcuts` 右簇，全是图标按钮。启动页装载入口 = `#empty-pick`（「打开文件」）+ `#empty-path` 路径框（HD6）。`#preview-stage` **刻意留空**：`app-preview.js` 渲染首个 `page-frame`（canvas + `.textLayer`）后才有内容，P2 在其内加实例叠层；`#asset-hooks` / `pathGrantId` 的 chip 只显示句柄值，本地化文案走 `title`|
+|`web/static/app-shell.js`|IIFE + `window.__autoStampShell`：状态机 12 态、i18n（`data-i18n`、`data-i18n-placeholder`、图标按钮的 `data-i18n-title` 各自独立生效）、**窗口标题**（`setDocTitle()`：原生标题栏与 `document.title` 同串 = `AutoStamp <版本> [文件名]`；`probe('docTitle')`；顶栏无文本，HD2/HD5）、实例列表（增/删/复制/改名 + 选中）、**P2 印章通道**（`sealIdFor`/`restoreInstanceSeals`/`applyTo`、`#stamp-layer` 由 overlay 拥有）、参数控件 ↔ `settings` 持久（`{"patch":{…}}`）、**导出体积预估**（`computeEstimate`/`refreshEstimate`，前端按 FACTS §4 表 × 页面积缩放，无请求；`probe('estimate')`）、P1 打开流程（`pickAndOpen`/`openByPath`/`handleFiles`/`openGrant`/`retryOpen`/`adopt` + 密码弹窗 + 拖放；`#empty-path` 的 `keydown` Enter → `openByPath`，HD6）、`probe()`/`fields()`/`ids()` 给 verify、深链 `#<state>`、toast/modals、`/api/health` 版本校验、`autostamp:lang`/`autostamp:open`/`autostamp:page`/`autostamp:param`/`autostamp:seal`/`autostamp:instance` 事件（跨模块同步）|
 |`web/static/app-api.js`|信封解析（`ok/data/code/error`）+ `http_<status>` 上报（未接线路由回 405 纯文本时不假装 JSON，FACTS §1.5）+ `GET/POST /api/settings` + P1 的 `pick/openGrant/uploadPDF/rawURL` 与 sessionStorage 会话令牌（`X-AutoStamp-Session`）|
 |`web/static/app-preview.js`|P1 渲染核 + P2/P3 串接：`import()` 载入 vendor `pdf.min.mjs`（`workerSrc`/`cMapUrl`/`standardFontDataUrl`/`wasmUrl` 指向 vendor 路径，`isEvalSupported:false` 保持 CSP 无 `unsafe-eval`）、`getDocument({url: rawURL})` 逐页 `render`（DPR 经 `RenderParameters.transform`，`MAX_RENDER_PIXELS` 超限降级 + `warn.render.hint`）、`goTo/next/prev/zoomBy/fit`、标尺与像素读数、`sample(x,y,w,h)` 按 PDF 点取样、干净页快照（`state.snapshot` → `drawImage`，供 overlay 重合成不重跑 pdf.js）、`overlay.paint/repaint/syncAffordance/selectAt/consumeWheel` 调用点、切分预览（`drawSplitMarks` 按 `split.mode` 在页框上画切点/网格，`probe('splitPreview')`）、`probe()` 供 verify（FACTS §1.7）|
 |`web/static/app-textlayer.js`|pdf.js 自带 `TextLayer` 驱动（6.4 无 `renderTextContent` 导出，官方 `TextLayerBuilder` 在未 vendor 的 `web/pdf_viewer.mjs`）：`attach({pdfjs,pageObj,viewport,frame,dpr})` 设 `--total-scale-factor = viewport.scale × OutputScale.pixelRatio` + `--scale-round-x/y` + `transform: scale(1/dpr)`，CSS 用 vendor 的 `.textLayer` 规则；`count(pageObj)` 给验收断言|
@@ -90,8 +92,8 @@
 |（续）|`web/static/app-api.js` 的 **P6 预设通道**|`presetList/presetSave/presetDelete/presetRawURL/rawBytes`（会话头 + 信封复用同一处）|
 |（续）|`web/static/app-shell.js` 的 **PD1/PD2 装载 gate**（AGENTS §5.23）|窗口级 `paste` + `dragenter/dragover/dragleave/drop`（`dragDepth` 计数 → `#preview[data-drag]` + `#drop-hint`）经 `submitFiles` 单漏斗：`classifyLoad` = `pdf`/`seals`/`reject(multi|mix|other)`（type 门只认 `Files`，无 type 时按扩展名兜底，`app-seal.js` 的 `upload` 门同步兜底）；单 PDF → `handleFiles` multipart `adopt`；图片 → `loadSeals`：单张设给选中实例、多张第一张设给选中 + 其余 `addInstance` 按文件名命名（失败 `rollbackInstance` 不留空行）；焦点输入框含 `text/plain` 的粘贴放行；`probe('load')` 读 `loadLog`|
 |`web/static/app-batch.js`|P6 印章**预设库 UI** + **批处理队列**：`window.__autoStampBatch`；预设 存/载/删/列表（列表镜像到印章卡与批处理卡的两个 select）；批处理 = **无后端作业路由的前端跑链**（AGENTS §5.21 BM1）`fs/pick{dir:true}`→`open`→（`split`）→`apply`→`export`(raster，离屏 pdf.js `scale=dpi/72` 回传)→`save{mkdirs}`；`batchTarget()` 输出 `_batch\<原名>.dpi<N>.q<Q>.pdf`（BM2，单扩展名）；`pagesForDoc()` = 预设 pages 词表逐文档求交集（BM5）；并发 `api.batch.concurrency`（1..8）+ 停止；加密行 `batch.status.encrypted`（BM4，不弹密码）；报表 CSV/JSON 由 `Blob`+`a[download]` 生成（不发请求）；`probe("queue"｜"report"｜"presets")` 给 verify|
-|`web/static/app-i18n.js`|en/cn 文案表（由 `tools/verify/gen-i18n.mjs` 从 `docs/UI_SPEC.md §4` 生成，270 键，禁止手改）|
-|`web/static/style.css`|壳样式（版式**固定 two-col** 双栏 + 图标按钮 tooltip / 控件表现代码）+ P1：分页条缩略图（`#page-pager canvas.pg-thumb`）、拖放高亮（`#preview[data-drag]` + `#drop-hint` 悬浮胶囊）；polish：`#panel-export` 段不再有 `opacity:.55` 淡化（误导状态 + 低对比，changelog 2026-11-03）|
+|`web/static/app-i18n.js`|en/cn 文案表（由 `tools/verify/gen-i18n.mjs` 从 `docs/UI_SPEC.md §4` 生成，268 键，禁止手改；`empty.pick.btn` = Open file / 打开文件，`empty.open.btn`、`empty.upload.btn` 已删）|
+|`web/static/style.css`|壳样式（版式**固定 two-col** 双栏 + 图标按钮 tooltip / 控件表现代码）+ P1：分页条缩略图（`#page-pager canvas.pg-thumb`）、拖放高亮（`#preview[data-drag]` + `#drop-hint` 悬浮胶囊）；polish：`#panel-export` 段不再有 `opacity:.55` 淡化（误导状态 + 低对比，changelog 2026-11-03）；**左列出血**（HD7，2026-11-04）：`#empty-state` 无 `margin`/`border-radius`、`#preview-stage` `padding: 0`、`.page-frame` 无圆角；`.file-chip` 规则随顶栏文本一起去掉（HD5）|
 |`web/static/favicon.svg`|图标（`<link rel="icon">`，否则 Chromium 自动 404 `/favicon.ico`，FACTS §1.5）|
 |`web/static/vendor/pdfjs/`|pdf.js 6.4.299 资产（P1 已进）：`build/`（只有 ESM，FACTS §1.1）、`cmaps/`、`standard_fonts/`、`wasm/`、`image_decoders/`、`iccs/`、`web/pdf_viewer.css`（文本层 CSS）；205 文件 / 5,486,850 B，`SHA256.txt` + `web/embed_test.go:TestVendorChecksums` 断言；见该目录 `README.md`|
 
@@ -100,12 +102,12 @@
 |文件|作用|
 |---|---|
 |`tools/genfix/main.go`|（独立模块 `go.mod`）生成 `docs/ui/fixtures/{page,seal}.png`（stdlib `image/png`，含 alpha 印章）|
-|`tools/verify/ui-smoke.mjs`|mock：状态机 15 态 + i18n 196 键 + 0 console error + 无横向溢出 + 切分/骑缝条带 + 混合模式像素矩阵（FACTS §1.2-§1.4）|
-|`tools/verify/ui-contract.mjs`|三方契约：mock `data-field` ↔ `UI_SPEC §2` ↔ AGENTS §6 请求字段（含 §6 覆盖度、id 存在性、i18n 表）|
-|`tools/verify/shell-smoke.mjs`|真实 `dist/autostamp.exe` + headless Chromium（沙箱 `%APPDATA%`/`%LOCALAPPDATA%`）：壳契约 12 态、en/cn i18n、窗口标题（`probe('docTitle')`）、实例、深链、`/api` 往返、`{"patch":…}` 合并；P1 起断言「未打开文档时 `#preview-stage` 没有假页」|
+|`tools/verify/ui-smoke.mjs`|mock：状态机 15 态 + i18n 全覆盖（每个 `data-i18n` 键都解析出非空 en/cn，`[data-i18n-title]` 必须有 cn 孪生）+ 0 console error + 无横向溢出 + 切分/骑缝条带 + 混合模式像素矩阵（FACTS §1.2-§1.4）|
+|`tools/verify/ui-contract.mjs`|三方契约：mock `data-field` ↔ `UI_SPEC §2` ↔ AGENTS §6 请求字段（含 §6 覆盖度、契约 id 存在性（`UI_SPEC §6` 的 89 个 id 与 mock + 壳 markup 三方一致）、i18n 表）|
+|`tools/verify/shell-smoke.mjs`|真实 `dist/autostamp.exe` + headless Chromium（沙箱 `%APPDATA%`/`%LOCALAPPDATA%`）：壳契约 12 态、en/cn i18n、窗口标题（`probe('docTitle')`）、实例、深链、`/api` 往返、`{"patch":…}` 合并；P1 起断言「未打开文档时 `#preview-stage` 没有假页」；顶栏收尾守卫：删件 id 未复活（`top-file`/`empty-upload`/`empty-open`/`file-input` 等）+ 顶栏图标几何（`#btn-open` 左缘、`#btn-save` 相邻、`#btn-shortcuts` 最右）+「顶栏无文本」计数 + 固定 two-col|
 |`tools/verify/pixel-matrix.mjs`|P2/P4 像素矩阵（页内算法独立重算 vs 真实画布；filter 污染回归；`--only=` 分段）——§1.3/§1.4 的仓库内重跑来源|
 |`tools/verify/overlay-smoke.mjs`|**P2 主校验**（真 exe + 真 UI + headless）：上传印章 → 16 模式 ×{1.0,0.6,0.3} → 几何/拖拽/四角/旋转/滚轮 → 骑缝条带 → `ctx.filter` 复位 → 去背计数 → 导出预估 == FACTS §4。分段令牌 `--only=<open\|geometry\|despill\|matrix\|drag\|strip\|filter\|export>`（缺省全跑）；`--reuse-build` 复用 `dist/autostamp-overlay-smoke.exe`（改前端后必须去掉该旗标重建）|
-|`tools/verify/preview-smoke.mjs`|P1 端到端：CDP `Page.printToPDF` 现场生成样本（英文多页文字 / 中文 CID / 混合 / 图片型无文字）→ 真 exe → 真 UI 打开（`#empty-path` + `#empty-open`）→ 画布像素、`getTextContent` 条数、`.textLayer` span 计数与层框宽度对齐、翻页/分页条/缩放、切分预览切点计数、vendor 资源 0 失败（FACTS §1.7）|
+|`tools/verify/preview-smoke.mjs`|P1 端到端：CDP `Page.printToPDF` 现场生成样本（英文多页文字 / 中文 CID / 混合 / 图片型无文字）→ 真 exe → 真 UI 打开（`#empty-path` 回车通道，HD6）→ 画布像素、`getTextContent` 条数、`.textLayer` span 计数与层框宽度对齐、翻页/分页条/缩放、切分预览切点计数、vendor 资源 0 失败（FACTS §1.7）|
 |`tools/verify/export-smoke.mjs`|**P5 主校验**（真 exe + 真 UI + headless）：保存链里的 raster 通道（apply → 前端位图 → multipart → adopt → 写盘）、页 pt == `px*72/dpi`（Δ 0.000）、导出文件字节落在 FACTS §4 的 ±40% 量级带、回读像素 Δ ≤6、vector 零 `/api/pdf/export` 请求 + 文字仍在、W6 超限只出 warn 且零请求、`pages="2"` 只送 `page-2`。分段 `--only=<raster|vector|guard|chain>`|
 |`tools/verify/batch-smoke.mjs`|**P6 主校验**（真 exe + 真 UI + headless）：分段 `--only=<preset|batch>`。preset = 真 UI 存/载/删往返（两个 select 都出现、面板参数写回、删除后列表空）；batch = **P6 验收形态** 22 份（20 份可盖 + 1 份 AES-256 加密 + 1 份故意坏）→ 报表计数 `[22,20,1,1]`、状态分布、`_batch\原名.dpi150.q75.pdf` 全在、产物页数与源一致、**源文件字节不动**、加密/坏文件没有产物、CSV/JSON 真下载（22 行、只有 ok 行带 `_batch`）、两个预期 400（`/api/pdf/open`）之外 0 失败请求与 0 console error|
 |`tools/verify/encfx/main.go`|现场生成 **AES-256 加密样本**（`pdfcore.WriteRaster` 一页 JPEG → `api.EncryptFile` + `model.NewAESConfiguration`），给 batch-smoke 的加密行与 `pdf_password_test.go` 用；不落二进制 blob|

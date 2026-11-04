@@ -1,9 +1,11 @@
 # AutoStamp — UI_SPEC（P0.5 UI 契约）
 
-> 最后核对：2026-11-04（版本号取值定为 `0.1-dev`：§8 新增 HD4，伪版本不再进 UI；
-> 顶栏收尾的 2026-11-03 记录（§2 删 `ui.density` 字段行、§4 删 12 个键（282 → 270）、
-> §6 删 6 个契约 id、§7 驱动去 `setDensity`、§7.1 probe 加 `docTitle`、§8 新增 HD1/HD2/HD3，
-> L1/RF1 的 UI 形态已作废）沿用；P2–P6 接线记录沿用 2026-10-30/11-02）。
+> 最后核对：2026-11-04（§8 新增 HD4–HD7：显示版本 = `0.1-dev`、顶栏去文本 + 按钮重排、
+> 启动页装载入口精简、左列预览出血；§4 删 2 键（270 → 268：`empty.open.btn`、`empty.upload.btn`）+
+> 改 1 键（`empty.pick.btn` = Open file / 打开文件）、§6 ui-ids 删 4 个 id
+> （`top-file`、`empty-upload`、`empty-open`、`file-input`，93 → 89）。顶栏收尾的
+> 2026-11-03 记录（§2 删 `ui.density`、§4 删 12 键、§6 删 6 个顶栏 id、§7 去 `setDensity`、
+> §7.1 加 `docTitle`、HD1/HD2/HD3，L1/RF1 的 UI 形态作废）沿用；P2–P6 接线记录沿用 2026-10-30/11-02）。
 > 本文是 **UI 语义唯一权威**：字段名/取值域/控件绑定/DOM id/状态机
 > 在此冻结；P0 起 `web/static/index.html` 必须照 §1 骨架与 §7 id 搭建，P1–P5 只换数据源。
 > 与 `AGENTS.md` §6 路由字段冲突时：先改本文 + §6（同一提交），再改代码。
@@ -195,9 +197,9 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 | 标尺 / 像素读数 | （只读派生） | `#preview-ruler`、`#pixel-readout` | 由 `pdf.open` 的页 pt 尺寸 + 当前视图 scale 计算，不请求 |
 
 滑杆 + 数值必须**双向绑定**（同一 `data-field` 复用两次，mock 已实现 `bindPair`）；
-隐藏 `type=file` input 只作选择器触发器，不占字段。
+隐藏 `type=file` input（HD6 后只剩 `#seal-file-input`，印章图片选择器）只作触发器，不占字段。
 
-## 4. i18n 清单（key | en | cn；共 270 键，全部由 mock + 状态文案生成；`node tools/verify/gen-i18n.mjs` 打印同数）
+## 4. i18n 清单（key | en | cn；共 268 键，全部由 mock + 状态文案生成；`node tools/verify/gen-i18n.mjs` 打印同数）
 
 规则（AGENTS §7）：每个可见控件/文案必须有 `data-i18n` key，en/cn 两值非空；
 `data-i18n-cn`（及 `-placeholder`、`-title`）提供中文值，en 取元素自身文本或 `class="tag"` 的字段名。
@@ -298,12 +300,10 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |crosspage.on|on|开|
 |del.hint|delete selected instance|删除选中的印章实例|
 |dup.hint|duplicate instance|复制印章实例|
-|empty.hint|Drop or paste a PDF here to open it, or drop/paste images to load them as seals. You can also pick a file or type a path.|把这里拖入或粘贴（Ctrl+V）一个 PDF 即打开；拖入/粘贴图片装载为印章。也可以选择文件 / 直接填写路径。|
+|empty.hint|Drop or paste a PDF here to open it, or drop/paste images to load them as seals. You can also open a file or type its path.|把这里拖入或粘贴（Ctrl+V）一个 PDF 即打开；拖入/粘贴图片装载为印章。也可以「打开文件」/ 直接填写路径。|
 |empty.msg|No PDF open|还没有打开 PDF|
-|empty.open.btn|Open|打开|
 |empty.path.placeholder|C:\docs\contract.pdf|C:\docs\contract.pdf|
-|empty.pick.btn|Pick file|选择文件|
-|empty.upload.btn|Upload|上传文件|
+|empty.pick.btn|Open file|打开文件|
 |err.corrupt.hint|Not a PDF or damaged header: cannot open|不是 PDF 或文件头损坏，无法打开|
 |err.encrypted.hint|PDF is encrypted: password required|PDF 已加密，需要口令|
 |err.fix.ext.hint|Remove .bin suffix|移除 .bin 后缀|
@@ -498,14 +498,14 @@ P0/P1 的 `index.html` 必须使用下表 id（`ui-ids` 块 = `ui-contract.mjs` 
 新增 id 要先登记，mock 缺该 id 即报错。
 
 ```ui-ids
-app-main  app-root  apply-anchor  apply-blend  asset-hooks  batch-auto-split  batch-binding  batch-cols  batch-cross-page  batch-files  batch-pick-dir  batch-pick-files  batch-progress  batch-queue  batch-rows  batch-split-mode  batch-start  batch-start-offset  btn-open  btn-save  btn-shortcuts  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  drop-hint  empty-open  empty-path  empty-pick  empty-pick-filter  empty-pick-multi  empty-state  empty-upload  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-add  instance-delete  instance-duplicate  lang-seg  modal-layer  page-pager  panel  panel-actions  panel-batch  panel-crosspage  panel-export  panel-instances  panel-overlay  panel-position  panel-seal  panel-split  password-modal  pixel-readout  pos-center  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  right-sidebar  save-cancel  save-confirm  save-modal  file-input  error-toast  save-open  save-pick  save-source  scale-pt  seal-despill-revert  seal-file-input  seal-instances  seal-meta  seal-preset-delete  seal-preset-load  seal-preset-name  seal-preset-save  seal-preset-select  seal-upload  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  split-apply  split-mode  split-veto  strip-previews  theme-seg  top-file  topbar
+app-main  app-root  apply-anchor  apply-blend  asset-hooks  batch-auto-split  batch-binding  batch-cols  batch-cross-page  batch-files  batch-pick-dir  batch-pick-files  batch-progress  batch-queue  batch-rows  batch-split-mode  batch-start  batch-start-offset  btn-open  btn-save  btn-shortcuts  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  drop-hint  empty-path  empty-pick  empty-pick-filter  empty-pick-multi  empty-state  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-add  instance-delete  instance-duplicate  lang-seg  modal-layer  page-pager  panel  panel-actions  panel-batch  panel-crosspage  panel-export  panel-instances  panel-overlay  panel-position  panel-seal  panel-split  password-modal  pixel-readout  pos-center  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  right-sidebar  save-cancel  save-confirm  save-modal  error-toast  save-open  save-pick  save-source  scale-pt  seal-despill-revert  seal-file-input  seal-instances  seal-meta  seal-preset-delete  seal-preset-load  seal-preset-name  seal-preset-save  seal-preset-select  seal-upload  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  split-apply  split-mode  split-veto  strip-previews  theme-seg  topbar
 
 ```
 
-`#file-input` 是隐藏的 `<input type=file>` 选择器触发器，不占字段（§2 里没有 `data-field`）。
-
-`#top-file` 是**窗口标题文本**（HD2，2026-11-03）：无文档 = `AutoStamp <版本>`，打开后追加
-` 文件名`；其 `title` 属性 = 完整路径 · 体积。`#app-main` 不再带版式属性（固定 two-col，HD3）。
+顶栏**没有任何文本**（HD5，2026-11-04）：只有「打开 / 保存」左簇、「语言 / 主题 / 快捷键」右簇，
+全部图标 + `data-i18n-title` tooltip。版本与打开后的文件名只写在**窗口标题**里 —— 原生标题栏
+（Go `windowTitle`）与浏览器标签页（`document.title`）同一个串 `AutoStamp <版本> [文件名]`（HD2 修订）。
+`#app-main` 不带版式属性（固定 two-col，HD3）；左列的 `#preview` 无内边距、无圆角（HD7）。
 
 `#preview-stage` 的页框与 `#page-pager` 的分页 chip 全部由 JS 生成（不占契约 id，靠
 `class` + `data-page`）；`#asset-hooks` 与 `pathGrantId` 的 chip 只显示句柄值本身，
@@ -625,12 +625,16 @@ FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 |HD2|版本号和文件名显示在哪|顶栏文本承载 / 新增版本 chip / 只写窗口标题栏（标签页同源）|已确认（用户 2026-11-03 对话指令）：`#top-file` 就是窗口标题文本 —— 无文档 = `AutoStamp <版本>`，打开后追加 ` 文件名`；版本串同时写进原生窗口标题栏（Go `windowTitle`）与浏览器标签页（`document.title`）；**不新增任何控件**|2026-11-03|用户 2026-11-03 对话指令|
 |HD3|版式还可切换吗|固定 two-col / 保留 single-col 与 collapsed 切档|已确认（用户 2026-11-03 对话指令）：固定 two-col（CSS 基础规则就是两栏）；`ui.density` 字段、`[data-density=…]` 规则、`setDensity` 驱动接口全部删除，settings 的 patch 不再接受 `ui.density`|2026-11-03|用户 2026-11-03 对话指令|
 |HD4|未打标签的构建显示什么版本号|沿用 Go 伪版本（`v0.0.0-<日期>-<hash>+dirty`）/ 固定 dev 横幅|已确认（用户 2026-11-04 对话指令）：版本 = **`0.1-dev`**，`internal/app.pickVersion` 只认真实标签——伪版本、`devel`、`+dirty` 一律回落到 `devVersion`，标题栏不带 commit 串；真标签（`v1.2.3`、`v1.2.3-rc.1`）照旧直接显示|2026-11-04|用户 2026-11-04 对话指令|
+|HD5|顶栏要不要文本、按钮怎么排|保留 `#top-file` 标题文本 / 顶栏只剩图标按钮|已确认（用户 2026-11-04 对话指令）：**顶栏没有任何文本**，`#top-file` 删除（作废 HD2 的顶栏承载：版本 + 打开后的文件名只写在原生标题栏与浏览器标签页）；顺序 = 左簇「打开 + 保存」相邻贴着左边缘，右簇「语言 → 主题 → 快捷键」，**快捷键最右**（在明暗切档右侧）|2026-11-04|用户 2026-11-04 对话指令|
+|HD6|启动页装载入口形态|上传 + 选择 + 路径 + 打开 四个控件 / 只留「打开文件」+ 路径框|已确认（用户 2026-11-04 对话指令）：删「上传文件」按钮（`#empty-upload`）与路径框右侧的「打开」按钮（`#empty-open`）；「选择文件」改名 **「打开文件」**（`empty.pick.btn` = Open file / 打开文件）；路径框回车仍走 `openByPath`；隐藏 `#file-input` 及其 change 监听随上传入口一起去掉（已无触发者），拖放/粘贴装载继续喂 `submitFiles`|2026-11-04|用户 2026-11-04 对话指令|
+|HD7|左列预览保留圆角与外边距吗|出血占满左容器 / 保留卡片式内缩|已确认（用户 2026-11-04 对话指令）：`#empty-state` 去 `margin: 24px` + `border-radius: 8px`（占满左列），`#preview-stage` 内边距 `18px` → `0`，`.page-frame` 圆角 `2px` → `0`；虚线框仍作拖放反馈（`#preview[data-drag]` + `#drop-hint` 不变）|2026-11-04|用户 2026-11-04 对话指令|
 
 
 D2–D4、L1、CP1 已在 P0.5 第 1 轮确认（2026-10-29）；D1、I1、S1、E1 在第 2 轮确认（同日）。
-HD1/HD2/HD3/HD4 不是 ask 轮次，而是 2026-11-03/11-04 用户在对话里直接下的指令（顶栏收尾 +
-版本号取值），因此来源列写「用户 … 对话指令」；HD1/HD2/HD3 作废了 L1（切档控件）与
-RF1（最近文件 UI 入口）的可见形态，后端数据与字段不变。
+HD1–HD7 不是 ask 轮次，而是 2026-11-03/11-04 用户在对话里直接下的指令（顶栏收尾 +
+版本号取值 + 启动页入口 + 左列出血），因此来源列写「用户 … 对话指令」；HD1/HD2/HD3 作废了
+L1（切档控件）与 RF1（最近文件 UI 入口）的可见形态，后端数据与字段不变；HD5 作废 HD2 的
+「顶栏文本承载」半边（`#top-file` 删除，窗口标题仍在）。
 
 W5、W6 是 P5（光栅导出）开工前的落盘/保存语义，用第 5 轮确认（2026-11-02）。
 P6 的 PR1/PR2/RF1/BC1–BC3/PC1/OP1 是开工前的预设/批处理/打包语义,用第 6 轮（5 条）与
