@@ -6,9 +6,9 @@ import (
 )
 
 func TestPickDialogFilterVocabulary(t *testing.T) {
-	// The contract has exactly two filter values (UI_SPEC §2 api.fs.pick.filter):
+	// The contract has exactly three filter values (UI_SPEC §2 api.fs.pick.filter):
 	// the pdf one must offer PDF first with an escape hatch, the all one must not
-	// smuggle a PDF-only filter.
+	// smuggle a PDF-only filter, and image (HD8) must offer the seal pictures.
 	pdf := pickDialog("pdf")
 	if !strings.Contains(pdf, "*.pdf") {
 		t.Errorf("pdf filter = %q, must offer *.pdf", pdf)
@@ -19,6 +19,13 @@ func TestPickDialogFilterVocabulary(t *testing.T) {
 	all := pickDialog("all")
 	if strings.Contains(all, "*.pdf") {
 		t.Errorf("all filter = %q, must not restrict to PDF", all)
+	}
+	image := pickDialog("image")
+	if !strings.Contains(image, "*.png") || !strings.Contains(image, "*.jpg") {
+		t.Errorf("image filter = %q, must offer seal picture extensions", image)
+	}
+	if strings.Contains(image, "*.pdf") {
+		t.Errorf("image filter = %q, must not offer PDF", image)
 	}
 }
 

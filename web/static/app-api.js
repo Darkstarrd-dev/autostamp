@@ -133,6 +133,17 @@
   async function uploadPOST(path, file, fields) {
     return uploadMultipart(path, fields, [{ name: "file", blob: file, filename: file.name }]);
   }
+  // sealPrepareGrant posts the JSON shape of /api/pdf/seal/prepare (HD8): the
+  // native picker's grant instead of a multipart file. The server reads the
+  // file itself (path + extension whitelist) and records the recent-seal
+  // entry, so the caller never touches the bytes.
+  async function sealPrepareGrant(pathGrantId, fields) {
+    return request("/api/pdf/seal/prepare", {
+      method: "POST",
+      body: Object.assign({ pathGrantId }, fields || {}),
+    });
+  }
+
 
   window.__autoStampApi = {
     ApiError,
@@ -149,6 +160,8 @@
     // clamps out-of-range values instead of rejecting them, and reports which
     // value it fixed in `warning`.
     patchSettings: (patch) => request("/api/settings", { method: "POST", body: { patch } }),
+
+    sealPrepareGrant,
 
     // --- P1: the local-file channel (AGENTS §6) ---
 

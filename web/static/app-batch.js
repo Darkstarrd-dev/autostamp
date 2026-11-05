@@ -145,6 +145,9 @@
       if (!sealMod || !sealMod.prepare) throw Object.assign(new Error("seal module unavailable"), { code: "internal" });
       const meta = await sealMod.prepare(file);
       s.setSealForSelected(meta.sealId);
+      // HD9: a loaded preset is a freshly opened seal - the preview card
+      // switches to it (the preset's own name, not a path basename).
+      s.setCurrentSeal(meta.sealId, preset.name);
       const p = preset.params || {};
       s.setParams({
         "api.apply.blend": p.blend || "multiply",

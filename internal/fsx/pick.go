@@ -9,8 +9,8 @@ import (
 // PickOptions describes a native file-open dialog (AGENTS §6 /api/fs/pick).
 //
 // Filter takes the contract vocabulary: "pdf" limits the dialog to PDF files,
-// "all" leaves everything visible. Multi enables multi-selection, which the
-// batch queue (P6) uses.
+// "image" to seal pictures (HD8), "all" leaves everything visible. Multi enables
+// multi-selection, which the batch queue (P6) uses.
 type PickOptions struct {
 	Filter   string
 	Multi    bool
@@ -55,12 +55,15 @@ func PickDirs(ctx context.Context, o PickOptions) (string, error) {
 	return paths[0], nil
 }
 
-// pickDialog maps the contract filter onto a Windows filter string. The two
+// pickDialog maps the contract filter onto a Windows filter string. The three
 // entries are the only vocabulary the route accepts (UI_SPEC §2
-// api.fs.pick.filter), so anything else is a bug, not user input.
+// api.fs.pick.filter, HD8 adds "image"), so anything else is a bug, not user input.
 func pickDialog(filter string) string {
-	if filter == "all" {
+	switch filter {
+	case "all":
 		return "所有文件 (*.*)|*.*"
+	case "image":
+		return "印章图片 (*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff)|*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff|所有文件 (*.*)|*.*"
 	}
 	return "PDF 文件 (*.pdf)|*.pdf|所有文件 (*.*)|*.*"
 }
@@ -83,7 +86,11 @@ func pickScript(o PickOptions) string {
 	b.WriteString("$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n")
 	b.WriteString("Add-Type -AssemblyName System.Windows.Forms\n")
 	b.WriteString("$d = New-Object System.Windows.Forms.OpenFileDialog\n")
-	b.WriteString("$d.Title = 'AutoStamp: 选择 PDF 文件'\n")
+	title := "AutoStamp: 选择 PDF 文件"
+	if o.Filter == "image" {
+		title = "AutoStamp: 选择印章图片"
+	}
+	b.WriteString("$d.Title = '" + title + "'\n")
 	b.WriteString("$d.Filter = '" + strings.ReplaceAll(pickDialog(o.Filter), "'", "''") + "'\n")
 	b.WriteString("$d.Multiselect = " + boolPS(o.Multi) + "\n")
 	b.WriteString("$d.CheckFileExists = $true\n")

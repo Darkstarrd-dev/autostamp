@@ -1,15 +1,15 @@
 # AutoStamp — UI_SPEC（P0.5 UI 契约）
 
-> 最后核对：2026-11-04（§8 新增 V4–V6：fit = **整页适配**（保比例，不再是仅适配宽）、
-> 左主区**无滚动条** + Space+方向键 / Space+左键拖动 / 滚轮 平移且四边被原生 clamp 钉死、
-> Ctrl+鼠标中键 = 恢复 fit；§4 增 2 键（268 → 270：`view.pan.hint`、`view.fit.hint`）、
-> §5 增两行、§7.1 预览接口增 `panStage` 与 `probe('pan')`；修复面：实例 ghost 双绘制
-> （`instance-canvas` 不挂 DOM，仅 probe 背板）与 brightness/saturate 复核（代码链路正确，
-> ghost 是用户感觉「两滑杆结果相同」的成因）。HD4–HD7（版本 = `0.1-dev`、顶栏去文本、
-> 启动页入口、左列出血；§4 删 2 键 + 改 1 键、§6 ui-ids 删 4 个 id 93 → 89）沿用；
-> 顶栏收尾的 2026-11-03 记录（§2 删 `ui.density`、§4 删 12 键、§6 删 6 个顶栏 id、
-> §7 去 `setDensity`、§7.1 加 `docTitle`、HD1/HD2/HD3，L1/RF1 的 UI 形态作废）沿用；
-> P2–P6 接线记录沿用 2026-10-30/11-02）。
+> 最后核对：2026-11-04（§8 新增 HD8–HD12：印章装载入口移到顶栏（「上传印章」按钮 + 最近
+> 印章下拉，`config.recentSeals` 落 settings.json）、左列底部印章预览、加章模式开关、
+> 实例只作用于放置页（W4 修订）、选中实例浮动参数面板取代「叠加参数/位置与尺寸」两段
+> （滑杆范围 10%..200% 可超出、旋转 −180..180、复位/删除按钮）；§2 改 3 行（filter 词表 +
+> scale 范围 + pos/anchor/offset/pages 转 ctl=no）增 2 行、§4 删 14 键 + 增 9 键（270 → 265）、
+> §6 ui-ids 删 7 增 9（89 → 91）、§7.1 增 `setAddMode`/`openRecentSeal`/`dropRecentSeal`
+> 与 `addMode`/`recentSeals`/`sealPreview`/`instancePanel` 探针、删 `setGeomMode`；
+> §7.1 ghost 修复与 V4–V6 沿用；HD4–HD7 沿用；顶栏收尾的 2026-11-03 记录（§2 删
+> `ui.density`、§4 删 12 键、§6 删 6 个顶栏 id、§7 去 `setDensity`、§7.1 加 `docTitle`、
+> HD1/HD2/HD3，L1/RF1 的 UI 形态作废）沿用；P2–P6 接线记录沿用 2026-10-30/11-02）。
 > 本文是 **UI 语义唯一权威**：字段名/取值域/控件绑定/DOM id/状态机
 > 在此冻结；P0 起 `web/static/index.html` 必须照 §1 骨架与 §7 id 搭建，P1–P5 只换数据源。
 > 与 `AGENTS.md` §6 路由字段冲突时：先改本文 + §6（同一提交），再改代码。
@@ -61,14 +61,15 @@ save-confirm → replace-confirm`（`replaceOriginal=true`）→ 成功 toast �
 `nullable` = 是否允许 `null`/空串。默认值即 mock 初值，也是 settings.json 默认。
 
 ```ui-fields
+field=api.fs.pick.filePath api=fs.pick.filePath type=text range=abs path default= nullable=yes ctl=yes i18nkey=api.fs.pick.filePath.ctl decision=-
+field=api.fs.pick.filter api=fs.pick.filter type=select range=pdf|image|all default=pdf nullable=no ctl=yes i18nkey=api.fs.pick.filter.ctl decision=HD8
+field=api.fs.pick.multi api=fs.pick.multi type=toggle range=bool default=true nullable=no ctl=yes i18nkey=api.fs.pick.multi.ctl decision=-
+field=api.fs.pick.pathGrantId api=fs.pick.pathGrantId type=text range=grant id default=(auto after pick) nullable=yes ctl=no i18nkey=api.fs.pick.pathGrantId.hint decision=-
+field=api.fs.pick.startDir api=fs.pick.startDir type=text range=abs dir default=%APPDATA%\AutoStamp nullable=yes ctl=no i18nkey=api.fs.pick.startDir.hint decision=-
+field=api.open.assetId api=open.assetId type=text range=assetId default=- nullable=yes ctl=no i18nkey=api.open.assetId.ctl decision=-
 field=ui.lang api=- type=segmented range=en|cn default=en nullable=no ctl=yes i18nkey=ui.lang.ctl decision=-
 field=ui.theme api=- type=segmented range=light|dark default=light nullable=no ctl=yes i18nkey=ui.theme.ctl decision=-
 field=decision.assetIds api=- type=display range=5个 assetId chip default=- nullable=yes ctl=yes i18nkey=asset.hint decision=-
-field=api.fs.pick.filePath api=fs.pick.filePath type=text range=绝对路径 default=- nullable=no ctl=yes i18nkey=api.fs.pick.filePath.ctl decision=-
-field=api.fs.pick.multi api=fs.pick.multi type=toggle range=bool default=true nullable=no ctl=yes i18nkey=api.fs.pick.multi.ctl decision=-
-field=api.fs.pick.filter api=fs.pick.filter type=select range=pdf|all default=pdf nullable=no ctl=yes i18nkey=api.fs.pick.filter.ctl decision=-
-field=api.fs.pick.pathGrantId api=fs.pick.pathGrantId type=text range=grantId default=- nullable=yes ctl=yes i18nkey=api.fs.pick.pathGrantId.ctl decision=- unit=grantId
-field=api.open.assetId api=open.assetId type=text range=assetId default=- nullable=yes ctl=no i18nkey=api.open.assetId.ctl decision=-
 field=api.split.assetId api=split.assetId type=text range=assetId default=- nullable=yes ctl=no i18nkey=api.split.assetId.ctl decision=-
 field=api.apply.assetId api=apply.assetId type=text range=assetId default=- nullable=yes ctl=no i18nkey=api.apply.assetId.ctl decision=-
 field=api.export.assetId api=export.assetId type=text range=assetId default=- nullable=yes ctl=no i18nkey=api.export.assetId.ctl decision=-
@@ -81,12 +82,14 @@ field=api.apply.blend api=apply.blend type=select-grouped range=16blend词表 de
 field=api.apply.opacity api=apply.opacity type=slider+number range=0..1 default=0.6 nullable=no ctl=yes i18nkey=api.apply.opacity.ctl decision=-
 field=api.apply.brightness api=apply.brightness type=slider+number range=0..2 default=1 nullable=no ctl=yes i18nkey=api.apply.brightness.ctl decision=-
 field=api.apply.saturate api=apply.saturate type=slider+number range=0..3 default=1 nullable=no ctl=yes i18nkey=api.apply.saturate.ctl decision=-
-field=api.apply.scale api=apply.scale type=slider+number range=0.05..0.9 default=0.202 nullable=no ctl=yes i18nkey=api.apply.scale.ctl decision=- unit=相对页宽分数
-field=api.apply.pos api=apply.pos type=text range=x,y default=130,480 nullable=no ctl=yes i18nkey=api.apply.pos.ctl decision=- unit=pt
-field=api.apply.anchor api=apply.anchor type=segmented range=tl|tr|center|bl|br default=center nullable=no ctl=yes i18nkey=api.apply.anchor.ctl decision=-
-field=api.apply.offset api=apply.offset type=text range=dx,dy default=0,0 nullable=no ctl=yes i18nkey=api.apply.offset.ctl decision=- unit=pt
-field=api.apply.rotation api=apply.rotation type=slider+number range=-180..180 default=0 nullable=no ctl=yes i18nkey=api.apply.rotation.ctl decision=- unit=deg
-field=api.apply.pages api=apply.pages type=text range=pages词表 default=1-2,5 nullable=no ctl=yes i18nkey=api.apply.pages.ctl decision=-
+field=api.apply.scale api=apply.scale type=slider+number range=0.05..5.0 default=0.202 nullable=no ctl=yes i18nkey=api.apply.scale.ctl decision=HD12 unit=相对页宽分数
+field=api.apply.pos api=apply.pos type=text range=x,y default=- nullable=no ctl=no i18nkey=- decision=HD12 unit=pt
+field=api.apply.anchor api=apply.anchor type=segmented range=tl|tr|center|bl|br default=center nullable=no ctl=no i18nkey=- decision=HD12
+field=api.apply.offset api=apply.offset type=text range=dx,dy default=0,0 nullable=no ctl=no i18nkey=- decision=HD12 unit=pt
+field=api.apply.rotation api=apply.rotation type=slider+number range=-180..180 default=0 nullable=no ctl=yes i18nkey=api.apply.rotation.ctl decision=HD12 unit=deg
+field=api.apply.pages api=apply.pages type=text range=pages词表 default=all nullable=no ctl=no i18nkey=- decision=HD11
+field=ui.seal.addMode api=- type=toggle range=bool default=false nullable=no ctl=yes i18nkey=app.sealAddMode.btn decision=HD10
+field=decision.seal.recentSeals api=- type=select range=最近打开印章 default=- nullable=yes ctl=yes i18nkey=seal.recent.select decision=HD8
 field=api.split.auto api=split.auto type=toggle range=bool default=true nullable=no ctl=yes i18nkey=api.split.auto.ctl decision=D3
 field=ui.split.mode api=- type=segmented range=off|v2|h2|grid default=v2 nullable=no ctl=yes i18nkey=ui.split.mode.ctl decision=D3
 field=api.split.rows api=split.rows type=number range=1..6 default=1 nullable=no ctl=yes i18nkey=api.split.rows.ctl decision=-
@@ -132,13 +135,22 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
   `api.apply.blend` → `blend.go` 注入 `/BM`（pdfcpu 不写 `/BM`，FACTS §2.2）。
 - `api.apply.brightness/saturate` 只在预览（`ctx.filter`），**落盘不写**；每层叠加前显式
   `ctx.filter='none'`（FACTS §1.4 的污染坑）。
-- `api.apply.scale` 是相对页宽分数（换算显示 pt/mm）；`api.apply.pos` 与 `api.apply.anchor`
-  二选一（选锚点后 pos 归算）。**页内坐标约定（P2 实测；见 §8「页内坐标原点」行）**：
-  display 空间、原点左上、y 向下（与 `#preview-ruler` 的「标尺原点在左上」一致）。
-  落盘侧换算到 pdfcpu 的 y 向上 MediaBox（含 `/Rotate` 补偿），换算在 P4 apply 内做并有单测钉死。
-  - 二选一是**逐实例**的（实例上的 `geomMode`）：改 `pos` 输入框或方向键 → 该实例走 pos 通道
-    （`offset` 归零，落盘发 `pos` 不带 `anchor`）；改锚点/拖拽/缩角 → 走 anchor+offset 通道
-    （`pos` 只作派生读数）。预览与落盘共用同一套换算：`app-overlay.rectFor` == `pdfcore.StampGeom.Box`。
+- `api.apply.scale` 是相对页宽分数：滑杆范围 **10%..200%**（0.1..2.0），最左 10%、最右 200%，
+  默认 0.202 = 20.2%；拖动边角可超出 200%（落盘词表上限 0.05..5.0），滑杆把超出值回显在
+  右端（HD12）。`api.apply.pos` / `api.apply.anchor` / `api.apply.offset` 不再有控件（HD12：
+  位置直接走画布拖拽）：实例几何恒走 **anchor+offset** 通道（`anchor=center` + 拖拽增量
+  `offset`），`pos` 只作派生读数不落请求。**页内坐标约定（P2 实测；见 §8「页内坐标原点」行）**：
+  display 空间、原点左上、y 向下（与 `#preview-ruler` 一致）。落盘侧换算到 pdfcpu 的 y 向上
+  MediaBox（含 `/Rotate` 补偿），换算在 P4 apply 内做并有单测钉死；预览与落盘共用同一套换算：
+  `app-overlay.rectFor` == `pdfcore.StampGeom.Box`。方向键步进（1pt/Shift=10pt）改 `offset`。
+  - `api.apply.pages` 的交互默认 = **实例所在页**（HD11，W4 修订）：在哪一页放置/加章，
+    就只在该页显示；骑缝实例（`crossPage=true`）仍按 `all` 逐页放条带（D2/CP1 不变），
+    批处理的 `pagesForDoc`（BM5）不受影响。
+- `decision.seal.recentSeals`（HD8）= 后端 `config.recentSeals`（24 条去重截断，与
+  `recentFiles` 同一套 `SetRecent` 语义）：`POST /api/pdf/seal/prepare` 走 pathGrantId 形态
+  成功后记录路径；顶栏下拉显示 **去后缀** 的名称，value = 完整路径。兜底：下拉选择时
+  `fs/pick{filePath}` 报 `path_denied`（文件不存在）→ 前端移除该选项并 `PATCH settings`
+  的 `recentSeals` 数组（整组替换）删除该记录。
 - `api.apply.startOffset` 是骑缝条带沿装订边的起始偏移（pdfcpu `offset:0 -N`），与 `api.apply.offset` 独立。
 - `api.export.dpi/customDpi/quality` 仅 `mode=raster` 生效（页位图由前端回传，FACTS §2.4 无 rasterize）。
 - `api.batch.*`（BM1/BM2）= 前端逐文件跑完整链：`fs/pick` → `open` →（`split`）→ `apply` →（`export` 光栅）→ `save(mkdirs)`；
@@ -153,7 +165,9 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 
 | 面板/控件 | 字段 | 控件形态 | 落点 |
 |---|---|---|---|
-| 印章段 · 上传印章 PNG | `sealId`（响应侧） | button | `POST /api/pdf/seal/prepare` |
+| 顶栏 · 上传印章（`#btn-seal-upload`） | `sealId`（响应侧） | 图标 button（SVG 印章）→ `fs/pick{filter:image}` | `POST /api/pdf/seal/prepare`（pathGrantId 形态）|
+| 顶栏 · 最近印章下拉（`#seal-recent-select`） | `decision.seal.recentSeals` | `<select>`（名称去后缀，value=路径） | `fs/pick{filePath}` → `seal/prepare(pathGrantId)`；文件没了 → 移除选项 + `PATCH settings` |
+| 顶栏 · 加章模式开关（`#btn-seal-add`） | `ui.seal.addMode` | toggle button（`aria-pressed`，SVG） | 无请求；开启后左键点击页面空白处 = 在该点新增实例 |
 | 印章段 · 撤销去背 | `seal.prepare`（`despill:false` 重跑） | button | `POST /api/pdf/seal/prepare`（同一份字节） |
 | 印章段 · 元数据 | `sealId` + `alpha`/`opaque`（响应侧） | chip（只读） | 无请求 |
 | 主画布 · 选中实例（`#stamp-layer`） | `apply.offset`（拖框）/ `apply.scale`（四角、Ctrl+滚轮 V3）/ `apply.rotation`（顶部手柄） | 虚线框 + 手柄 | 无请求（叠加层内部状态） |
@@ -166,14 +180,10 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 | 批处理段 · 链路开关 | `api.batch.autoSplit` / `splitMode` / `rows` / `cols` / `crossPage` / `binding` / `startOffset` | toggle + select + number | `POST /api/pdf/split`；骑缝参数走预设 |
 | 印章段 · 载入/删除预设 | `api.seal.preset.select`（响应侧） | select + 两个按钮 | `GET/DELETE /api/seal/preset` |
 | 实例段 · 列表 | instance（名称/模式/删除） | list + text | 内部状态 |
-| 叠加段 · 混合模式 | `api.apply.blend` | 分组 `<select>` | `/api/pdf/apply` |
-| 叠加段 · 透明度/明度/饱和度 | `api.apply.opacity/brightness/saturate` | 滑杆 + 数值（双向绑定） | 同上 / 仅预览 |
-| 位置段 · 印章宽度 | `api.apply.scale` | 滑杆 + 数值 + pt 换算 | 同上 |
-| 位置段 · 位置 | `api.apply.pos` | text(x,y) + 居中 | 同上 |
-| 位置段 · 页内锚点 | `api.apply.anchor` | segmented | 同上 |
-| 位置段 · 偏移 | `api.apply.offset` | text(dx,dy) | 同上 |
-| 位置段 · 旋转 | `api.apply.rotation` | 滑杆 + 数值 | 同上 |
-| 位置段 · 作用页 | `api.apply.pages` | text + All/Current | 同上 |
+| 浮动参数面板 · 混合模式（`#instance-panel`） | `api.apply.blend` | 分组 `<select>` | `/api/pdf/apply` |
+| 浮动参数面板 · 透明度/明度/饱和度/缩放/旋转 | `api.apply.opacity/brightness/saturate/scale/rotation` | 滑杆 + 数值（双向绑定；scale 10%..200%，可被拖角超出；rotation −180..180） | 同上 / 仅预览 |
+| 浮动参数面板 · 复位 / 删除 | 复位当前实例参数到默认 / 删除当前实例 | 底部两个 button | 无请求 |
+| 左列 · 印章预览（`#seal-preview`） | 当前选/刚打开的印章（响应侧） | 静态 `<canvas>`（透明底棋盘） | 无请求（字节来自 `GET /api/pdf/seal/raw`） |
 | 切分段 · 自动判定 | `api.split.auto` | toggle | `/api/pdf/split` |
 | 切分段 · 已判定页 | `ui.split.vetoedPages` | 逐页 chip | 同上（veto 列表） |
 | 切分段 · 手动切分 | `ui.split.mode` | segmented off/v2/h2/grid | 同上 |
@@ -201,9 +211,10 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 | 标尺 / 像素读数 | （只读派生） | `#preview-ruler`、`#pixel-readout` | 由 `pdf.open` 的页 pt 尺寸 + 当前视图 scale 计算，不请求 |
 
 滑杆 + 数值必须**双向绑定**（同一 `data-field` 复用两次，mock 已实现 `bindPair`）；
-隐藏 `type=file` input（HD6 后只剩 `#seal-file-input`，印章图片选择器）只作触发器，不占字段。
+没有任何隐藏 `type=file` input（HD8：`#seal-file-input` 随侧栏「上传印章 PNG」一起删除；
+印章装载 = 顶栏 `fs/pick` 或粘贴/拖拽的 File 对象直接喂 `seal/prepare` multipart）。
 
-## 4. i18n 清单（key | en | cn；共 270 键，全部由 mock + 状态文案生成；`node tools/verify/gen-i18n.mjs` 打印同数）
+## 4. i18n 清单（key | en | cn；共 266 键，全部由 mock + 状态文案生成；`node tools/verify/gen-i18n.mjs` 打印同数）
 
 规则（AGENTS §7）：每个可见控件/文案必须有 `data-i18n` key，en/cn 两值非空；
 `data-i18n-cn`（及 `-placeholder`、`-title`）提供中文值，en 取元素自身文本或 `class="tag"` 的字段名。
@@ -212,28 +223,20 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 
 |key|en|cn|
 |---|---|---|
-|api.apply.anchor.ctl|apply.anchor|页内锚点|
-|api.apply.anchor.hint|Nine-point anchor; pdfcpu anchor constant.|九宫格锚点；落盘用 pdfcpu 锚点常量，pos 会被覆盖。|
 |api.apply.blend.ctl|apply.blend|混合模式|
 |api.apply.blend.hint|16 blend modes (PDF Table 136) grouped; backend writes ExtGState /BM.|16 种 PDF 混合模式（PDF 表 136），分组选择器；落盘写 ExtGState /BM。|
 |api.apply.brightness.ctl|apply.brightness 0..2|明度|
 |api.apply.brightness.hint|Preview-only (canvas filter), not written to PDF.|仅预览（前端 ctx.filter brightness），落盘不写。|
 |api.apply.crossPage.ctl|apply.crossPage|骑缝章|
 |api.apply.crossPage.hint|One strip per page, strip i on page i; merged after per-page stamping.|切分后每页放一枚条带，第 i 页第 i 条；落盘后逐页合并（P3）。|
-|api.apply.offset.ctl|apply.offset|偏移（pt）|
-|api.apply.offset.hint|Offset from anchor, may be negative.|相对锚点的偏移，可负；与骑缝章 startOffset 互相独立。|
 |api.apply.opacity.ctl|apply.opacity 0..1|透明度|
 |api.apply.opacity.hint|0..1 writes ExtGState /CA and /ca.|0..1，落盘 ExtGState /ca /CA（pdfcpu opacity 同义）。|
-|api.apply.pages.ctl|apply.pages|作用页|
-|api.apply.pages.hint|Accepts all, none, single pages, ranges.|支持 all / none / 单页 / 区间，例如 1-2,5。|
-|api.apply.pos.ctl|apply.pos|位置（pt，左上原点）|
-|api.apply.pos.hint|Either pos or anchor; anchor recomputes pos.|与页内锚点二选一；选锚点后 pos 自动归算。|
 |api.apply.rotation.ctl|apply.rotation|旋转（度）|
 |api.apply.rotation.hint|Degrees around the seal centre.|-180 到 180；印章绕自身中心旋转。|
 |api.apply.saturate.ctl|apply.saturate 0..3|饱和度|
 |api.apply.saturate.hint|Preview-only (canvas filter), not written to PDF.|仅预览（前端 ctx.filter saturate），落盘不写。|
 |api.apply.scale.ctl|apply.scale|印章宽度（相对页宽）|
-|api.apply.scale.hint|scale is a fraction of page width; pt shown in brackets.|scale 为相对页宽分数；括号内为换算后的 pt（A4 = 595.3pt）。|
+|api.apply.scale.hint|Seal width as a fraction of page width; slider 10%..200%, corner-drag can exceed and echoes back on the slider.|印章宽度为相对页宽分数；滑杆最左 10%、最右 200%，拖动边角可超出范围并回显在滑杆上（A4 = 595.3pt）。|
 |api.apply.startOffset.ctl|apply.startOffset|起始位置（pt）|
 |api.apply.startOffset.hint|Start offset along the binding edge (pdfcpu offset:0 -N).|沿装订边的起始偏移（pdfcpu offset:0 -N）；0 为页首。|
 |api.export.customDpi.ctl|export.customDpi|自定义 DPI|
@@ -254,7 +257,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |api.fs.pick.multi.ctl|multi|多文件选择|
 |api.fs.pick.multi.hint|Allow selecting several PDFs (batch queue, P6).|允许多选 PDF（进入批处理队列，P6）。|
 |api.fs.pick.filter.ctl|PDF only / All files|仅 PDF / 所有文件|
-|api.fs.pick.filter.hint|Filter of the native picker; only .pdf is accepted by the app.|原生选择器过滤条件；应用只接受 .pdf。|
+|api.fs.pick.filter.hint|Native picker filter: pdf opens documents, image loads seals; the batch folder pick only counts .pdf.|原生选择器过滤条件：打开文档用 pdf，上传印章用 image；批处理目录只收 .pdf。|
 |api.open.pw.hint|UserPW and OwnerPW are both tried; AES-256 read is UNVERIFIED (FACTS 6).|UserPW/OwnerPW 都试；AES-256 读取链路目前 UNVERIFIED（FACTS §6）。|
 |api.save.replaceOriginal.ctl|save.replaceOriginal|替换原文件|
 |api.save.targetPath.ctl|save.targetPath|目标路径|
@@ -280,6 +283,8 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |app.open.btn|Open PDF|打开 PDF|
 |app.save.btn|Save|保存|
 |app.shortcuts.btn|Shortcuts|快捷键|
+|app.sealAddMode.btn|Add-seal mode|添加印章模式|
+|app.sealAddMode.hint|when on, a left click on empty page space stamps the current seal at that point|开启后：在页面空白处左键点击，即在点击位置放置当前印章|
 |split.undo.btn|Undo split|撤销切分|
 |apply.undo.btn|Undo stamping|撤销盖章|
 |apply.write.btn|Stamp into PDF|盖到 PDF|
@@ -294,6 +299,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |blend.group.darken|Darken|增暗|
 |blend.group.lighten|Lighten|增亮|
 |blend.group.normal|Normal|正常|
+|pages.all.btn|All|全部|
 |chip.2up|2-up|2 拼|
 |chip.veto|vetoed|已否决|
 |confirm.cancel|Save as new file|改存新文件|
@@ -328,6 +334,8 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |fs.pick.multi.on|multi|多文件|
 |instances.add.btn|Add instance|新增实例|
 |instances.delete.btn|Delete|删除|
+|instance.panel.title|Seal options|印章参数|
+|instance.reset.btn|Reset|复位|
 |instances.duplicate.btn|Duplicate|复制|
 |instances.err.last|At least one stamp instance is required|至少需要保留一个印章实例|
 |instances.rename.placeholder|Instance name|实例名称|
@@ -347,19 +355,13 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |ok.exported|rasterised %d page(s) at %d dpi q%d|已光栅化 %d 页（%d dpi，质量 %d）|
 |ok.undoStep|reverted to the previous step|已回退到上一步|
 |open.hint|open a PDF|打开 PDF|
-|overlay.filter.note|ctx.filter is context state: reset to none per layer (FACTS §1.4).|注意：ctx.filter 是上下文状态，每层叠加前必须置 none（FACTS §1.4）。|
 |page.hint|jump to page|跳到某页|
 |pager.count|page 1/5|页 1/5|
-|pages.all.btn|All|全部|
-|pages.current.btn|Current|当前页|
 |panel.crosspage.title|Cross-page seal|骑缝章|
 |panel.export.title|Export|导出设置|
 |panel.instances.title|Instances|印章实例|
-|panel.overlay.title|Overlay|叠加参数|
-|panel.position.title|Position|位置与尺寸|
 |panel.seal.title|Stamp|印章|
 |panel.split.title|Split|切分（2 拼 → 单页）|
-|position.center.btn|Center|居中|
 |preset.ok|preset stored|预设已写入|
 |pw.open.btn|Password|输入口令|
 |pw.retry|Retry|重试打开|
@@ -379,10 +381,14 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |seal.despill.on|on|开|
 |seal.despill.revert|revert|撤销|
 |seal.ok|sealId ready (alpha ring, SMask generated on save)|印章已就绪（带 alpha 环，落盘自动生成 SMask）|
+|seal.addMode.noseal|upload or pick a seal first|先上传或选择印章|
+|seal.preview.title|Seal preview|印章预览|
+|seal.recent.select|recent seals|最近打开的印章|
+|seal.recent.stale|that seal file no longer exists: removed from the list|该印章文件已不存在：已从下拉列表移除|
 |seal.preset.placeholder|Company A - red seal|公司甲 · 红章|
 |seal.preset.save|Save preset|保存预设|
-|seal.upload.btn|Upload seal PNG|上传印章 PNG|
 |seal.meta.label|Seal metadata|印章元数据|
+|seal.upload.btn|Upload seal|上传印章|
 |seal.upload.hint|Keying, trim and resample follow the options above; revert re-runs from the source.|去白底/自动裁边/重采样按上方参数处理；「撤销」会用原图重跑一次。|
 |seal.err.type|Stamp image must be PNG or JPEG with an alpha channel|印章图片必须是带透明通道的 PNG 或 JPEG|
 |seal.err.nosource|Upload a seal image first, then revert|先上传印章图片，再点撤销|
@@ -490,14 +496,15 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |Ctrl+O / Ctrl+S|打开 / 保存弹窗|open.* / save.*|
 |Ctrl+V / 拖入窗口|装载：单个 PDF 打开文档；图片（单/多张）装载为印章（PD1/PD2）|load.*|
 |Ctrl+D / Del|复制 / 删除当前实例|instance|
-|左键拖拽 / 拖句柄|移动 / 缩放|pos / scale|
+|左键拖拽 / 拖句柄|移动 / 缩放|offset / scale|
 |旋转句柄拖拽|按中心旋转|rotation|
-|←↑↓→（Shift=10pt）|1pt 步进|pos|
+|←↑↓→（Shift=10pt）|1pt 步进|offset|
 |+ / −|scale ±0.01|scale|
 |1..9 / PgUp/PgDn|跳页|current|
 |Ctrl+滚轮|按中心缩放（P1 = 预览视图缩放；P2 起光标在选中实例上时 = `apply.scale`，见 §8 V3）|scale / 视图|
 |Space + 方向键 / Space + 左键拖动 / 滚轮（无 Ctrl）|平移视图；页四边不会越过容器四边（V4/V5）|视图|
 |Ctrl + 鼠标中键|回到 fit（整页适配，V6）|视图|
+|加章模式开关 + 左键点击页面空白处|在当前页点击处放置当前印章（HD10）|新增实例|
 |Esc / ?|关闭弹窗、清除 toast / 快捷键表|—|
 
 ## 6. 契约 DOM id
@@ -506,7 +513,7 @@ P0/P1 的 `index.html` 必须使用下表 id（`ui-ids` 块 = `ui-contract.mjs` 
 新增 id 要先登记，mock 缺该 id 即报错。
 
 ```ui-ids
-app-main  app-root  apply-anchor  apply-blend  asset-hooks  batch-auto-split  batch-binding  batch-cols  batch-cross-page  batch-files  batch-pick-dir  batch-pick-files  batch-progress  batch-queue  batch-rows  batch-split-mode  batch-start  batch-start-offset  btn-open  btn-save  btn-shortcuts  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  drop-hint  empty-path  empty-pick  empty-pick-filter  empty-pick-multi  empty-state  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-add  instance-delete  instance-duplicate  lang-seg  modal-layer  page-pager  panel  panel-actions  panel-batch  panel-crosspage  panel-export  panel-instances  panel-overlay  panel-position  panel-seal  panel-split  password-modal  pixel-readout  pos-center  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  right-sidebar  save-cancel  save-confirm  save-modal  error-toast  save-open  save-pick  save-source  scale-pt  seal-despill-revert  seal-file-input  seal-instances  seal-meta  seal-preset-delete  seal-preset-load  seal-preset-name  seal-preset-save  seal-preset-select  seal-upload  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  split-apply  split-mode  split-veto  strip-previews  theme-seg  topbar
+app-main  app-root  apply-blend  asset-hooks  batch-auto-split  batch-binding  batch-cols  batch-cross-page  batch-files  batch-pick-dir  batch-pick-files  batch-progress  batch-queue  batch-rows  batch-split-mode  batch-start  batch-start-offset  btn-open  btn-save  btn-seal-add  btn-seal-upload  btn-shortcuts  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  drop-hint  empty-path  empty-pick  empty-pick-filter  empty-pick-multi  empty-state  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-add  instance-delete  instance-duplicate  instance-panel  instance-remove  instance-reset  lang-seg  modal-layer  page-pager  panel  panel-actions  panel-batch  panel-crosspage  panel-export  panel-instances  panel-seal  panel-split  password-modal  pixel-readout  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  right-sidebar  save-cancel  save-confirm  save-modal  error-toast  save-open  save-pick  save-source  seal-despill-revert  seal-instances  seal-meta  seal-preset-delete  seal-preset-load  seal-preset-name  seal-preset-save  seal-preset-select  seal-preview  seal-preview-canvas  seal-preview-name  seal-recent-select  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  split-apply  split-mode  split-veto  strip-previews  theme-seg  topbar
 
 ```
 
@@ -530,7 +537,8 @@ fit 为整页适配（V4），`#page-frame` 永远完整可见。
 `window.__autoStampMock`：`STATES`、`setState(name)`、`verifyState(name)`、
 `setParams({api.x: v,…})`、`probe(name)`、`applyLang(lang)`、`applyTheme(t)`、
 `i18n()`（DOM 快照）、`fields()`、`ids()`、`q()/qa()`、`setModal()/clearToast()`。
-`probe` 关键字：`state` `overflow` `images` `instances` `split` `strip` `pixel-blend` `estimate`。
+`probe` 关键字：`state` `overflow` `images` `instances` `split` `strip` `pixel-blend` `estimate`
+`addMode`（加章模式开关读数）`recentSeals`（下拉 + 记录读数值，见 §8 HD8）`sealPreview`（预览 canvas 尺寸）`instancePanel`（面板可见性/位置）。
 
 深链：`mockup.html#crosspage`（`hashchange` 会重走状态机）。
 
@@ -544,15 +552,22 @@ tooltip）、`probe(name)`、
 `applyLang(lang)`、`applyTheme(t)`、`setModal(id)`、`clearToast()`、
 `addInstance(name, params)`、`selectInstance(id)`、`deleteSelected()`、`duplicateSelected()`、
 `APPLY_FIELDS`、`defaultParams()`、`instanceById(id)`、`selectedInstance()`、
-`setParam(field, value)`（改**选中实例**的参数并派发 input/change，等价于滑杆改值）、
 `setSealForSelected(sealId)`、`notify(name, detail)`、
 `adopt(info, pw)`（文档接管的唯一漏斗：状态翻转 + `assets.*` 记账 + `preview.open`；
 `pixel-matrix` 真链路驱动的就是它，而不是直接调预览模块）、
+`setAddMode(on)` (add-seal mode toggle, HD10), `openRecentSeal(path)` (the topbar dropdown/fallback chain:
+`fs/pick{filePath}` → `seal/prepare(pathGrantId)`, on failure the shell removes the record itself, HD8),
+`dropRecentSeal(path)` (fallback deletes the settings record), `currentSeal()` (the current seal's sealId or null),
 `q()/qa()`、`t(key)`。
 `probe` 关键字：`state` `overflow` `instances` `instanceCount` `selected`
 `modal` `toast` `lang` `theme` `version`（纯版本串）`docTitle`（窗口/标签页标题，HD2）`labels`
 `estimate`（导出体积预估，见 §7 E1）
-`load`（粘贴/拖拽装载读数：`{kind: pdf|seals|reject, reason, names, count}`，见 §8 PD1/PD2）。
+`load`（粘贴/拖拽装载读数：`{kind: pdf|seals|reject, reason, names, count}`，见 §8 PD1/PD2）
+`addMode` (add-seal mode boolean) `defaults` (reset snapshot = current defaults group, HD12)
+`recentSeals` (`{paths, names, optionNames, optionValues}` dropdown and record readings, HD8)
+`sealPreview` (`{visible, w, h, name, drawn}` left-column bottom preview, HD9)
+`instancePanel` (`{visible, left, top, w, h}` floating panel geometry, HD12)
+`page` (current page number), `currentSeal` (the current seal's sealId or null).
 
 `window.__autoStampPreview`（`app-preview.js`）：`open(info)`、`setPassword(pw)`、`reload(pw)`、
 `close()`、`goTo(n)`、`next()`、`prev()`、`zoomBy(step)`、`zoomTo(v)`、`fit()`、`panStage(dx,dy)`
@@ -565,9 +580,12 @@ tooltip）、`probe(name)`、
 `count(pageObj)`。`window.__autoStampPager`（`app-pager.js`）：`build()`、`refresh()`。
 
 `window.__autoStampSeal`（`app-seal.js`，P2 印章图通道）：`upload(file)`（→
-`POST /api/pdf/seal/prepare`，选项取面板 `seal.prepare.*`）、`prepare(file, override)`、
+`POST /api/pdf/seal/prepare` multipart，选项取面板 `seal.prepare.*`；粘贴/拖拽/图片装载走这条）、
+`prepareFromGrant(pathGrantId, options)`（pathGrantId 形态 → `seal/prepare` JSON，HD8）、
+`prepare(file, override)`、
 `revert()`（用内存里的原始上传重跑 `despill:false`，即「撤销去背」）、`bitmapOf(sealId)`、
-`renderMeta(sealId)`、`lastSource()`、`probe(name)`：`seals` `count` `meta`。
+`renderMeta(sealId)`、`renderPreview()`（左列底部预览重绘，HD9）、`lastSource()`、
+`probe(name)`：`seals` `count` `meta`。
 
 `window.__autoStampOverlay`（`app-overlay.js`，P2 叠加层）：`paint(ctx, info)`（由
 `app-preview.js` 在每次页渲染后调用：先把干净页存进 `state.snapshot`，再把印章合成进
@@ -618,7 +636,7 @@ FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 |W1|印章何时真正写进 PDF（落盘时机）|「盖到 PDF」按钮 + 保存时自动补盖章（推荐）/ 只有按钮 / 保存时自动无按钮|已确认：按钮（`#apply-write`）+ 保存弹窗点「保存」时若有未落盘实例先自动 apply|2026-10-30|ask 第 4 轮 apply-trigger|
 |W2|盖章后实例叠加层的处理|切到已盖章 asset、清空已落盘实例（推荐）/ 保留可继续微调 / 保留但禁用编辑|已确认：切到已盖章 asset 并清空已落盘实例（预览显示 PDF 里已有的章，不会二次叠加）|2026-10-30|ask 第 4 轮 after-apply|
 |W3|撤销盖章入口|顶栏「撤销盖章」按钮（推荐）/ 实例行撤销 / 无撤销按钮|已确认：`#apply-undo`（另配 `#split-undo` 撤销切分；逐级回到上一个 asset）|2026-10-30|ask 第 4 轮 undo-entry|
-|W4|实例 pages 的落盘语义|按实例 pages 词表逐页写（推荐）/ 只写当前可见页|已确认：按实例 `pages` 词表逐页落章（与 P2 预览按 pages 绘制一致）|2026-10-30|ask 第 4 轮 pages-semantics|
+|W4|实例 pages 的落盘语义|按实例 pages 词表逐页写（推荐）/ 只写当前可见页|已确认：按实例 `pages` 词表逐页落章（与 P2 预览按 pages 绘制一致）。**2026-11-04 交互默认被 HD11 修订**：新实例的 `pages` = 所在页，不再是全开|2026-10-30|ask 第 4 轮 pages-semantics + 修订 2026-11-04|
 |W5|光栅导出（raster）何时真正触发|保存弹窗「保存」时按导出段参数自动光栅化（推荐，不加新控件）/ 导出段新增「光栅化并导出」按钮（新契约 id）/ 顶栏「导出」+ 独立弹窗|已确认：保存时自动光栅化 —— `mode=raster` 则先渲染页位图 → `POST /api/pdf/export` → adopt 新 asset → 写盘；`mode=vector` 不发该请求（源资产直接写）。实现决定（2026-11-02，不新增控件、不改词表）：同一份 raster 参数第二次保存**不再**光栅化，复用已光栅化的 asset；只有 `dpi/质量/pages` 变了才重光栅化一次|2026-11-02|ask P5 轮 raster-trigger|
 |W6|单页位图超过 90 MB 上限（PLAN P5）时的行为|提交前拦截 + 提示降 DPI（推荐）/ 服务端只告警不拒绝 / 前端自动降到 300 dpi|已确认：提交前拦截 —— 前端按体积预估（§E1，FACTS §4 换算）在发请求前挡住并提示降 DPI（i18n `warn.export.tooBig`）；服务端仍留硬限，超 90 MB/页回 400 `page_too_large`|2026-11-02|ask P5 轮 raster-limit|
 |PR1|印章预设存什么|图片 + `api.apply.*` 全套参数（推荐）/ 只存参数组（图片另选）/ 图片 + 参数 + 导出参数（工作预设）|已确认：图片 + 印章/骑缝参数（含 `seal.prepare.*` 去背选项），导出参数不进预设|2026-11-02|ask 第 6 轮 preset-scope|
@@ -647,6 +665,11 @@ FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 |V4|fit 到底适配什么|整页适配（宽+高取小，保比例，推荐）/ 仅适配宽（P1 原状）|已确认（用户 2026-11-04 对话指令，人工验收修正 2）：fit = `min(stageWidth/pageW, stageHeight/pageH)`，加载/打开默认 fit，页在两个方向都不超出容器；ResizeObserver 的 re-fit 同时盯宽高（`stageHeight()` 新增）|2026-11-04|用户 2026-11-04 对话指令|
 |V5|左主区滚动条 + 平移语义|无滚动条 + Space 组合平移（推荐）/ 保留原生滚动条 / 只做键盘不加拖拽|已确认（用户 2026-11-04 对话指令，修正 1+3）：`#preview-stage` `overflow: hidden`（无滚动条）；缩放超出容器时平移 = 程序化滚动偏移 —— **Space+方向键**、**Space+左键拖动**（capture+stopPropagation，不劫持印章选择/拖动）、无 Ctrl 滚轮；`scrollTop/scrollLeft` 的原生 clamp 保证「图片上下左右边不会超出容器上下左右边」；Space 按住时吞掉其原生（滚动/按钮激活），输入框内不启用|2026-11-04|用户 2026-11-04 对话指令|
 |V6|非 fit 时怎么一键回 fit|Ctrl+鼠标中键（推荐）/ 双击 / 全局快捷键|已确认（用户 2026-11-04 对话指令，修正 4）：**Ctrl+鼠标中键** → `fit()`（`state.zoom = 0`）；`pointerdown` capture 同时 `preventDefault` 吃掉浏览器的 autoscroll|2026-11-04|用户 2026-11-04 对话指令|
+|HD8|印章装载入口放哪里|侧栏按钮（原状）/ 顶栏按钮 + 最近印章下拉|已确认（用户 2026-11-04 对话指令）：侧栏「上传印章 PNG」按钮与隐藏 `#seal-file-input` 删除；顶栏「打开」右侧 = `#btn-seal-upload`（SVG 印章图标 → `fs/pick{filter:image}` → `seal/prepare` pathGrantId 形态），其右侧 = `#seal-recent-select`（最近打开过的印章，选项名 = **去后缀** 的文件名，value = 完整路径）。实现决定：记录存 **settings.json 的 `recentSeals`**（应用唯一设置文件，`%APPDATA%\AutoStamp`，与 `recentFiles` 同一套去重/24 条截断；不新增 settings.yaml，也不在 exe 目录新建文件——运行目录可能只读）。兜底：下拉选择时 `fs/pick{filePath}` 报 `path_denied`（文件已不存在）→ 移除该选项 + `PATCH settings` 删除该记录|2026-11-04|用户 2026-11-04 对话指令|
+|HD9|主界面要不要常驻印章预览|左列底部小预览卡（推荐）/ 不显示|已确认（用户 2026-11-04 对话指令）：左列底部 `#seal-preview`（标题 + 透明棋盘 canvas + 名称），显示当前下拉选择的 / 刚打开（上传、粘贴、拖拽）的印章|2026-11-04|用户 2026-11-04 对话指令|
+|HD10|加章怎么进页面|加章模式开关（推荐）/ 双击页面加章 / 常驻「新增实例」按钮|已确认（用户 2026-11-04 对话指令）：下拉右侧 `#btn-seal-add`（SVG 示意图标，`aria-pressed` 切档，不持久化）；开启后左键点击页面空白处 = 在点击位置用当前印章新增实例；点击已有实例仍是选择/拖动（不叠加点）；没有当前印章时 toast 告警|2026-11-04|用户 2026-11-04 对话指令|
+|HD11|实例作用于哪些页|所有页（原状）/ 在哪页盖章就只在那页（推荐）|已确认（用户 2026-11-04 对话指令，**修订 W4 的交互默认**）：交互实例的 `pages` = 放置/加章所在页（不同页可盖不同章）；落盘语义仍按 W4 词表逐页写；骑缝实例（`crossPage=true`）仍为 `all` 逐页条带（D2/CP1 不变，开启骑缝时实例 `pages` 归 `all`）；批处理 `pagesForDoc`（BM5）不受影响|2026-11-04|用户 2026-11-04 对话指令|
+|HD12|叠加参数/位置尺寸控件放哪里|浮动面板贴选中实例右侧（推荐）/ 留在侧栏 / 弹窗|已确认（用户 2026-11-04 对话指令）：侧栏「叠加参数」「位置与尺寸」两段删除；`#instance-panel` 贴当前选中实例右侧（放不下翻转），成员 = 分组混合模式 `<select>` + 透明度/明度/饱和度/缩放/旋转滑杆（+数值双向绑定）+ 底部「复位」「删除」；**缩放滑杆最左 10% 最右 200%**（默认居中 20.2%），拖边角可超出并在滑杆回显；**旋转滑杆 −180..180** 默认居中 0；复位 = 当前实例参数回 settings 默认组，删除 = 移除当前实例。位置改为画布直接拖放（`pos/anchor/offset/pages` 控件与 `apply-anchor/pos-center/scale-pt` 契约 id 一并删除，`geomMode` 双通道废除，实例几何恒走 anchor+offset）|2026-11-04|用户 2026-11-04 对话指令|
 
 
 D2–D4、L1、CP1 已在 P0.5 第 1 轮确认（2026-10-29）；D1、I1、S1、E1 在第 2 轮确认（同日）。
@@ -654,6 +677,11 @@ HD1–HD7 不是 ask 轮次，而是 2026-11-03/11-04 用户在对话里直接�
 版本号取值 + 启动页入口 + 左列出血），因此来源列写「用户 … 对话指令」；HD1/HD2/HD3 作废了
 L1（切档控件）与 RF1（最近文件 UI 入口）的可见形态，后端数据与字段不变；HD5 作废 HD2 的
 「顶栏文本承载」半边（`#top-file` 删除，窗口标题仍在）。
+
+HD8–HD12 也是 2026-11-04 用户在对话里直接下的指令（印章通道上顶栏 + 左列预览 + 加章模式 +
+实例只作用放置页 + 浮动参数面板取代侧栏两段），来源列同样写「用户 … 对话指令」；HD11 修订了
+W4 的交互默认，HD12 废除了 U1 的 `pos/anchor` 双通道（`geomMode` 从壳中删除）；HD8 的
+「`settings.json` 在应用运行目录」按实现决定落到既有唯一设置文件 `%APPDATA%\AutoStamp\settings.json`。
 
 V4–V6 同样是 2026-11-04 用户在人工端到端验收里直接下的修正指令（fit 整页、无滚动条 +
 Space 平移、Ctrl+中键回 fit）；同一轮的「印章 ghost 双绘制」与「明度/饱和度滑杆」是
@@ -667,15 +695,19 @@ P6 的 PR1/PR2/RF1/BC1–BC3/PC1/OP1 是开工前的预设/批处理/打包语�
 V1–V3 是 P1 开工前的形态问题，用第 3 轮确认（同日），因为它们改的是预览区/分页条的可见形态而非字段词表。
 B1/D5 属 `IMPLEMENTATION_PLAN` §9 的「不阻塞 P0.5」，按 §9 默认实现并在此登记。
 C1 是 P2 叠加层落地的坐标语义，本轮未评审：先按默认实现，落盘一致性（预览==落盘）靠 P4 的
-单测钉死；若用户选 y 向上，只改 `apply.go` 的换算与前端 `pos/offset` 的读法。
+单测钉死；若用户选 y 向上，只改 `apply.go` 的换算与前端 `pos/offset` 的读法。**2026-11-04 修订
+（HD12）**：`pos` 输入框与锚点切档已删，交互几何只剩 `anchor`（默认 center）+ 拖拽增量 `offset`，
+方向键也改 `offset`；落盘换算本身不变。
 
 ## 9. 与 AGENTS §6 的字段映射
 
-`AGENTS.md` §6 请求词表：`fs.pick{pathGrantId, owner, TTL, multi, filter, filePath}`、
+`AGENTS.md` §6 请求词表：`fs.pick{pathGrantId, owner, TTL, multi, filter(pdf|image|all), filePath}`、
 `pdf.split{assetId, splitMode(auto|rows-cols|custom|unsplit), rows, cols, customCuts[], splitVeto, vetoPages[], splitPages}`、
 `pdf.apply{assetId, instances[]: sealId blend opacity scale pos anchor offset rotation pages crossPage binding startOffset}`（实例是数组；`brightness/saturate` 不发送）、
 `pdf.export{assetId, dpi, customDpi, quality, mode, pages}`、`pdf.save{assetId, targetPath, pathGrantId, replaceOriginal}`、
-`seal/preset{presetName}`。`offset` 与 `startOffset` 独立；`brightness/saturate` 仅预览不落盘。
+`pdf.seal/prepare`（两形态 Content-Type 协商：multipart 上传 / `{pathGrantId, despill, alphaTrim, resampleDpi}` JSON，HD8；
+pathGrantId 形态成功后 `config.recentSeals` 记录路径）、`seal/preset{presetName}`。
+`settings` PATCH 新增 `recentSeals` 数组字段（整组替换，兜底删除记录用）。`offset` 与 `startOffset` 独立；`brightness/saturate` 仅预览不落盘。
 
 ## 10. 变更纪律
 

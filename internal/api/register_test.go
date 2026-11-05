@@ -222,6 +222,61 @@ func TestSettingsPatchClampsAndWarns(t *testing.T) {
 	}
 }
 
+// TestSettingsPatchReplacesRecentSeals is the HD8 fallback contract: the
+// drop-down drops stale records by replacing the whole recentSeals group.
+func TestSettingsPatchReplacesRecentSeals(t *testing.T) {
+	mux, store, _ := newTestMux(t)
+	store.SetRecentSeal(`C:\seals\keep.png`)
+	store.SetRecentSeal(`C:\seals\gone.png`)
+
+	body := `{"patch":{"recentSeals":[{"path":"C:\\seals\\keep.png","openedAt":"2026-11-04T00:00:00Z"}]}}`
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/settings", strings.NewReader(body)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH = %d %s", rec.Code, rec.Body.String())
+	}
+	list := store.Snapshot().RecentSeals
+	if len(list) != 1 {
+		t.Fatalf("recentSeals = %+v, want the group replaced with 1 entry", list)
+	}
+	if list[0].Path != `C:\seals\keep.png` {
+		t.Errorf("recentSeals[0] = %+v, want keep.png", list[0])
+	}
+
+	// HD12: the scale ceiling widened for drag-overshoot; 3.0 stays, 9 clamps.
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/settings", strings.NewReader(`{"patch":{"apply":{"scale":3}}}`)))
+	if settingsPayloadOf(t, rec).Warning != "" {
+		t.Error("scale 3: warning not empty")
+	}
+	if store.Snapshot().Apply.Scale != 3 {
+		t.Errorf("scale = %v, want 3", store.Snapshot().Apply.Scale)
+	}
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/settings", strings.NewReader(`{"patch":{"apply":{"scale":9}}}`)))
+	if w := settingsPayloadOf(t, rec).Warning; !strings.Contains(w, "scale") {
+		t.Errorf("scale 9 warning = %q, want it to mention scale", w)
+	}
+	if got := store.Snapshot().Apply.Scale; got != 5 {
+		t.Errorf("scale = %v, want clamped 5", got)
+	}
+}
+
+// settingsPayloadOf decodes the data section of a settings response.
+func settingsPayloadOf(t *testing.T, rec *httptest.ResponseRecorder) settingsPayload {
+	t.Helper()
+	env := decodeEnvelope(t, rec)
+	raw, err := json.Marshal(env.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var p settingsPayload
+	if err := json.Unmarshal(raw, &p); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
 func TestSettingsRejectsBadBodies(t *testing.T) {
 	mux, _, _ := newTestMux(t)
 	for _, tc := range []struct {

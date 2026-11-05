@@ -12,9 +12,12 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
+	"autostamp/internal/config"
+	"autostamp/internal/fsx"
 	"autostamp/internal/pdfcore"
 	"autostamp/internal/tmpstore"
 	"autostamp/internal/webx"
@@ -40,50 +43,110 @@ type sealResult struct {
 	pdfcore.SealMeta
 }
 
-// handleSealPrepare answers POST /api/pdf/seal/prepare (multipart: file +
-// despill/alphaTrim/resampleDpi). The uploaded bitmap is decoded in memory —
-// the body cap keeps that bounded — and only the prepared PNG is stored, so the
-// session store never holds a half-processed upload the UI cannot use.
-func handleSealPrepare(store *tmpstore.Store, log *slog.Logger) http.HandlerFunc {
+// handleSealPrepare answers POST /api/pdf/seal/prepare. Two shapes are accepted
+// by Content-Type (HD8, AGENTS §6):
+//
+//	multipart/form-data  file=<seal image> + despill/alphaTrim/resampleDpi fields
+//	                     (paste/drag and preset re-feed; no path is remembered)
+//	application/json     {"pathGrantId":"pg…","despill":…,"alphaTrim":…,"resampleDpi":…}
+//	                     (top-bar pick + recent-seals dropdown; on success the
+//	                      path is remembered — settings.recentSeals, the only
+//	                      source the dropdown has)
+//
+// The uploaded bitmap is decoded in memory — the body cap keeps that bounded —
+// and only the prepared PNG is stored, so the session store never holds a
+// half-processed upload the UI cannot use. A JSON-form path must resolve through
+// a fresh grant, and a missing file answers path_denied so the UI can drop the
+// stale dropdown entry (HD8 fallback rule).
+func handleSealPrepare(settings *config.Store, store *tmpstore.Store, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		owner, err := webx.SessionOf(r)
 		if err != nil {
 			webx.Fail(w, http.StatusBadRequest, "bad_session", err.Error())
 			return
 		}
-		if ct := r.Header.Get("Content-Type"); !strings.HasPrefix(ct, "multipart/") {
-			webx.Fail(w, http.StatusBadRequest, "bad_body", "seal/prepare 需要 multipart/form-data（file + 选项字段）")
-			return
-		}
-		// MaxBytesHandler enforces the body cap before this handler runs, so a
-		// failure here is a malformed body rather than a size problem.
-		if err := r.ParseMultipartForm(maxSealBody >> 1); err != nil {
-			webx.Fail(w, http.StatusBadRequest, "bad_body", "multipart 解析失败: "+err.Error())
-			return
-		}
-		defer r.MultipartForm.RemoveAll()
+		var (
+			data       []byte
+			meta       pdfcore.SealMeta
+			opts       pdfcore.SealOptions
+			openedPath string // set only for the JSON form: the path to remember
+		)
+		if ct := r.Header.Get("Content-Type"); strings.HasPrefix(ct, "multipart/") {
+			// MaxBytesHandler enforces the body cap before this handler runs, so a
+			// failure here is a malformed body rather than a size problem.
+			if err := r.ParseMultipartForm(maxSealBody >> 1); err != nil {
+				webx.Fail(w, http.StatusBadRequest, "bad_body", "multipart 解析失败: "+err.Error())
+				return
+			}
+			defer r.MultipartForm.RemoveAll()
 
-		file, hdr, err := r.FormFile("file")
-		if err != nil {
-			webx.Fail(w, http.StatusBadRequest, "bad_body", "缺少 file 字段")
-			return
-		}
-		defer file.Close()
-		if hdr.Size > maxSealBody {
-			webx.Fail(w, http.StatusRequestEntityTooLarge, "seal_too_large", "印章文件超过 20 MiB 上限")
-			return
-		}
-
-		opts := pdfcore.SealOptions{
-			Despill:   formBool(r.FormValue("despill"), true),
-			AlphaTrim: formBool(r.FormValue("alphaTrim"), true),
-			TargetDPI: formDPI(r.FormValue("resampleDpi")),
-			MaxSide:   pdfcore.DefaultSealMaxSide,
-		}
-		data, meta, err := pdfcore.PrepareSeal(file, opts)
-		if err != nil {
-			failSeal(w, err)
-			return
+			file, hdr, err := r.FormFile("file")
+			if err != nil {
+				webx.Fail(w, http.StatusBadRequest, "bad_body", "缺少 file 字段")
+				return
+			}
+			defer file.Close()
+			if hdr.Size > maxSealBody {
+				webx.Fail(w, http.StatusRequestEntityTooLarge, "seal_too_large", "印章文件超过 20 MiB 上限")
+				return
+			}
+			opts = pdfcore.SealOptions{
+				Despill:   formBool(r.FormValue("despill"), true),
+				AlphaTrim: formBool(r.FormValue("alphaTrim"), true),
+				TargetDPI: formDPI(r.FormValue("resampleDpi")),
+				MaxSide:   pdfcore.DefaultSealMaxSide,
+			}
+			data, meta, err = pdfcore.PrepareSeal(file, opts)
+			if err != nil {
+				failSeal(w, err)
+				return
+			}
+		} else {
+			var body struct {
+				PathGrantID string `json:"pathGrantId"`
+				Despill     *bool  `json:"despill"`
+				AlphaTrim   *bool  `json:"alphaTrim"`
+				ResampleDPI *int   `json:"resampleDpi"`
+			}
+			if err := webx.DecodeJSON(r, &body, 1<<20); err != nil {
+				webx.Fail(w, http.StatusBadRequest, "bad_body", "请求体不是合法的 seal/prepare 请求: "+err.Error())
+				return
+			}
+			if body.PathGrantID == "" {
+				webx.Fail(w, http.StatusBadRequest, "bad_body", "需要 pathGrantId")
+				return
+			}
+			path, err := store.CheckGrant(body.PathGrantID, owner)
+			if err != nil {
+				webx.Fail(w, http.StatusBadRequest, "path_denied", "pathGrantId 无效或已过期")
+				return
+			}
+			if !fsx.IsImageName(path) {
+				webx.Fail(w, http.StatusBadRequest, "bad_body", "印章文件必须是 png/jpg/jpeg/bmp/tiff")
+				return
+			}
+			f, err := os.Open(path)
+			if err != nil {
+				webx.Fail(w, http.StatusBadRequest, "path_denied", "印章文件不可读: "+err.Error())
+				return
+			}
+			defer f.Close()
+			if st, serr := f.Stat(); serr == nil && st.Size() > maxSealBody {
+				webx.Fail(w, http.StatusRequestEntityTooLarge, "seal_too_large", "印章文件超过 20 MiB 上限")
+				return
+			}
+			opts = pdfcore.SealOptions{
+				Despill:   body.Despill == nil || *body.Despill,
+				AlphaTrim: body.AlphaTrim == nil || *body.AlphaTrim,
+				TargetDPI: jsonDPI(body.ResampleDPI),
+				MaxSide:   pdfcore.DefaultSealMaxSide,
+			}
+			data, meta, err = pdfcore.PrepareSeal(f, opts)
+			if err != nil {
+				failSeal(w, err)
+				return
+			}
+			openedPath = path
 		}
 
 		id, err := tmpstore.NewID("sl")
@@ -95,6 +158,9 @@ func handleSealPrepare(store *tmpstore.Store, log *slog.Logger) http.HandlerFunc
 		if err != nil {
 			failStoreError(w, err)
 			return
+		}
+		if openedPath != "" {
+			settings.SetRecentSeal(openedPath) // HD8: the dropdown's record
 		}
 
 		out := sealResult{SealID: asset.ID, MIME: "image/png", Bytes: asset.Size, SealMeta: meta}
@@ -118,6 +184,16 @@ func formBool(v string, def bool) bool {
 	default:
 		return def
 	}
+}
+
+// jsonDPI resolves the optional resampleDpi for the JSON shape: absent falls
+// back to the documented default 300 (same policy as formDPI on a missing
+// multipart field).
+func jsonDPI(v *int) int {
+	if v == nil {
+		return 300
+	}
+	return formDPI(strconv.Itoa(*v))
 }
 
 // formDPI reads resampleDpi, clamped to the 72..600 range UI_SPEC §2 declares.

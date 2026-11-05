@@ -125,7 +125,10 @@
     const p = inst.params || {};
     const pageW = meta.width;
 
-    const clamp = (v) => Math.max(0.05, Math.min(0.9, v));
+    // HD12: 10% floor as before, but the ceiling moved 0.9 -> 5: corner drags,
+    // wheel and keyboard can pass the slider's 200% (the slider stretches to
+    // show the overshoot, the server vocabulary accepts up to 5).
+    const clamp = (v) => Math.max(0.05, Math.min(5, v));
     const scale = clamp(num(p["api.apply.scale"], 0.202));
     const aspect = img.height && img.width ? img.height / img.width : 1;
 
@@ -512,10 +515,12 @@
         break;
       case "scale": {
         // A corner drag resizes around the same anchor: the new scale is the
-        // width ratio, clamped to the field's 0.05..0.9 range.
+        // width ratio. HD12: it may pass the slider's 200% - the ceiling is
+        // the server vocabulary's 5, and the shell stretches the slider to
+        // echo the overshoot.
         const sign = d.handle === "nw" || d.handle === "sw" ? -1 : 1;
         const ratio = d.rect.w ? (d.rect.w + dx * sign) / d.rect.w : 1;
-        const next = Math.max(0.05, Math.min(0.9, +(d.baseScale * ratio).toFixed(4)));
+        const next = Math.max(0.05, Math.min(5, +(d.baseScale * ratio).toFixed(4)));
         shell().setParam("api.apply.scale", next);
         break;
       }
@@ -582,7 +587,7 @@
     if (!(pt.x >= rect.x && pt.x <= rect.x + rect.w && pt.y >= rect.y && pt.y <= rect.y + rect.h)) return false;
     ev.preventDefault();
     const cur = num((inst.params || {})["api.apply.scale"], 0.202);
-    const next = Math.max(0.05, Math.min(0.9, +(cur + (ev.deltaY < 0 ? 0.01 : -0.01)).toFixed(4)));
+    const next = Math.max(0.05, Math.min(5, +(cur + (ev.deltaY < 0 ? 0.01 : -0.01).toFixed(4))));
     s.setParam("api.apply.scale", next);
     repaint();
     layoutNodes();
@@ -591,15 +596,27 @@
 
   // bindStage owns the canvas-side press: hit-test selects (and starts the
   // move drag), and a press on empty page background clears the selection.
+  // HD10: with add-seal mode on, the same empty-page press *places* a copy of
+  // the current seal centered on the click instead - on the page being shown
+  // (HD11), which is the whole point of the mode.
   function bindStage() {
     const stage = q("#preview-stage");
     if (!stage) return;
     stage.addEventListener("pointerdown", (ev) => {
       if (ev.target.closest && ev.target.closest(".instance")) return;
+      const s = shell();
       const picked = selectAt(ev);
       if (!picked) {
-        const s = shell();
-        if (s.selectedInstance()) s.selectInstance(null);
+        if (s && s.state && s.state.addMode && s.state.file && state.canvas && state.meta) {
+          const pt = pagePoint(ev);
+          if (pt) {
+            ev.preventDefault();
+            s.addInstanceAt(pt);
+            return;
+          }
+        }
+        const sh = shell();
+        if (sh.selectedInstance()) sh.selectInstance(null);
         return;
       }
       beginDrag(ev, "move");

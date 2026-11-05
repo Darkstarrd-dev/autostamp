@@ -114,8 +114,13 @@ input[type="text"] { width: 100%; }
      container edges. Space held = grab cursor (data-pan set by bindPan). */
   cursor: default;
 }
+
 #preview-stage[data-pan="space"] { cursor: grab; }
 #preview-stage[data-pan="drag"] { cursor: grabbing; }
+
+/* HD10: add-seal mode arms a copy cursor over the page area. */
+#preview-stage[data-add="on"] { cursor: copy; }
+
 .page-frame { position: relative; flex: none; background: #fff; box-shadow: var(--shadow); }
 .page-frame canvas.page-canvas { display: block; }
 
@@ -287,3 +292,43 @@ html[data-state="stamp-resizing"] #stamp-layer .instance[data-selected="true"] .
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 /* A stamp instance is not clickable in the empty state (no document to place it on). */
 html[data-state="empty"] #stamp-layer { display: none; }
+
+/* HD12: the floating per-instance parameter panel. app-shell sets left/top from
+   the selected instance's box (flip left when it does not fit; both axes are
+   clamped inside #preview). */
+#instance-panel {
+  position: absolute; z-index: 6; width: 236px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 8px; display: flex; flex-direction: column; gap: 6px;
+}
+#instance-panel[hidden] { display: none; }
+#instance-panel .ip-title { font-weight: 600; }
+#instance-panel .flabel { font: var(--mono); font-size: 11px; color: var(--muted); }
+#instance-panel .num-pair input[type="range"] { flex: 1; min-width: 0; }
+#instance-panel .num-pair input[type="number"] { width: 56px; }
+#instance-panel .ip-actions { display: flex; gap: var(--gap-sm); }
+
+/* HD9: the current-seal preview card at the bottom of the left column. */
+#seal-preview {
+  align-self: flex-start; max-width: 190px; margin: 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 8px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+#seal-preview[hidden] { display: none; }
+#seal-preview .sp-head { display: flex; gap: 6px; align-items: baseline; font-size: 12px; }
+#seal-preview-name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; }
+#seal-preview-canvas {
+  display: block; background:
+  repeating-conic-gradient(var(--surface-3) 0% 25%, var(--surface) 0% 50%) 0 0 / 14px 14px;
+  border: 1px solid var(--border);
+}
+
+/* HD10: add-seal mode toggle + the placement cursor it arms. */
+#btn-seal-add[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+#preview-stage[data-add="on"] { cursor: copy; }
+#preview-stage[data-add="on"] .sel-box { cursor: copy; }
+
+/* HD8: the topbar recent-seal drop-down. */
+#seal-recent-select { max-width: 190px; }

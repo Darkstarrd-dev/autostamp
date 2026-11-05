@@ -100,11 +100,12 @@ func ParseBinding(s string) (BindingSide, error) {
 }
 
 // ClampScale keeps the seal inside the page the way the preview does: the
-// slider vocabulary is 0.05..0.9 (UI_SPEC §2 api.apply.scale). Out-of-range
+// slider vocabulary is 0.1..2.0 but corner drag can exceed it, and the
+// on-disk ceiling is 5.0 (UI_SPEC §2 api.apply.scale, HD12). Out-of-range
 // numbers clamp rather than error so a value an older build wrote out still
 // lands somewhere sane.
 func ClampScale(v float64) float64 {
-	const min, max = 0.05, 0.9
+	const min, max = 0.05, 5.0
 	if math.IsNaN(v) || v < min {
 		return min
 	}

@@ -24,6 +24,9 @@ type Settings struct {
 	Export      Export      `json:"export"`
 	Batch       Batch       `json:"batch"`
 	RecentFiles []RecentRef `json:"recentFiles,omitempty"`
+	// RecentSeals is the drop-down's record of seal files opened by path (HD8);
+	// entries no longer on disk are removed by the client via the settings PATCH.
+	RecentSeals []RecentRef `json:"recentSeals,omitempty"`
 }
 
 // UI is the client-side view state (ui.* in UI_SPEC §2; never sent to the API).

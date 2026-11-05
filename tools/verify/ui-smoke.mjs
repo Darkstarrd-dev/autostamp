@@ -153,7 +153,7 @@ async function main() {
         if (n.nodeType === 3 && n.nodeValue.trim()) stray.push(n.nodeValue.trim());
       }
       Array.prototype.forEach.call(bar.children, function (el) {
-        if (el.tagName === "BUTTON" || el.matches(".seg, .spacer")) return;
+        if (el.tagName === "BUTTON" || el.tagName === "SELECT" || el.matches(".seg, .spacer")) return;
         if (el.textContent.trim()) stray.push((el.id || el.className) + ": " + el.textContent.trim());
       });
       out.barStray = stray;
@@ -191,6 +191,68 @@ async function main() {
   cmp("HD7: empty stage bleeds into the column, dashed border kept",
     [load.bleed.emptyMargin, load.bleed.emptyRadius, load.bleed.emptyBorder, load.bleed.stagePadding, load.bleed.frameRadius],
     ["0px", "0px", "dashed", "0px", "0px"]);
+
+  // the mock fixtures load over file://; the seal canvas needs the bytes first
+  await evaluate(`new Promise(function (resolve) {
+    var t = setInterval(function () {
+      if (window.__autoStampMock.probe("images").seal) { clearInterval(t); resolve(true); }
+    }, 50);
+    setTimeout(function () { clearInterval(t); resolve(false); }, 4000);
+  })`).then((v) => { if (!v) bad("mock fixtures never loaded"); });
+
+  // 3d. HD8-HD12: the seal channel + floating panel live in the left column now.
+  // Assert the header order, the dropdown content, the toggle, the stale-entry
+  // fallback, and that the sidebar really lost the overlay/position sections.
+  const seals = await evaluate(`
+    (function () {
+      var m = window.__autoStampMock;
+      m.setState("stamp-selected");
+      var out = {};
+      out.barSeq = Array.prototype.map.call(
+        document.querySelectorAll("#topbar button, #topbar select"),
+        function (el) { return el.id; })
+        .filter(function (id) { return id; }).join(",");
+      out.dead = ["panel-overlay", "panel-position", "pos-center", "apply-pos",
+        "apply-anchor", "apply-offset", "apply-pages"].filter(function (id) { return document.getElementById(id); });
+      out.geoInputs = m.probe("geoInputs");
+      out.addModeBefore = m.probe("addMode");
+      m.q("#btn-seal-add").click();
+      out.addModeAfter = m.probe("addMode");
+      m.q("#btn-seal-add").click();
+      out.addModeOff = m.probe("addMode");
+      out.recent = m.probe("recentSeals");
+      var sel = m.q("#seal-recent-select");
+      sel.value = "C:\\\\seals\\\\不存在.png";
+      sel.dispatchEvent(new Event("change"));
+      var names = m.probe("recentSeals");
+      out.staleRemoved = names.names.indexOf("被删的旧章") < 0 &&
+        names.paths.indexOf("C:\\\\seals\\\\不存在.png") < 0;
+      var tt = m.q("#error-toast");
+      out.staleToast = document.documentElement.getAttribute("data-toast") === "true" &&
+        (tt.textContent || "").indexOf("no longer exists") >= 0;
+      m.clearToast();
+      out.panel = m.probe("instancePanel");
+      out.preview = m.probe("sealPreview");
+      return out;
+    })()`);
+  cmp("HD8: header carries open → seal upload → recent seals → add mode → save → shortcuts", seals.barSeq,
+    "btn-open,btn-seal-upload,seal-recent-select,btn-seal-add,btn-save,btn-shortcuts");
+  if (seals.dead.length) bad("HD11/HD12 deleted ids are back in the mock: " + seals.dead.join(" "));
+  cmp("HD11: no pos/anchor/offset/pages input inside the sidebar panel",
+    [seals.geoInputs, seals.addModeBefore.on, seals.addModeAfter.on, seals.addModeAfter.cursor, seals.addModeOff.on],
+    [0, false, true, true, false]);
+  if (!seals.recent.names.length || !seals.recent.paths.length) bad("HD8: recent-seals dropdown is empty");
+  if (seals.recent.names.some((n) => /\.(png|jpe?g)$/i.test(n)))
+    bad("HD8: dropdown labels must drop the file extension: " + seals.recent.names.join(" | "));
+  if (seals.recent.paths.some((p) => !/^[a-zA-Z]:\\/.test(p)))
+    bad("HD8: dropdown values must carry the full path: " + seals.recent.paths.join(" | "));
+  cmp("HD8: choosing a deleted file removes the entry + settings record",
+    [seals.staleRemoved, seals.staleToast], [true, true]);
+  cmp("HD12: floating panel shows the selected instance's parameters",
+    [seals.panel.visible, seals.panel.hasControls], [true, true]);
+  cmp("HD9: bottom-left seal preview paints the current seal",
+    [seals.preview.visible, seals.preview.painted, Boolean(seals.preview.name)], [true, true, true]);
+  await evaluate('window.__autoStampMock.setState("empty")');
 
   // 4. i18n coverage: every key resolves to non-empty en and cn
   await evaluate('window.__autoStampMock.applyLang("en")');

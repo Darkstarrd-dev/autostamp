@@ -67,6 +67,7 @@ func (s *Store) Snapshot() Settings {
 	defer s.mu.RUnlock()
 	cp := s.s
 	cp.RecentFiles = append([]RecentRef(nil), s.s.RecentFiles...)
+	cp.RecentSeals = append([]RecentRef(nil), s.s.RecentSeals...)
 	return cp
 }
 
@@ -82,6 +83,27 @@ func (s *Store) Apply(p *Patch) (Settings, error) {
 		return s.s, err
 	}
 	return s.s, clampErr
+}
+
+// SetRecentSeal records one opened seal path (most recent last) and saves —
+// the drop-down's record channel (HD8); the file shape mirrors SetRecent.
+func (s *Store) SetRecentSeal(path string) {
+	if path == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().UTC()
+	out := make([]RecentRef, 0, len(s.s.RecentSeals)+1)
+	for _, r := range s.s.RecentSeals {
+		if fsx.EqualPath(r.Path, path) {
+			continue
+		}
+		out = append(out, r)
+	}
+	out = append(out, RecentRef{Path: path, OpenedAt: now})
+	s.s.RecentSeals = trimRecent(out, 24)
+	_ = s.saveLocked()
 }
 
 // SetRecent records one opened path (most recent last) and saves.

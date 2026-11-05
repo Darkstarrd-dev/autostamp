@@ -58,10 +58,13 @@ func Sanitize(s *Settings) error {
 		fail("apply.saturate %g out of 0..3", a.Saturate)
 	}
 	a.Saturate = clampFlt(a.Saturate, 0, 3)
-	if !inRangeF(a.Scale, 0.05, 0.9) {
-		fail("apply.scale %g out of 0.05..0.9", a.Scale)
+	// HD12: the instance panel can drive scale up to 200%+, corner drag beyond the
+	// slider — the on-disk vocabulary keeps 0.05..0.9 as the safe floor but the
+	// ceiling is 5.0 (a 2.0 slider end plus drag overshoot).
+	if !inRangeF(a.Scale, 0.05, 5.0) {
+		fail("apply.scale %g out of 0.05..5", a.Scale)
 	}
-	a.Scale = clampFlt(a.Scale, 0.05, 0.9)
+	a.Scale = clampFlt(a.Scale, 0.05, 5.0)
 	if a.Anchor != "tl" && a.Anchor != "tr" && a.Anchor != "center" && a.Anchor != "bl" && a.Anchor != "br" {
 		fail("apply.anchor %q not in tl|tr|center|bl|br", a.Anchor)
 		a.Anchor = "center"
@@ -185,6 +188,10 @@ func Sanitize(s *Settings) error {
 		s.RecentFiles[i].Path = strings.TrimSpace(s.RecentFiles[i].Path)
 	}
 	s.RecentFiles = trimRecent(s.RecentFiles, 24)
+	for i := range s.RecentSeals {
+		s.RecentSeals[i].Path = strings.TrimSpace(s.RecentSeals[i].Path)
+	}
+	s.RecentSeals = trimRecent(s.RecentSeals, 24) // HD8
 	return firstErr
 }
 

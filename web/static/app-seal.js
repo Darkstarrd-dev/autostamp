@@ -76,6 +76,7 @@
     });
     await loadBitmap(meta.sealId);
     renderMeta(meta.sealId);
+    renderPreview(meta.sealId);
     return meta;
   }
 
@@ -93,6 +94,9 @@
     try {
       const meta = await prepare(file);
       shell().setSealForSelected(meta.sealId);
+      // HD9: the File funnel feeds the preview card too - the current seal is
+      // whatever was opened last, wherever it came from.
+      shell().setCurrentSeal(meta.sealId, file.name);
       shell().toast("ok", shell().t("seal.ok"));
       return meta;
     } catch (e) {
@@ -111,6 +115,7 @@
     try {
       const meta = await prepare(lastFile, { despill: false });
       shell().setSealForSelected(meta.sealId);
+      shell().setCurrentSeal(meta.sealId, lastFile.name);
       // The copy is the frozen mock string (seal.despill.revert), so the two
       // surfaces say the same thing about the same action.
       shell().toast("ok", shell().t("seal.despill.revert"));
@@ -122,16 +127,70 @@
   }
 
   function bind() {
-    const button = doc.getElementById("seal-upload");
-    const input = doc.getElementById("seal-file-input");
+    // HD8: the sidebar upload button + its file input are gone. The header's
+    // upload button drives fs/pick + the JSON seal/prepare channel, and the
+    // drop/paste funnel still feeds this module through upload(). The despill
+    // revert stays in the seal group because it only works when a browser
+    // File is in play (drop/paste); picked paths re-enter through the header.
     const revertBtn = doc.getElementById("seal-despill-revert");
-    if (!button || !input) return;
-    button.addEventListener("click", () => input.click());
-    input.addEventListener("change", () => {
-      const file = input.files && input.files[0];
-      if (file) upload(file);
-    });
     if (revertBtn) revertBtn.addEventListener("click", () => revert());
+  }
+
+  // prepareFromGrant runs a native-picker (or dropdown) path through the JSON
+  // shape of the same route (HD8): same options, same registration - only the
+  // bytes' origin differs (the server read them from disk). The name is the
+  // picked path so the recent-seals list and the preview card agree.
+  async function prepareFromGrant(pathGrantId, path) {
+    const a = api();
+    if (!a) throw new Error("api unavailable");
+    const opts = prepareOptions();
+    const meta = await a.sealPrepareGrant(pathGrantId, opts);
+    if (!meta || !meta.sealId) throw Object.assign(new Error("seal/prepare returned no sealId"), { code: "bad_envelope" });
+    seals.set(meta.sealId, {
+      meta,
+      name: path || `seal ${meta.sealId}`,
+      bytes: meta.bytes || 0,
+      bitmap: null,
+    });
+    lastFile = null; // the browser File channel is closed for this seal
+    await loadBitmap(meta.sealId);
+    renderMeta(meta.sealId);
+    renderPreview(meta.sealId);
+    return meta;
+  }
+
+  // HD9: the bottom-left preview card - the current seal drawn to fit a fixed
+  // square, scaled proportionally, on a checkerboard-free transparent surface
+  // (style.css paints the card background).
+  function renderPreview(sealId) {
+    const card = doc.getElementById("seal-preview");
+    if (!card) return;
+    const s = shell();
+    const cur = sealId || (s && s.state.currentSeal && s.state.currentSeal.sealId);
+    const entry = cur ? seals.get(cur) : null;
+    const nameEl = doc.getElementById("seal-preview-name");
+    const cv = doc.getElementById("seal-preview-canvas");
+    if (!entry) {
+      card.hidden = true;
+      return;
+    }
+    card.hidden = false;
+    if (nameEl) {
+      nameEl.textContent =
+        (s && s.state.currentSeal && s.state.currentSeal.name) || String(entry.name || "").replace(/\.[^.]+$/, "");
+    }
+    if (!cv) return;
+    const size = 150;
+    cv.width = size;
+    cv.height = size;
+    const ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, size, size);
+    const bm = entry.bitmap;
+    if (!bm) return;
+    const k = Math.min(size / bm.width, size / bm.height, 1);
+    const w = Math.max(1, Math.round(bm.width * k));
+    const h = Math.max(1, Math.round(bm.height * k));
+    ctx.drawImage(bm, (size - w) / 2, (size - h) / 2, w, h);
   }
 
   function bitmapOf(sealId) {
@@ -164,13 +223,13 @@
   window.__autoStampSeal = {
     upload,
     prepare,
-    revert,
+    prepareFromGrant,
+    prepareOptions,
     bitmapOf,
     renderMeta,
-    prepareOptions,
+    renderPreview,
+    metaLine,
+    lastSource: () => lastFile,
     probe,
-    // lastSource exposes the in-memory upload (the verify script needs to know
-    // the 撤销 channel has something to re-run).
-    lastSource: () => (lastFile ? { name: lastFile.name, bytes: lastFile.size } : null),
   };
 })();

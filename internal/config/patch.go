@@ -13,6 +13,9 @@ type Patch struct {
 	Export      *PatchExport   `json:"export,omitempty"`
 	Batch       *PatchBatch    `json:"batch,omitempty"`
 	RecentFiles *[]RecentRef   `json:"recentFiles,omitempty"`
+	// RecentSeals replaces the whole group (HD8: it is the only channel the
+	// drop-down has to drop a stale record).
+	RecentSeals *[]RecentRef `json:"recentSeals,omitempty"`
 }
 
 // PatchUI mirrors UI with pointer leaves.
@@ -158,6 +161,9 @@ func Merge(s *Settings, p *Patch) {
 	}
 	if p.RecentFiles != nil {
 		s.RecentFiles = *p.RecentFiles
+	}
+	if p.RecentSeals != nil {
+		s.RecentSeals = *p.RecentSeals
 	}
 }
 

@@ -523,7 +523,7 @@ async function main() {
       if (n.nodeType === 3 && n.nodeValue.trim()) out.push("text node: " + n.nodeValue.trim());
     }
     Array.prototype.forEach.call(bar.children, function (el) {
-      if (el.tagName === "BUTTON" || el.matches(".seg, .spacer")) return;
+      if (el.tagName === "BUTTON" || el.tagName === "SELECT" || el.matches(".seg, .spacer")) return;
       if (el.textContent.trim()) out.push(el.tagName.toLowerCase() + "#" + el.id + ": " + el.textContent.trim());
     });
     return JSON.stringify(out);
@@ -540,18 +540,23 @@ async function main() {
     return JSON.stringify({
       right: Math.round(tb.right),
       open: r("#btn-open"), save: r("#btn-save"), shortcuts: r("#btn-shortcuts"),
+      upload: r("#btn-seal-upload"), recent: r("#seal-recent-select"), addmode: r("#btn-seal-add"),
       lang: r("#lang-seg"), theme: r("#theme-seg")
     });
   })()`);
   if (bar.open.x >= 30) bad(`#btn-open is not at the left edge: ${JSON.stringify(bar.open)}`);
   if (bar.save.x > bar.right / 2) bad(`#btn-save is not in the left half of the topbar: ${JSON.stringify([bar.save.x, bar.right])}`);
-  if (!(bar.save.right > bar.open.right)) bad(`#btn-save does not follow #btn-open: ${JSON.stringify([bar.open, bar.save])}`);
-  if (bar.save.x - bar.open.right >= 24) bad(`the two icon buttons are not adjacent (gap ${bar.save.x - bar.open.right}): ${JSON.stringify([bar.open.right, bar.save.x])}`);
+  // HD8 (UI_SPEC 8): the left cluster is one continuous icon row:
+  // open -> upload seal -> recent seals -> add-seal mode -> save.
+  for (const [a, b] of [["open", "upload"], ["upload", "recent"], ["recent", "addmode"], ["addmode", "save"]]) {
+    if (!(bar[b].x > bar[a].right)) bad(`#${a} -> #${b} are not consecutive: ${JSON.stringify([bar[a].right, bar[b].x])}`);
+    if (bar[b].x - bar[a].right >= 24) bad(`#${a} -> #${b} gap too large (${bar[b].x - bar[a].right})`);
+  }
   const rows = [bar.lang.cy, bar.theme.cy, bar.shortcuts.cy];
   if (Math.max(...rows) - Math.min(...rows) > 4) bad(`the right cluster is not one row: ${JSON.stringify({ lang: bar.lang.cy, theme: bar.theme.cy, shortcuts: bar.shortcuts.cy })}`);
   if (!(bar.shortcuts.x > bar.theme.right)) bad(`#btn-shortcuts is not right of the theme switch: ${JSON.stringify([bar.theme.right, bar.shortcuts.x])}`);
   if (bar.right - bar.shortcuts.right >= 24) bad(`#btn-shortcuts is not the rightmost control (topbar right ${bar.right}, button right ${bar.shortcuts.right})`);
-  for (const k of ["open", "save", "shortcuts"]) {
+  for (const k of ["open", "upload", "addmode", "save", "shortcuts"]) {
     if (bar[k].icons !== 1) bad(`#btn-${k} must hold exactly one inline svg icon: ${JSON.stringify(bar[k])}`);
     if (bar[k].text !== 0) bad(`#btn-${k} must be icon-only, found ${bar[k].text} text chars`);
     if (bar[k].w < 24 || bar[k].h < 24) bad(`icon button too small: ${k} ${JSON.stringify(bar[k])}`);
@@ -690,8 +695,8 @@ async function main() {
   truthy("pasted image assigned to the selected instance (PD1/I1)", gate.assigned === true);
   truthy("pasting two images adds exactly one named instance for the extra image (I1)", gate.multiSeals === true
     && gate.newInstances.length === 1 && /seal-four/.test(gate.newInstances[0].name) && gate.newInstances[0].seal === true);
-  truthy("and every pre-existing instance kept a seal (I1/PD1)", gate.oldInstances.length >= 1
-    && gate.oldInstances.every((i) => i.seal) && gate.oldInstances.some((i) => /gate-inst/.test(i.name)));
+  truthy(`and every pre-existing instance kept a seal (I1/PD1): ${JSON.stringify(gate.oldInstances)}`,
+    gate.oldInstances.length >= 1 && gate.oldInstances.every((i) => i.seal) && gate.oldInstances.some((i) => /gate-inst/.test(i.name)));
   truthy("seal count grew with every loaded image", gate.sealCount1 >= 1);
   truthy("text paste in a focused field stays untouched (PD1)", gate.passthrough === false && gate.kindAfterPaste === "seals");
   truthy("file drops are always prevented from default navigation (PD2)", gate.pdfDrop.prevented === true);
@@ -727,14 +732,142 @@ async function main() {
     typed.prevented === true && typed.opened === true && typed.pageCount >= 1
       && /^AutoStamp .*typed-open\.pdf$/.test(typed.docTitle || ""));
 
+  // ---------- HD8-HD12: recent seals + add-seal mode + floating panel ----------
+  // Same /api round-trips the header controls wire: the recent-seal record is
+  // server-side settings.recentSeals (GET back proves it), the stale entry
+  // drops itself, the toggle turns a page click into a stamped instance on the
+  // *current page only*, and the panel/preview are the surfaces under test.
+  const hdSealPath = join(sandbox, "company seal.png");
+  writeFileSync(hdSealPath, readFileSync(join(root, "docs", "ui", "fixtures", "seal.png")));
+  const ghostSealPath = join(sandbox, "deleted seal.png");
+  const hd = await json(`(async function () {
+    var s = window.__autoStampShell;
+    function wait(fn, ms) {
+      return new Promise(function (res) {
+        var t0 = Date.now();
+        var iv = setInterval(function () {
+          var done = false;
+          try { done = !!fn(); } catch (e) { done = false; }
+          if (done) { clearInterval(iv); res(true); }
+          else if (Date.now() - t0 > ms) { clearInterval(iv); res(false); }
+        }, 100);
+      });
+    }
+    var out = {};
+    try {
+      // 1) HD8: a grant-opened seal is recorded server-side; menu labels drop the extension
+      out.opened = await s.openRecentSeal(${JSON.stringify(hdSealPath)});
+      await wait(function () { return s.probe("recentSeals").paths.length >= 1; }, 5000);
+      out.recent1 = s.probe("recentSeals");
+      out.serverRecord = await window.__autoStampApi.request("/api/settings").then(function (r) {
+        return ((r.settings || {}).recentSeals || []).map(function (x) { return { path: x.path }; });
+      });
+      // 2) HD8 fallback: a deleted file drops the entry from menu + settings
+      out.stale = await s.openRecentSeal(${JSON.stringify(ghostSealPath)});
+      await wait(function () { return s.probe("recentSeals").paths.length === 1; }, 4000);
+      out.recentAfterStale = s.probe("recentSeals").paths.length;
+      out.staleToast = s.probe("toast") || {};
+      // the recorded entry still replays through the same channel
+      out.replayed = await s.openRecentSeal(${JSON.stringify(hdSealPath)});
+      // 3) HD9: the bottom-left card shows the current seal, painted
+      out.preview = (function () {
+        var card = document.querySelector("#seal-preview");
+        var cv = document.querySelector("#seal-preview-canvas");
+        var nm = document.querySelector("#seal-preview-name");
+        var paint = 0;
+        try {
+          var d = cv.getContext("2d").getImageData(0, 0, cv.width, cv.height).data;
+          for (var i = 3; i < d.length; i += 4) if (d[i] > 0) paint++;
+        } catch (e) { paint = -1; }
+        return {
+          visible: Boolean(card && !card.hidden), paintedPixels: paint,
+          name: nm ? nm.textContent : "",
+        };
+      })();
+      // 4) HD10: the header toggle + a click on empty page space stamps the seal
+      var btn = document.querySelector("#btn-seal-add");
+      btn.click();
+      out.toggleOn = s.probe("addMode") === true && btn.getAttribute("aria-pressed") === "true";
+      out.cursor = getComputedStyle(document.querySelector("#preview-stage")).cursor;
+      out.countBefore = s.state.instances.length;
+      var cr = document.querySelector("canvas.page-canvas").getBoundingClientRect();
+      document.querySelector("#preview-stage").dispatchEvent(new PointerEvent("pointerdown", {
+        bubbles: true, cancelable: true, button: 0, isPrimary: true,
+        clientX: cr.left + 20, clientY: cr.top + 20,
+      }));
+      var sel = s.selectedInstance();
+      out.idAfterClick = sel ? sel.id : null;
+      out.countAfterClick = s.state.instances.length;
+      out.newInstSealed = Boolean(sel && sel.sealId);
+      out.newInstPages = sel ? String(sel.params["api.apply.pages"]) : null;
+      out.page = String(window.__autoStampPreview.probe("page"));
+      // 5) HD12: the floating panel sits beside the selected instance box
+      out.panel = s.probe("instancePanel");
+      (function () {
+        var ov = window.__autoStampOverlay;
+        var box = ov.state.rects.get(out.idAfterClick);
+        var cvr = ov.probe("canvasRect");
+        if (!box || !cvr) { out.boxOk = false; return; }
+        out.boxOk = true;
+        out.boxRight = cvr.left + (box.x + box.w) * ov.state.scale;
+      })();
+      // 6) HD12: reset restores the snapshot defaults, remove drops the row
+      var inst = s.state.instances.filter(function (i) { return i.id === out.idAfterClick; })[0];
+      inst.params["api.apply.scale"] = 9;
+      inst.params["api.apply.rotation"] = 44;
+      document.querySelector("#instance-reset").click();
+      out.resetScale = inst.params["api.apply.scale"];
+      out.defaultScale = (s.probe("defaults") || {})["api.apply.scale"];
+      document.querySelector("#instance-remove").click();
+      out.countAfterRemove = s.state.instances.length;
+      out.selAfterRemove = s.state.selected;
+      // the panel answers to the *current* selection's box state (a selection
+      // whose seal is not painted has no box -> no panel; stale rows do)
+      (function () {
+        var ov = window.__autoStampOverlay;
+        out.panelForSel = ov.state.rects.has(s.state.selected) ? true : Boolean(ov.state.rects.get(s.state.selected));
+      })();
+      out.panelAfterRemove = s.probe("instancePanel");
+      s.setAddMode(false); // never leak the mode into later checks
+    } catch (e) { out.crash = String((e && e.stack) || e); }
+    return JSON.stringify(out);
+  })()`);
+  if (!hd || hd.crash) bad("HD block crashed: " + (hd && hd.crash ? String(hd.crash).slice(0, 200) : "null"));
+  truthy(`HD8: the seal opened by grant is recorded in settings.recentSeals: ${JSON.stringify(hd.recent1)}`,
+    hd.recent1 && hd.recent1.paths.some((p) => p.toLowerCase() === hdSealPath.toLowerCase()) &&
+      hd.recent1.names.some((n) => n === "company seal") &&
+      hd.recent1.optionNames.some((n) => n === "company seal") &&
+      !hd.recent1.names.some((n) => /\.(png|jpe?g)$/i.test(n)));
+  truthy("HD8: the backend settings record holds exactly the opened path once",
+    hd.serverRecord && hd.serverRecord.length === 1 &&
+      hd.serverRecord[0].path.toLowerCase() === hdSealPath.toLowerCase());
+  truthy("HD8: a stale entry removes the option, the settings record and reports via toast",
+    hd.stale === null && hd.recentAfterStale === 1 && hd.staleToast.level === "warn" &&
+      /no longer exists|不存在/.test(hd.staleToast.text || ""));
+  truthy("HD9: the bottom-left preview card painted the current seal",
+    hd.preview && hd.preview.visible && hd.preview.paintedPixels > 200 &&
+      /company seal/.test(hd.preview.name || ""));
+  truthy("HD10: the toggle turns on with a copy cursor, and clicking empty page space stamps the seal",
+    hd.toggleOn === true && hd.cursor === "copy" && hd.countAfterClick === hd.countBefore + 1 &&
+      hd.newInstSealed === true && hd.idAfterClick !== null);
+  truthy(`HD11: the clicked instance belongs to the page on screen only (pages=${JSON.stringify(hd.newInstPages)})`,
+    String(hd.newInstPages) === String(hd.page));
+  truthy(`HD12: the floating panel is visible for the selected instance and pinned beside its box: panel=${JSON.stringify(hd.panel)} box=${hd.boxRight}`,
+    hd.panel && hd.panel.visible && hd.boxOk === true && hd.panel.left >= hd.boxRight - 1 &&
+      hd.panel.left <= hd.boxRight + 80);
+  truthy(`HD12: reset restores the default parameters, remove drops the row (selection moves): ${JSON.stringify({ resetScale: hd.resetScale, defaultScale: hd.defaultScale, counts: [hd.countBefore, hd.countAfterClick, hd.countAfterRemove], panel: hd.panelAfterRemove, forSel: hd.panelForSel })}`,
+    hd.resetScale === hd.defaultScale && hd.countAfterRemove === hd.countAfterClick - 1 &&
+      hd.selAfterRemove !== hd.idAfterClick && hd.panelAfterRemove.visible === hd.panelForSel);
+
   // The save click above is deliberate: with no document open the shell must
   // refuse locally, so *nothing* may reach the network (asserted below).
-  const deliberate = (e) => /\/api\/pdf\/save/.test(e);
+  // the HD block fires a deliberate fs/pick 400 (path_denied) for the stale entry
+  const deliberate = (e) => /\/api\/pdf\/save|\/api\/fs\/pick/.test(e);
   const unexpectedErrors = chrome.errors.filter((e) => !deliberate(e));
   const unexpectedFailures = chrome.failures.filter((e) => !deliberate(e));
   if (unexpectedErrors.length) bad("console errors: " + unexpectedErrors.join(" | "));
   if (unexpectedFailures.length) bad("resource failures: " + unexpectedFailures.join(" | "));
-  if (chrome.failures.length) bad("no page request may hit /api/pdf/save without a document, got: " + chrome.failures.join(" | "));
+  if (chrome.failures.some((e) => /\/api\/pdf\/save/.test(e))) bad("no page request may hit /api/pdf/save without a document, got: " + chrome.failures.join(" | "));
 
   await chrome.close(process.argv.includes("--keep-profile"));
   child.kill();

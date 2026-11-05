@@ -139,6 +139,36 @@ html:not([data-state="stamp-selected"]):not([data-state="stamp-dragging"]):not([
 html:not([data-state="crosspage"]) #panel-crosspage .body, html:not([data-state="crosspage"]) #strip-previews { display: none; }
 html:not([data-state="crosspage"]):not([data-state="split-preview"]) #panel-crosspage summary { color: var(--muted); }
 html[data-state="stamp-dragging"] #preview-stage, html[data-state="stamp-resizing"] #preview-stage { cursor: grabbing; }
+/* HD10: add-seal mode turns the stage into a placement cursor. */
+html[data-state] #preview-stage[data-add="on"] { cursor: copy; }
+
+/* HD12: the floating per-instance panel (mirrors style.css). The mock keeps it
+   visible; app-shell pins it to the selected instance's right edge at runtime. */
+#instance-panel {
+  position: absolute; right: 10px; top: 76px; width: 236px; z-index: 30;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  box-shadow: var(--shadow); padding: 8px; display: flex; flex-direction: column; gap: 6px;
+}
+#instance-panel .ip-title { font-weight: 600; }
+#instance-panel .flabel { font: var(--mono); font-size: 11px; color: var(--muted); }
+#instance-panel .num-pair input[type="range"] { flex: 1; min-width: 0; }
+#instance-panel .num-pair input[type="number"] { width: 56px; }
+#instance-panel .ip-actions { display: flex; gap: var(--gap-sm); }
+
+/* HD9: bottom-left current-seal preview card. */
+#seal-preview {
+  position: absolute; left: 10px; bottom: 34px; z-index: 30;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  box-shadow: var(--shadow); padding: 6px 8px; display: flex; flex-direction: column; gap: 4px;
+}
+#seal-preview .sp-head { display: flex; gap: 6px; font-size: 12px; color: var(--muted); }
+#seal-preview canvas {
+  width: 150px; height: 150px;
+  background:
+    repeating-conic-gradient(var(--surface-2) 0 8px, var(--surface-3) 8px 16px);
+}
+
+html[data-state="empty"] #instance-panel, html[data-state="empty"] #seal-preview { display: none; }
 html:not([data-state="empty"]) #empty-state { display: none; }
 
 /* PD2: the drop affordance must be visible while dragging (window-level gate) */
@@ -305,6 +335,21 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
       data-i18n-title="app.open.btn" data-i18n-title-cn="打开 PDF">
       <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a1 1 0 0 1 .95 1.31l-1.4 5.6A2 2 0 0 1 17.6 18H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v4" /></svg>
     </button>
+    <button id="btn-seal-upload" class="btn icon" type="button" title="Upload seal" aria-label="Upload seal"
+      data-i18n-title="seal.upload.btn" data-i18n-title-cn="上传印章">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="10" r="6" /><path d="M12 6.5a3.5 3.5 0 1 0 0 7" /><path d="M8.5 17.5h7" /><path d="M7 21h10" /></svg>
+    </button>
+    <select id="seal-recent-select" data-field="decision.seal.recentSeals" aria-label="recent seals" title="recent seals"
+      data-i18n-title="seal.recent.select" data-i18n-title-cn="最近打开的印章">
+      <option value=""></option>
+      <option value="C:\seals\公司甲-红章.png" selected>公司甲-红章</option>
+      <option value="C:\seals\财务圆章.png">财务圆章</option>
+      <option value="C:\seals\不存在.png">被删的旧章</option>
+    </select>
+    <button id="btn-seal-add" class="btn icon" type="button" aria-pressed="false" title="Add-seal mode" aria-label="Add-seal mode" data-field="ui.seal.addMode"
+      data-i18n-title="app.sealAddMode.btn" data-i18n-title-cn="添加印章模式">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6" /><path d="M18 15.5v6M15 18.5h6" /></svg>
+    </button>
     <button id="btn-save" class="btn primary icon" type="button" title="Save" aria-label="Save"
       data-i18n-title="app.save.btn" data-i18n-title-cn="保存">
       <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" /><path d="M17 21v-8H7v8" /><path d="M7 3v5h8" /></svg>
@@ -375,6 +420,91 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
     <div id="pixel-readout" data-i18n="ruler.hint" data-i18n-cn="页面尺寸（pt）；标尺原点在左上">page size in pt; origin at top-left</div>
 
     <nav id="page-pager"></nav>
+
+    <!-- HD12: the per-instance floating panel (mirrors index.html; app-shell
+         pins it to the selected instance's right edge, flipping when the
+         column has no room). HD9: #seal-preview is the bottom-left card. -->
+    <div id="instance-panel" hidden>
+      <div class="flabel ip-title"><span data-i18n="instance.panel.title" data-i18n-cn="印章参数">Seal options</span></div>
+      <div class="field">
+        <div class="flabel"><span data-i18n="api.apply.blend.ctl" data-i18n-cn="混合模式">apply.blend</span></div>
+        <select id="apply-blend" data-field="api.apply.blend">
+          <optgroup label="normal" data-i18n="blend.group.normal" data-i18n-cn="正常">Normal</optgroup>
+          <option value="normal">normal / 正常 (source-over)</option>
+          <optgroup label="lighten" data-i18n="blend.group.lighten" data-i18n-cn="增亮">Lighten</optgroup>
+          <option value="screen">screen / 滤色</option>
+          <option value="lighten">lighten / 变亮</option>
+          <optgroup label="darken" data-i18n="blend.group.darken" data-i18n-cn="增暗">Darken</optgroup>
+          <option value="multiply">multiply / 正片叠底</option>
+          <option value="darken">darken / 变暗</option>
+          <option value="color-burn">color-burn / 颜色加深</option>
+          <optgroup label="contrast" data-i18n="blend.group.contrast" data-i18n-cn="对比">Contrast</optgroup>
+          <option value="overlay">overlay / 叠加</option>
+          <option value="soft-light">soft-light / 柔光</option>
+          <option value="hard-light">hard-light / 强光</option>
+          <option value="color-dodge">color-dodge / 颜色减淡</option>
+          <optgroup label="compare" data-i18n="blend.group.compare" data-i18n-cn="比较">Compare</optgroup>
+          <option value="difference">difference / 差值</option>
+          <option value="exclusion">exclusion / 排除</option>
+          <optgroup label="component" data-i18n="blend.group.component" data-i18n-cn="分量">Component</optgroup>
+          <option value="hue">hue / 色相</option>
+          <option value="saturation">saturation / 饱和度</option>
+          <option value="color">color / 颜色</option>
+          <option value="luminosity">luminosity / 明度</option>
+        </select>
+        <div class="hintline" data-i18n="api.apply.blend.hint" data-i18n-cn="16 种 PDF 混合模式（PDF 表 136），分组选择器；落盘写 ExtGState /BM。">16 blend modes (PDF Table 136) grouped; backend writes ExtGState /BM.</div>
+      </div>
+      <div class="field">
+        <div class="flabel"><span data-i18n="api.apply.opacity.ctl" data-i18n-cn="透明度">apply.opacity 0..1</span></div>
+        <div class="num-pair">
+          <input data-field="api.apply.opacity" type="range" min="0" max="1" step="0.05" value="0.6" aria-label="opacity">
+          <input data-field="api.apply.opacity" type="number" min="0" max="1" step="0.05" value="0.6" aria-label="opacity">
+        </div>
+        <div class="hintline" data-i18n="api.apply.opacity.hint" data-i18n-cn="0..1，0.05 档；落盘写 ExtGState /ca 与 /CA。">0..1; 0.05 steps; /ca /CA at export.</div>
+      </div>
+      <div class="field">
+        <div class="flabel"><span data-i18n="api.apply.brightness.ctl" data-i18n-cn="明度">apply.brightness 0..2</span></div>
+        <div class="num-pair">
+          <input data-field="api.apply.brightness" type="range" min="0" max="2" step="0.05" value="1" aria-label="brightness">
+          <input data-field="api.apply.brightness" type="number" min="0" max="2" step="0.05" value="1" aria-label="brightness">
+        </div>
+        <div class="hintline" data-i18n="api.apply.brightness.hint" data-i18n-cn="0..2；仅预览（ctx.filter）；落盘不发送该参数。">0..2; preview only (ctx.filter); not sent to apply.</div>
+      </div>
+      <div class="field">
+        <div class="flabel"><span data-i18n="api.apply.saturate.ctl" data-i18n-cn="饱和度">apply.saturate 0..3</span></div>
+        <div class="num-pair">
+          <input data-field="api.apply.saturate" type="range" min="0" max="3" step="0.05" value="1" aria-label="saturate">
+          <input data-field="api.apply.saturate" type="number" min="0" max="3" step="0.05" value="1" aria-label="saturate">
+        </div>
+        <div class="hintline" data-i18n="api.apply.saturate.hint" data-i18n-cn="0..3；仅预览（ctx.filter）；落盘不发送该参数。">0..3; preview only (ctx.filter); not sent to apply.</div>
+      </div>
+      <div class="field">
+        <div class="flabel"><span data-i18n="api.apply.scale.ctl" data-i18n-cn="缩放（相对页宽）">apply.scale</span></div>
+        <div class="num-pair">
+          <input data-field="api.apply.scale" type="range" min="0.1" max="2" step="0.01" value="0.202" aria-label="scale">
+          <input data-field="api.apply.scale" type="number" min="0.05" max="5" step="0.01" value="0.202" aria-label="scale">
+        </div>
+        <span class="opt-label" id="scale-pt">scale 0.202 = 120pt / 42mm</span>
+        <div class="hintline" data-i18n="api.apply.scale.hint" data-i18n-cn="印章宽度为相对页宽分数；滑杆最左 10%、最右 200%，拖动边角可超出范围并回显在滑杆上（A4 = 595.3pt）。">Seal width as a fraction of page width; slider 10%..200%, corner-drag can exceed and echoes back on the slider.</div>
+      </div>
+      <div class="field">
+        <div class="flabel"><span data-i18n="api.apply.rotation.ctl" data-i18n-cn="旋转（度）">apply.rotation</span></div>
+        <div class="num-pair">
+          <input data-field="api.apply.rotation" type="range" min="-180" max="180" step="1" value="0" aria-label="rotation">
+          <input data-field="api.apply.rotation" type="number" min="-180" max="180" step="1" value="0" aria-label="rotation">
+        </div>
+        <div class="hintline" data-i18n="api.apply.rotation.hint" data-i18n-cn="-180 到 180；印章绕自身中心旋转。">Degrees around the seal centre.</div>
+      </div>
+      <div class="row ip-actions">
+        <button type="button" id="instance-reset" class="btn" data-i18n="instance.reset.btn" data-i18n-cn="复位">Reset</button>
+        <button type="button" id="instance-remove" class="btn danger" data-i18n="instances.delete.btn" data-i18n-cn="删除">Delete</button>
+      </div>
+    </div>
+
+    <div id="seal-preview" hidden>
+      <div class="sp-head"><span data-i18n="seal.preview.title" data-i18n-cn="印章预览">Seal preview</span><span id="seal-preview-name"></span></div>
+      <canvas id="seal-preview-canvas" width="150" height="150" aria-label="seal preview"></canvas>
+    </div>
   </section>
 
 
@@ -432,12 +562,11 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
               <button type="button" id="seal-preset-delete" class="btn" data-i18n="seal.preset.delete" data-i18n-cn="删除预设">Delete preset</button>
             </div>
           </div>
-          <div class="row">
-            <button type="button" id="seal-upload" class="btn" data-i18n="seal.upload.btn" data-i18n-cn="上传印章 PNG">Upload seal PNG</button>
-            <span class="flabel"><span data-i18n="seal.meta.label" data-i18n-cn="印章元数据">Seal metadata</span></span>
-            <span class="chip" id="seal-meta">-</span>
-            <input id="seal-file-input" type="file" accept="image/*" hidden>
-          </div>
+          <div class="field">
+            <div class="flabel"><span data-i18n="seal.meta.label" data-i18n-cn="印章元数据">Seal metadata</span><span class="tag">seal.prepare</span></div>
+            <div class="row">
+              <span class="chip" id="seal-meta">-</span>
+            </div>
           <div class="hintline" data-i18n="seal.upload.hint" data-i18n-cn="去白底/自动裁边/重采样按上方参数处理；「撤销」会用原图重跑一次。">Keying, trim and resample follow the options above; revert re-runs from the source.</div>
           <div class="hintline" data-i18n="seal.err.type" data-i18n-cn="印章图片必须是带透明通道的 PNG 或 JPEG">Stamp image must be PNG or JPEG with an alpha channel</div>
           <div class="hintline" data-i18n="stamp.drag.hint" data-i18n-cn="拖动虚线框移动，四角缩放，顶部手柄旋转。">Drag the dashed box to move; corners resize; the top handle rotates.</div>
@@ -458,126 +587,6 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
             <button type="button" id="apply-undo" class="btn ghost" data-i18n="apply.undo.btn" data-i18n-cn="撤销盖章">Undo stamping</button>
           </div>
           <div class="hintline" data-i18n="apply.write.hint" data-i18n-cn="把实例烘焙成新的会话 asset（原文件不动）；保存时若仍有未落盘实例会自动先盖章。">Bakes the instances into a new session asset; the original file is untouched. Saving stamps first if anything is still unbaked.</div>
-        </div>
-      </details>
-      <details class="section" id="panel-overlay" open>
-        <summary data-i18n="panel.overlay.title" data-i18n-cn="叠加参数">Overlay</summary>
-        <div class="body">
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.apply.blend.ctl" data-i18n-cn="混合模式">apply.blend</span><span class="tag">apply.blend</span></div>
-            <select id="apply-blend" data-field="api.apply.blend">
-              <optgroup label="normal" data-i18n="blend.group.normal" data-i18n-cn="正常">Normal</optgroup>
-              <option value="normal">normal / 正常 (source-over)</option>
-              <optgroup label="lighten" data-i18n="blend.group.lighten" data-i18n-cn="增亮">Lighten</optgroup>
-              <option value="screen">screen / 滤色</option>
-              <option value="lighten">lighten / 变亮</option>
-              <option value="color-dodge">color-dodge / 颜色减淡</option>
-              <option value="hard-light">hard-light / 强光</option>
-              <optgroup label="darken" data-i18n="blend.group.darken" data-i18n-cn="增暗">Darken</optgroup>
-              <option value="multiply">multiply / 正片叠底</option>
-              <option value="darken">darken / 变暗</option>
-              <option value="color-burn">color-burn / 颜色加深</option>
-              <optgroup label="contrast" data-i18n="blend.group.contrast" data-i18n-cn="对比">Contrast</optgroup>
-              <option value="overlay">overlay / 叠加</option>
-              <option value="soft-light">soft-light / 柔光</option>
-              <optgroup label="compare" data-i18n="blend.group.compare" data-i18n-cn="比较">Compare</optgroup>
-              <option value="difference">difference / 差值</option>
-              <option value="exclusion">exclusion / 排除</option>
-              <optgroup label="component" data-i18n="blend.group.component" data-i18n-cn="分量">Component</optgroup>
-              <option value="hue">hue / 色相</option>
-              <option value="saturation">saturation / 饱和度</option>
-              <option value="color">color / 颜色</option>
-              <option value="luminosity">luminosity / 明度</option>
-            </select>
-            <div class="hintline" data-i18n="api.apply.blend.hint" data-i18n-cn="16 种 PDF 混合模式（PDF 表 136），分组选择器；落盘写 ExtGState /BM。">16 blend modes (PDF Table 136) grouped; backend writes ExtGState /BM.</div>
-          </div>
-
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.apply.opacity.ctl" data-i18n-cn="透明度">apply.opacity 0..1</span><span class="tag">apply.opacity 0..1</span></div>
-            <div class="num-pair">
-              <input data-field="api.apply.opacity" type="range" min="0" max="1" step="0.05" value="0.6" aria-label="opacity">
-              <input data-field="api.apply.opacity" type="number" min="0" max="1" step="0.05" value="0.6" aria-label="opacity">
-            </div>
-            <div class="hintline" data-i18n="api.apply.opacity.hint" data-i18n-cn="0..1，落盘 ExtGState /ca /CA（pdfcpu opacity 同义）。">0..1 writes ExtGState /CA and /ca.</div>
-          </div>
-
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.apply.brightness.ctl" data-i18n-cn="明度">apply.brightness 0..2</span><span class="tag">apply.brightness 0..2</span></div>
-            <div class="num-pair">
-              <input data-field="api.apply.brightness" type="range" min="0" max="2" step="0.05" value="1" aria-label="brightness">
-              <input data-field="api.apply.brightness" type="number" min="0" max="2" step="0.05" value="1" aria-label="brightness">
-            </div>
-            <div class="hintline" data-i18n="api.apply.brightness.hint" data-i18n-cn="仅预览（前端 ctx.filter brightness），落盘不写。">Preview-only (canvas filter), not written to PDF.</div>
-          </div>
-
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.apply.saturate.ctl" data-i18n-cn="饱和度">apply.saturate 0..3</span><span class="tag">apply.saturate 0..3</span></div>
-            <div class="num-pair">
-              <input data-field="api.apply.saturate" type="range" min="0" max="3" step="0.05" value="1" aria-label="saturate">
-              <input data-field="api.apply.saturate" type="number" min="0" max="3" step="0.05" value="1" aria-label="saturate">
-            </div>
-            <div class="hintline" data-i18n="api.apply.saturate.hint" data-i18n-cn="仅预览（前端 ctx.filter saturate），落盘不写。">Preview-only (canvas filter), not written to PDF.</div>
-          </div>
-          <div class="hintline" data-i18n="overlay.filter.note" data-i18n-cn="注意：ctx.filter 是上下文状态，每层叠加前必须置 none（FACTS §1.4）。">ctx.filter is context state: reset to none per layer (FACTS §1.4).</div>
-        </div>
-      </details>
-
-      <details class="section" id="panel-position" open>
-        <summary data-i18n="panel.position.title" data-i18n-cn="位置与尺寸">Position</summary>
-        <div class="body">
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.apply.scale.ctl" data-i18n-cn="印章宽度（相对页宽）">apply.scale</span><span class="tag">apply.scale</span></div>
-            <div class="num-pair">
-              <input data-field="api.apply.scale" type="range" min="0.05" max="0.9" step="0.01" value="0.202" aria-label="scale">
-              <input data-field="api.apply.scale" type="number" min="0.05" max="0.9" step="0.01" value="0.202" aria-label="scale">
-            </div>
-            <div class="hintline" id="scale-pt" data-i18n="api.apply.scale.hint" data-i18n-cn="scale 为相对页宽分数；括号内为换算后的 pt（A4 = 595.3pt）。">scale is a fraction of page width; pt shown in brackets.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.apply.pos.ctl" data-i18n-cn="位置（pt，左上原点）">apply.pos</span><span class="tag">apply.pos</span></div>
-            <div class="row">
-              <input data-field="api.apply.pos" type="text" size="7" value="130,480" aria-label="pos">
-              <span class="tag">x,y</span>
-              <button type="button" id="pos-center" class="btn" data-i18n="position.center.btn" data-i18n-cn="居中">Center</button>
-            </div>
-            <div class="hintline" data-i18n="api.apply.pos.hint" data-i18n-cn="与页内锚点二选一；选锚点后 pos 自动归算。">Either pos or anchor; anchor recomputes pos.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.apply.anchor.ctl" data-i18n-cn="页内锚点">apply.anchor</span><span class="tag">apply.anchor</span></div>
-            <div class="seg sm" id="apply-anchor" data-field="api.apply.anchor">
-              <button type="button" data-value="tl">TL</button>
-              <button type="button" data-value="tr">TR</button>
-              <button type="button" data-value="center" aria-pressed="true">Center</button>
-              <button type="button" data-value="bl">BL</button>
-            <button type="button" data-value="br">BR</button>
-            </div>
-            <div class="hintline" data-i18n="api.apply.anchor.hint" data-i18n-cn="九宫格锚点；落盘用 pdfcpu 锚点常量，pos 会被覆盖。">Nine-point anchor; pdfcpu anchor constant.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.apply.offset.ctl" data-i18n-cn="偏移（pt）">apply.offset</span><span class="tag">apply.offset</span></div>
-            <div class="row">
-              <input data-field="api.apply.offset" type="text" size="10" value="0,0" aria-label="offset">
-              <span class="tag">dx,dy</span>
-            </div>
-            <div class="hintline" data-i18n="api.apply.offset.hint" data-i18n-cn="相对锚点的偏移，可负；与骑缝章 startOffset 互相独立。">Offset from anchor, may be negative.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.apply.rotation.ctl" data-i18n-cn="旋转（度）">apply.rotation</span><span class="tag">apply.rotation</span></div>
-            <div class="num-pair">
-              <input data-field="api.apply.rotation" type="range" min="-180" max="180" step="1" value="0" aria-label="rotation">
-              <input data-field="api.apply.rotation" type="number" min="-180" max="180" step="1" value="0" aria-label="rotation">
-            </div>
-            <div class="hintline" data-i18n="api.apply.rotation.hint" data-i18n-cn="-180 到 180；印章绕自身中心旋转。">Degrees around the seal centre.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.apply.pages.ctl" data-i18n-cn="作用页">apply.pages</span><span class="tag">apply.pages</span></div>
-            <div class="row">
-              <input data-field="api.apply.pages" type="text" size="16" value="1-2,5" aria-label="pages">
-              <button type="button" class="btn" data-value="all" data-i18n="pages.all.btn" data-i18n-cn="全部">All</button>
-              <button type="button" class="btn" data-value="current" data-i18n="pages.current.btn" data-i18n-cn="当前页">Current</button>
-            </div>
-            <div class="hintline" data-i18n="api.apply.pages.hint" data-i18n-cn="支持 all / none / 单页 / 区间，例如 1-2,5。">Accepts all, none, single pages, ranges.</div>
-          </div>
         </div>
       </details>
 
@@ -1008,6 +1017,7 @@ window.__autoStampMock = (function () {
   function toast(key, text, tone, acts) {
     var t = q("#error-toast");
     t.textContent = text;
+    t.dataset.i18nPh = text; // applyLang caches EN from i18nPh: prime it
     document.documentElement.setAttribute("data-toast", "true");
     document.documentElement.setAttribute("data-tone", tone || "err");
     t.dataset.i18n = key; t.dataset.i18nCn = t.getAttribute("data-i18n-cn") || text;
@@ -1662,21 +1672,12 @@ window.__autoStampMock = (function () {
       if (est.warn) { toast("warn.export.tooBig", "page bitmap exceeds the 90 MB cap: lower DPI to 300 or fewer pages", "warn"); return; }
       toast("ok.exported", "rasterised " + S.pages.length + " page(s) at " + S.p["export.dpi"] + " dpi q" + S.p["export.quality"], "ok");
     });
-    q("#pos-center").addEventListener("click", function () {
-      var vb = viewBox(), g = S.geo[S.selId];
-      g.x = (vb.w - g.w) / 2; g.y = (vb.h - g.w) / 2;
-      geoToField(); draw(); readouts();
-    });
     qa("#panel .btn[data-value=\"all\"], #panel .btn[data-value=\"current\"]").forEach(function (b) {
       b.addEventListener("click", function () {
         var v = b.dataset.value === "all" ? "all" : String(S.current);
         S.p["apply.pages"] = v; S.p["export.pages"] = v;
         setField("apply.pages", v); setField("export.pages", v);
       });
-    });
-    q("#seal-upload").addEventListener("click", function () {
-      toast("seal.ok", "sealId: seal-" + Math.random().toString(36).slice(2, 8) +
-        " (alpha ring, SMask generated on save)", "ok");
     });
     q("#seal-despill-revert").addEventListener("click", function () {
       pset("seal.prepare.despill", false);
@@ -1956,6 +1957,67 @@ window.__autoStampMock = (function () {
     var e = qa("[data-i18n=\"" + key + "\"]")[0];
     return e ? (e.dataset.i18nCn || e.getAttribute("data-i18n-cn") || null) : null;
   }
+  // HD8-HD12: the design artifact only needs to *show* the new surfaces and
+  // hand ui-smoke enough truth to assert them: the dropdown options, the
+  // toggle behaviour, the floating panel's visibility and the preview canvas.
+  function wireSealChannel() {
+    var add = q("#btn-seal-add");
+    add.addEventListener("click", function () {
+      S.addMode = !S.addMode;
+      add.setAttribute("aria-pressed", String(S.addMode));
+      q("#preview-stage").dataset.add = S.addMode ? "on" : "off";
+      if (S.addMode) toast("app.sealAddMode.hint", "when on, a left click on empty page space stamps the current seal at that point", "ok");
+    });
+    q("#seal-recent-select").addEventListener("change", function (e) {
+      var opt = e.target.options[e.target.selectedIndex];
+      if (!opt || !opt.value) return;
+      // HD8 fallback shape: the stale entry carries "不存在" in its path.
+      if (opt.value.indexOf("不存在") >= 0) {
+        opt.remove();
+        e.target.selectedIndex = 0;
+        toast("seal.recent.stale", "that seal file no longer exists: removed from the list", "warn");
+        return;
+      }
+      showSealPreview(opt.textContent);
+    });
+    q("#instance-reset").addEventListener("click", function () {
+      var g = S.geo[S.selId];
+      if (!g) return;
+      g.x = 130; g.y = 480; g.rot = 0;
+      setField("apply.rotation", 0); S.p["apply.rotation"] = 0;
+      geoToField(); layout(); draw(); readouts();
+    });
+    q("#instance-remove").addEventListener("click", function () { removeInstance(S.selId); });
+    // HD10: a left click on empty page space places the seal at the click.
+    q("#preview-stage").addEventListener("click", function (e) {
+      if (!S.addMode || S.state === "empty") return;
+      if (!e.target.closest || !e.target.closest(".page-frame")) return;
+      if (e.target.closest(".instance") || e.target.closest(".handle")) return;
+      if (!img.seal) { toast("seal.addMode.noseal", "upload or pick a seal first", "warn"); return; }
+      addInstance();
+    });
+    showSealPreview(q("#seal-recent-select").options[1].textContent);
+    q("#instance-panel").hidden = false;
+  }
+  function showSealPreview(name) {
+    var card = q("#seal-preview");
+    q("#seal-preview-name").textContent = name || "";
+    var cv = q("#seal-preview-canvas");
+    var ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, 150, 150);
+    if (img.seal) {
+      var k = 150 / Math.max(img.seal.width, img.seal.height);
+      var w = Math.round(img.seal.width * k);
+      var h = Math.round(img.seal.height * k);
+      ctx.drawImage(img.seal, (150 - w) / 2, (150 - h) / 2, w, h);
+      // file:// canvas is tainted (SecurityError on getImageData), so the flag
+      // proves the draw happened; shell-smoke scans real pixels over http.
+      S.previewPainted = true;
+    } else {
+      S.previewPainted = false;
+    }
+    card.hidden = false;
+  }
   function wireKeys() {
     window.addEventListener("keydown", function (e) {
       var tag = (e.target.tagName || "").toLowerCase();
@@ -1986,11 +2048,15 @@ window.__autoStampMock = (function () {
 
   // ---------- boot + public mock API (used by tools/verify/ui-smoke.mjs) ----------
   function boot() {
-    initFixtures();
+    initFixtures().then(function () {
+      // fixtures are async: repaint the current-seal preview once the bytes arrive
+      var sel = q("#seal-recent-select");
+      showSealPreview(sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : "");
+    });
     applyTheme(S.theme); applyLang(S.lang);
     // The browser tab title mirrors main.go's native window title.
     setDocTitle();
-    wireControls(); wireStage(); wireKeys(); buildShortcuts();
+    wireControls(); wireStage(); wireKeys(); wireSealChannel(); buildShortcuts();
     var h = (location.hash || "").replace(/^#/, "");
     setState(h || "empty");
     window.addEventListener("hashchange", function () {
@@ -2026,6 +2092,39 @@ window.__autoStampMock = (function () {
     }
     if (name === "version") return S.version;
     if (name === "docTitle") return document.title;
+    if (name === "addMode") return { on: q("#btn-seal-add").getAttribute("aria-pressed") === "true",
+      cursor: q("#preview-stage").dataset.add === "on" };
+    if (name === "instancePanel") {
+      var p = q("#instance-panel");
+      return { visible: !p.hidden, hasControls: ("apply.blend apply.opacity apply.brightness " +
+        "apply.saturate apply.scale apply.rotation").split(" ").every(function (nm) {
+          return !!q('[data-field="api.' + nm + '"]', p); }) &&
+        !!q("#instance-reset", p) && !!q("#instance-remove", p) };
+    }
+    if (name === "sealPreview") {
+      var sp = q("#seal-preview");
+      // file:// taints the canvas (getImageData throws SecurityError): the
+      // painted flag set by showSealPreview is the design-artifact proof.
+      return { visible: !sp.hidden, name: q("#seal-preview-name").textContent,
+        painted: Boolean(S.previewPainted && img.seal) };
+    }
+    if (name === "recentSeals") {
+      var sel = q("#seal-recent-select");
+      var names = [], paths = [];
+      qa("option", sel).forEach(function (o) { if (o.value) { names.push(o.textContent); paths.push(o.value); } });
+      return { names: names, paths: paths };
+    }
+    if (name === "headerBtns") {
+      var ids = qa("#topbar button, #topbar select").map(function (b) { return b.id; });
+      return ids.join(",");
+    }
+    if (name === "sidebarSections") {
+      return qa("#panel details").map(function (d) { return d.id; }).join(",");
+    }
+    if (name === "geoInputs") {
+      return qa("#panel [data-field=\"api.apply.pos\"], #panel [data-field=\"api.apply.anchor\"], " +
+        "#panel [data-field=\"api.apply.offset\"], #panel [data-field=\"api.apply.pages\"]").length;
+    }
     return null;
   }
   return {

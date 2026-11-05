@@ -9,6 +9,8 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -327,4 +329,111 @@ func TestSealPrepareBodyCap(t *testing.T) {
 	if rec.Code == http.StatusCreated {
 		t.Fatalf("over-cap body accepted, want a rejection")
 	}
+}
+
+// sealJSON posts the JSON shape of seal/prepare (HD8: the top-bar channel).
+func sealJSON(t *testing.T, mux http.Handler, body, session string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/pdf/seal/prepare", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	if session != "" {
+		req.Header.Set(webx.SessionHeader, session)
+	}
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	return rec
+}
+
+// writeSealFile drops a stamp bitmap into a temp dir for the path forms.
+func writeSealFile(t *testing.T, name string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, stampPNG(t), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestSealPrepareJSONFormRecordsRecent(t *testing.T) {
+	mux, _, assets := newTestMux(t)
+	owner := newSession(t)
+	path := writeSealFile(t, "circle seal.png")
+
+	grant := grantPath(t, assets, path, owner)
+	rec := sealJSON(t, mux, `{"pathGrantId":"`+grant+`","despill":false}`, owner)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("JSON prepare = %d body=%s", rec.Code, rec.Body.String())
+	}
+	data := dataOf(t, rec)
+	id, _ := data["sealId"].(string)
+	if !strings.HasPrefix(id, "sl") {
+		t.Errorf("sealId = %q, want the seal id prefix", id)
+	}
+	echo, _ := data["echo"].(map[string]any)
+	if echo["despill"] != false {
+		t.Errorf("echo.despill = %v, want false (the option came through)", echo["despill"])
+	}
+
+
+	// HD8: the path lands in the settings record the dropdown reads.
+	setData := dataOf(t, getJSON(t, mux))
+	settings, _ := setData["settings"].(map[string]any)
+	seals, _ := settings["recentSeals"].([]any)
+	if len(seals) != 1 {
+		t.Fatalf("recentSeals = %v, want the picked path recorded", setData["recentSeals"])
+	}
+	entry, _ := seals[0].(map[string]any)
+	if entry["path"] != path {
+		t.Errorf("recentSeals[0] = %v, want %s", entry, path)
+	}
+}
+
+// The fallback channel of the dropdown: an old record whose file disappeared
+// answers path_denied (and the JSON guards keep malformed bodies honest).
+func TestSealPrepareJSONFormGuardErrors(t *testing.T) {
+	mux, _, assets := newTestMux(t)
+	owner := newSession(t)
+
+	if rec := sealJSON(t, mux, `{"pathGrantId":"pg-missing"}`, owner); rec.Code != http.StatusBadRequest {
+		t.Errorf("missing grant = %d, want 400", rec.Code)
+	} else if env := decodeEnvelope(t, rec); env.Code != "path_denied" {
+		t.Errorf("code = %s, want path_denied", env.Code)
+	}
+	if rec := sealJSON(t, mux, `{}`, owner); rec.Code != http.StatusBadRequest {
+		t.Errorf("no pathGrantId = %d, want 400", rec.Code)
+	}
+
+	txt := filepath.Join(t.TempDir(), "not-a-seal.txt")
+	if err := os.WriteFile(txt, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	grant := grantPath(t, assets, txt, owner)
+	if rec := sealJSON(t, mux, `{"pathGrantId":"`+grant+`"}`, owner); rec.Code != http.StatusBadRequest {
+		t.Errorf("non-image path = %d, want 400", rec.Code)
+	} else if env := decodeEnvelope(t, rec); env.Code != "bad_body" {
+		t.Errorf("code = %s, want bad_body", env.Code)
+	}
+
+	// A recorded-but-deleted file: grant ok, open fails -> path_denied so the
+	// UI drops the dropdown entry (HD8 fallback rule).
+	ghost := filepath.Join(t.TempDir(), "deleted.png")
+	if err := os.WriteFile(ghost, stampPNG(t), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ghostGrant := grantPath(t, assets, ghost, owner)
+	if err := os.Remove(ghost); err != nil {
+		t.Fatal(err)
+	}
+	if rec := sealJSON(t, mux, `{"pathGrantId":"`+ghostGrant+`"}`, owner); rec.Code != http.StatusBadRequest {
+		t.Errorf("deleted file = %d, want 400", rec.Code)
+	} else if env := decodeEnvelope(t, rec); env.Code != "path_denied" {
+		t.Errorf("code = %s, want path_denied for the removed file", env.Code)
+	}
+}
+
+func getJSON(t *testing.T, mux http.Handler) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/settings", nil))
+	return rec
 }

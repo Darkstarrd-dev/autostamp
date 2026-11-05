@@ -140,8 +140,8 @@ func TestStampBoxClampsScale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if math.Abs(r.W-0.9*a4.Width) > 1e-9 {
-		t.Errorf("scale 9 clamped to %g, want 0.9", r.W/a4.Width)
+	if math.Abs(r.W-5.0*a4.Width) > 1e-9 {
+		t.Errorf("scale 9 clamped to %g, want 5.0", r.W/a4.Width)
 	}
 	g = StampGeom{Scale: 0, Aspect: 1, Anchor: AnchorTL}
 	r, err = g.Box(a4)

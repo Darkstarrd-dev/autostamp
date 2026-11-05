@@ -89,9 +89,9 @@ func handlePick(store *tmpstore.Store, log *slog.Logger) http.HandlerFunc {
 			return
 		}
 		switch body.Filter {
-		case "", "pdf", "all":
+		case "", "pdf", "image", "all":
 		default:
-			webx.Fail(w, http.StatusBadRequest, "bad_body", "filter 只允许 pdf 或 all")
+			webx.Fail(w, http.StatusBadRequest, "bad_body", "filter 只允许 pdf/image/all")
 			return
 		}
 		var paths []string

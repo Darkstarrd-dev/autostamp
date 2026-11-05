@@ -177,7 +177,12 @@ for (const k of mockI18nKeys) if (!i18nSet.has(k)) bad("E-I18N-MOCK", `mock key 
 // is open) is in use even when the design artifact no longer hosts it.
 const shellMarkup = read("web/static/index.html");
 const shellI18nKeys = [...new Set([...shellMarkup.matchAll(/data-i18n(?:-title|-placeholder)?="([^"]+)"/g)].map((m) => m[1]))];
-const usedKeys = new Set([...mockI18nKeys, ...mockPlaceholders, ...dynKeys, ...shellI18nKeys]);
+
+// HD8-HD12: toast()/hint strings live in the shell JS (t("seal.addMode.noseal"),
+// t("app.sealAddMode.hint")); they are part of the same vocabulary as markup.
+const shellJS = read("web/static/app-shell.js");
+const shellDynamicKeys = [...new Set([...shellJS.matchAll(/t\("([a-z][A-Za-z0-9_.]*)"/g)].map((m) => m[1]))];
+const usedKeys = new Set([...mockI18nKeys, ...mockPlaceholders, ...dynKeys, ...shellI18nKeys, ...shellDynamicKeys]);
 for (const i of i18n) {
   if (!i.en || !i.cn) bad("E-I18N-EMPTY", `UI_SPEC §4 key "${i.key}" has empty en/cn`);
   if (!usedKeys.has(i.key)) bad("E-I18N-UNUSED", `UI_SPEC §4 key "${i.key}" not used in mock`);

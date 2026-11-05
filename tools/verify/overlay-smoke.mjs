@@ -401,8 +401,10 @@ async function main() {
     "api.seal.prepare.alphaTrim": false,
     "api.seal.prepare.resampleDpi": 300,
   });
-  await setInputFiles(app, "#seal-file-input", [sealFile]);
-  await app.evaluate(`(() => { const i = document.getElementById('seal-file-input'); i.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+  // HD8: the upload button now goes through the native picker, which a headless
+  // run cannot drive. The recent-seal channel shares the same openSealByGrant
+  // path, so the scripts replay it with a typed-path grant.
+  await app.evaluate(`window.__autoStampShell.openRecentSeal(${JSON.stringify(sealFile)}).then(() => true)`, true);
   await waitFor(
     async () => (await app.evaluate(shellEval("window.__autoStampSeal.probe('seals').length > 0"))) === true,
     12000,
@@ -616,7 +618,11 @@ async function main() {
     truthy(`ctrl+wheel over the seal changes scale (${before["api.apply.scale"]} -> ${after["api.apply.scale"]})`,
       Number(after["api.apply.scale"]) !== Number(before["api.apply.scale"]));
     const zoomBefore = await app.evaluate(shellEval("p.probe('zoom')"));
-    await mouse(app, "mouseWheel", over.x + 240, over.y + 200, 0, { deltaX: 0, deltaY: -120, modifiers: 2 });
+    // the wheel must land inside #preview-stage (the gesture owner) but not on
+    // the floating panel (HD12) or the instance box; the stage letterbox strip
+    // above the page is exactly that.
+    const bg = await app.evaluate(shellEval("(() => { var st = document.querySelector('#preview-stage').getBoundingClientRect(); return { x: Math.round(st.x + st.width / 2), y: Math.round(st.y + 12) }; })()"));
+    await mouse(app, "mouseWheel", bg.x, bg.y, 0, { deltaX: 0, deltaY: -120, modifiers: 2 });
     await sleep(250);
     const zoomAfter = await app.evaluate(shellEval("p.probe('zoom')"));
     truthy(`ctrl+wheel on the page background zooms the view (${zoomBefore} -> ${zoomAfter})`, zoomAfter !== zoomBefore);
@@ -801,8 +807,7 @@ async function main() {
   // image, and 撤销去背 re-runs the same bytes with despill off
   if (wants("despill")) {
     await setParams(app, { "api.seal.prepare.despill": true });
-    await setInputFiles(app, "#seal-file-input", [sealFile]);
-    await app.evaluate(`(() => { document.getElementById('seal-file-input').dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+    await app.evaluate(`window.__autoStampShell.openRecentSeal(${JSON.stringify(sealFile)}).then(() => true)`, true);
     await sleep(600);
     const withDespill = await app.evaluate(shellEval("window.__autoStampSeal.probe('seals')"));
     await app.evaluate(`(() => { document.getElementById('seal-despill-revert').click(); return true; })()`);

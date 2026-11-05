@@ -9,9 +9,10 @@ import (
 )
 
 // ListMatching returns the files directly under dir whose extension matches the pick
-// filter vocabulary ("pdf" = .pdf, "all" = any file). Subdirectories are skipped, as
-// are dot-files: the batch queue (P6, 需求 6) enumerates a picked folder, and the
-// browser must not be the one deciding which files exist on the user's disk.
+// filter vocabulary ("pdf" = .pdf, "image" = seal pictures (HD8), "all" = any file).
+// Subdirectories are skipped, as are dot-files: the batch queue (P6, 需求 6)
+// enumerates a picked folder, and the browser must not be the one deciding which
+// files exist on the user's disk.
 //
 // One level only, on purpose - a recursive walk over a user's whole tree would turn a
 // 20-file batch into a surprise. The picked folder is the scope (UI_SPEC §8 B1).
@@ -22,7 +23,7 @@ func ListMatching(dir, filter string) ([]string, error) {
 	switch filter {
 	case "":
 		filter = "pdf" // the route default (AGENTS §6 /api/fs/pick)
-	case "pdf", "all":
+	case "pdf", "image", "all":
 	default:
 		return nil, fmt.Errorf("fsx: 未知的 filter %q", filter)
 	}
@@ -43,8 +44,15 @@ func ListMatching(dir, filter string) ([]string, error) {
 		if strings.HasPrefix(name, ".") {
 			continue // dot-files are not batch input
 		}
-		if filter == "pdf" && !strings.EqualFold(filepath.Ext(name), ".pdf") {
-			continue
+		switch filter {
+		case "pdf":
+			if !strings.EqualFold(filepath.Ext(name), ".pdf") {
+				continue
+			}
+		case "image":
+			if !IsImageName(name) {
+				continue
+			}
 		}
 		out = append(out, filepath.Join(f, name))
 	}
@@ -61,4 +69,15 @@ func ListMatching(dir, filter string) ([]string, error) {
 		return out[i] < out[j]
 	})
 	return out, nil
+}
+
+// isImageName reports the seal-picture extensions accepted by the seal channels
+// (HD8; the pdf/djvu-family is intentionally absent — PrepareSeal only decodes
+// raster images).
+func IsImageName(name string) bool {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff":
+		return true
+	}
+	return false
 }

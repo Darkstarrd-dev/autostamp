@@ -404,9 +404,12 @@ async function checkStrips(app, grantId, sealId, fixture) {
         await new Promise((r) => setTimeout(r, 220));
         read.push({
           page: n,
-          rightInside: ${probeAt(pageW - 2, midY)},
-          leftInside: ${probeAt(pageW - stripW + 1.5, midY)},
-          leftOutside: ${probeAt(pageW - stripW - 2, midY)},
+          // 3.5 pt inwards: the two-half boundary AA sits at the strip's right
+          // edge (page edge), so a 2 pt probe flapped across that boundary when
+          // the fit-zoom rounding changed (V4 removed the stage padding).
+          rightInside: ${probeAt(pageW - 3.5, midY)},
+          leftInside: ${probeAt(pageW - stripW + 2.5, midY)},
+          leftOutside: ${probeAt(pageW - stripW - 3, midY)},
           insideTop: ${probeAt(pageW - 10, STRIP_START + 1.5)},
           aboveTop: ${probeAt(pageW - 10, STRIP_START - 2)},
           insideBottom: ${probeAt(pageW - 10, STRIP_START + stripH - 1.5)},
@@ -460,6 +463,55 @@ async function checkStrips(app, grantId, sealId, fixture) {
   if (got.chain && got.chain.instances.length !== 0) bad(`落盘后实例未清空(W2): ${JSON.stringify(got.chain.instances)}`);
 }
 
+// HD11: "stamp on the page you stamp on" — pages word "2" must put ink on
+// page 2 *only*; page 1 stays at the backdrop. The readback samples the
+// applied asset (stampIntoPDF adopts it), so this proves the disk side too.
+async function checkPerPage(app, grantId, sealId) {
+  const r = await app.evaluate(
+    `(async () => {
+      const api = window.__autoStampApi, sh = window.__autoStampShell, p = window.__autoStampPreview;
+      const info = await api.request('/api/pdf/open', { method: 'POST', body: { pathGrantId: ${JSON.stringify(grantId)} } });
+      await sh.adopt(info);
+      sh.state.instances.forEach((i) => { i.sealId = null; });
+      const params = ${JSON.stringify(instanceParams({ blend: "normal", opacity: 1, scale: 0.25, offset: "0,0" }))};
+      params["api.apply.pages"] = "2"; // HD11: page 2 only
+      sh.addInstance('page2', params);
+      sh.setSealForSelected(${JSON.stringify(sealId)});
+      await new Promise((res) => setTimeout(res, 120));
+      const applied = await sh.stampIntoPDF({ quiet: true });
+      if (!applied || !applied.assetId) return { badApply: true };
+      const px = [];
+      for (let n = 1; n <= 2; n++) {
+        await p.goTo(n);
+        await new Promise((res) => setTimeout(res, 220));
+        px.push({
+          page: n,
+          inside: Array.from(window.__autoStampOverlay.sample(40, 40, 2, 2, 'composite').data).slice(0, 3),
+          outside: Array.from(window.__autoStampOverlay.sample(400, 400, 2, 2, 'composite').data).slice(0, 3),
+        });
+      }
+      return { px, chain: sh.probe('chain') };
+    })()`
+  );
+  if (!r || r.badApply) {
+    bad("per-page 落盘失败");
+    return;
+  }
+  if (!r.px || r.px.length !== 2) {
+    bad(`per-page 取样页数 = ${r.px ? r.px.length : 0}, want 2`);
+    return;
+  }
+  const byPage = new Map(r.px.map((x) => [x.page, x]));
+  const p1 = byPage.get(1);
+  const p2 = byPage.get(2);
+  if (!isClose(p1.inside, GROUND, 6)) bad(`页 1 框内被盖住了(应不落章): ${p1.inside.join(",")}`);
+  if (!isClose(p2.inside, INK, 6)) bad(`页 2 框内没有印章色: ${p2.inside.join(",")}`);
+  if (!isClose(p1.outside, GROUND, 6)) bad(`页 1 框外被盖住: ${p1.outside.join(",")}`);
+  if (!isClose(p2.outside, GROUND, 6)) bad(`页 2 框外被盖住: ${p2.outside.join(",")}`);
+  if (!r.chain || !r.chain.apply) bad("链上没有 apply asset");
+  if (r.chain && r.chain.instances.length !== 0) bad(`落盘后实例未清空(W2): ${JSON.stringify(r.chain.instances)}`);
+  console.log("  ok 逐页落盘:pages=\"2\" 只盖第 2 页、第 1 页保持底");
+}
 // ---------- 段 3:切分 -> 落盘 -> 保存 ----------------------------------
 
 async function checkChain(app, grantId, sealId, sandbox) {
@@ -644,6 +696,11 @@ async function main() {
         sealHeight: splitSeal.srcHeight,
       });
       cmp("两页样本的 seal 纵横比来源", splitSeal.srcWidth > 0, true);
+    }
+    if (runPart("perpage")) {
+      const grant = await grantOf(app, twoPage);
+      if (!grant) throw new Error("two-page fixture 未授权");
+      await checkPerPage(app, grant, solid.sealId);
     }
     if (runPart("chain")) {
       const grant = await grantOf(app, onePage);

@@ -48,7 +48,7 @@ func NewMux(d Deps) *http.ServeMux {
 	mux.HandleFunc("GET /api/pdf/raw", handleRaw(d.Assets))
 	// P2: the seal image channel. The upload cap is its own (20 MiB), not the
 	// PDF body cap, so a stray seal upload cannot spool a document-sized body.
-	mux.Handle("POST /api/pdf/seal/prepare", http.MaxBytesHandler(handleSealPrepare(d.Assets, d.Log), maxSealBody))
+	mux.Handle("POST /api/pdf/seal/prepare", http.MaxBytesHandler(handleSealPrepare(d.Settings, d.Assets, d.Log), maxSealBody))
 	mux.HandleFunc("GET /api/pdf/seal/raw", handleSealRaw(d.Assets))
 	// P3: 自动切分. The body is a small JSON command (the split vocabulary), the
 	// bytes already live in the session store, so no upload cap is needed here.

@@ -3,6 +3,23 @@
 > `docs/UI_SPEC.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+
+## 2026-11-04 — §8 新增 HD8–HD12：顶栏印章通道 + 左下预览 + 加章模式 + 逐页落盘 + 浮动面板（侧栏两段删除）
+
+- **来源**：用户 2026-11-04 对话指令（功能调整 1–6）；HD11 是对 W4 的修订（实例 `pages` 默认 =
+  放置页，跨页实例仍 `all`），HD12 作废「叠加参数/位置与尺寸」两段的控件形态。
+- **§2**：改 3 行（`fs.pick.filter` 词表、`scale` 0.05..5.0、`pos/anchor/offset/pages` 转 `ctl=no`）
+  增 2 行（`ui.seal.addMode`、`decision.seal.recentSeals`）。
+- **§4**：删 14 键（两段控件的 ctl/hint 键 + 死键）+ 增 9 键（面板标题、开关、预览名、
+  `seal.recent.stale`、`seal.addMode.noseal` 等），270 → 265。
+- **§6**：ui-ids 删 7 增 9（`#seal-file-input`、两段 id → `#btn-seal-upload`、`#seal-recent-select`、
+  `#btn-seal-add`、`#seal-preview*`、`#instance-panel`、`#instance-reset/remove`），89 → 91。
+- **§7/§7.1**：删 `setGeomMode`；增 `setAddMode`/`openRecentSeal`/`dropRecentSeal` 与探针
+  `addMode`/`recentSeals`/`sealPreview`/`instancePanel`/`page`/`defaults`/`currentSeal`（**本轮回填**：
+  名称与返回形态按实现钉死 = `{paths, names, optionNames, optionValues}`、`{visible,w,h,name,drawn}`、
+  `{visible,left,top,w,h}`）。
+- **§8** 五行决策（选项文本 + 「用户 2026-11-04 对话指令」）；表后段落写明预览出血/面板翻转语义。
+
 ## 2026-11-04 — §8 新增 V4/V5/V6：fit 整页 + 无滚动条/Space 平移 + Ctrl+中键回 fit
 
 - **来源**：人工端到端验收轮的用户 2026-11-04 修正指令（同一轮的 ghost/滑杆两项是缺陷修复，

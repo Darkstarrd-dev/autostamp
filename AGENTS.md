@@ -279,21 +279,45 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
     溢出选中框，只露出左上部分）造成「完整印章 + 左上角副本」ghost 双绘制，已修复。
     `brightness/saturate` 复核：链路本来就分离（滑杆写 `api.apply.brightness/saturate`，
     `drawSeal` 拼 `ctx.filter`），用户感觉「两滑杆结果相同」的根因就是 ghost——修掉后差异明显。
+28. **顶栏印章装载通道（HD8/HD9，用户 2026-11-04 对话指令）**：侧栏「上传印章 PNG」按钮与
+    隐藏 `#seal-file-input` 删除。印章三来源 = ①顶栏 `#btn-seal-upload`（`fs/pick{filter:image}`
+    → `seal/prepare` JSON `{pathGrantId,…}` 形态，成功后后端 `SetRecentSeal` 记路径）②顶栏
+    `#seal-recent-select`（选项 = `settings.recentSeals` 的**去后缀**文件名，value = 完整路径；
+    选择走 `fs/pick{filePath}` → JSON 形态；`path_denied` = 文件已不存在 → 移除选项 +
+    `PATCH settings{recentSeals}` 整组替换删记录）③粘贴/拖拽的 File 对象喂 multipart（无路径，
+    不记录）。记录存既有唯一设置文件 `%APPDATA%\AutoStamp\settings.json`（不在 exe 目录新建）。
+    左列底部 `#seal-preview` = 当前选/刚打开的印章预览（`ImageBitmap` 画进 canvas，不走 CSP
+    禁区）。
+29. **加章模式 + 实例只作用放置页（HD10/HD11，用户 2026-11-04 对话指令）**：顶栏下拉右侧
+    `#btn-seal-add`（`aria-pressed` 切档，不持久化）；开启时左键点击页面空白处 =
+    `app-shell.addInstanceAt(pagePoint)`：当前印章（`state.currentSeal`）+ 点击点几何 +
+    `pages` = 当前页，新增实例并选中；点击已有实例仍是选择/拖动。实例 `pages` 默认 = 放置页
+    （W4 落盘语义不变；`crossPage` 实例开启时 `pages` 归 `all`，逐页条带语义见 §5.7）。
+30. **浮动实例参数面板（HD12，用户 2026-11-04 对话指令）**：侧栏 `panel-overlay/panel-position`
+    两段删除；`#instance-panel` 贴选中实例右侧（绝对定位在 `#preview` 内，跟随 =
+    `autostamp:param/page/lang/theme` 事件 + ResizeObserver；右侧放不下翻转左侧，两向 clamp）。
+    成员 = `api.apply.blend/opacity/brightness/saturate/scale/rotation` 六控件（`data-field`
+    契约名不变）+ `#instance-reset`（实例参数回 settings 默认组）+ `#instance-remove`。缩放滑杆
+    **0.1..2.0（10%..200%）**，拖边角/滚轮/键盘可超出且回显滑杆（落盘词表上限放宽到 0.05..5.0，
+    `sanitize` 同步）；旋转滑杆 −180..180。实例几何恒走 `anchor`(center)+`offset`（`geomMode`
+    双通道与 `pos` 控件删除，方向键步进改 `offset`）。默认参数与 `#instance-reset` 同源 =
+    `DEFAULT_PARAMS` 快照（boot 播种、每次 `applySettings` 与 `apply` 组 `persist` 成功后刷新）；
+    面板控件镜像的是选中实例，读实时控件会回显现值 → 复位必须回快照，不能读控件。
 
 ## 6. HTTP 契约（`/api/*`，全部 JSON；字段在 **P0.5 与用户确认后**才冻结，改动必须同步本文、`docs/UI_SPEC.md` 与前端）
 
 |路由|用途|
 |---|---|
 |`GET /api/health`|健康检查 + 版本号|
-|`POST /api/fs/pick`|原生文件选择器（`{filter,multi,startDir}`）或 `{"filePath":…}` 直开授权，返回 `pathGrantId`（owner 绑定，TTL）；取消回 `{cancelled:true, picks:[]}`，无选择器的平台回 501 `pick_unsupported`；`{dir:true}` 选**目录**（Windows `FolderBrowserDialog`；`{dir:true,filePath:<目录>}` = 无选择器平台的直开），回 `{dirPath, picks[]}` = 该目录**一层内**匹配的 PDF，每个带自己的 grant（批处理输入，BM1）|
+|`POST /api/fs/pick`|原生文件选择器（`{filter,multi,startDir}`；filter 词表 `pdf|image|all`，`image` = 印章图选择器，见 HD8）或 `{"filePath":…}` 直开授权，返回 `pathGrantId`（owner 绑定，TTL）；取消回 `{cancelled:true, picks:[]}`，无选择器的平台回 501 `pick_unsupported`；`{dir:true}` 选**目录**（Windows `FolderBrowserDialog`；`{dir:true,filePath:<目录>}` = 无选择器平台的直开），回 `{dirPath, picks[]}` = 该目录**一层内**匹配的 PDF，每个带自己的 grant（批处理输入，BM1）|
 |`POST /api/pdf/open`|按 `pathGrantId` 或 multipart 上传打开 PDF → `assetId` + 页元数据（页数、每页 pt 尺寸、rotation、是否含文字）|
 |`GET /api/pdf/raw?id=`|原始 PDF 字节（支持 Range/ETag），供 pdf.js 直接取|
 |`POST /api/pdf/split`|**已实现**:切分词表 `{assetId, splitMode, rows, cols, customCuts[], splitVeto, vetoPages[], splitPages}`（词表 = `UI_SPEC §2.2`；`splitVeto` 是指针,`false` 是真答案；`vetoPages` = D3 逐页否决；`splitPages` 用 pages 词表限定可切页）→ 新 `assetId`（kind `split`）+ 同形状页元数据;原资产保留即「撤销切分」的实现|
-|`POST /api/pdf/seal/prepare`|**已实现**:multipart 上传印章 PNG/生成 → `sealId` + alpha 元数据（`seal.prepare.despill/alphaTrim/resampleDpi` 词表见 `UI_SPEC §2.2`；**去背在前端**，见 §5.12 与 FACTS §1.8）。配套 `GET /api/pdf/seal/raw?id=` 只回印章字节给合成|
+|`POST /api/pdf/seal/prepare`|**已实现**：两形态靠 `Content-Type` 协商（HD8）。`multipart/form-data` = 上传印章 PNG（粘贴/拖拽/预设重喂走这条，不记路径）；`application/json` = `{pathGrantId, despill, alphaTrim, resampleDpi}`（顶栏「上传印章」/ 最近印章下拉；成功后 `config.SetRecentSeal(path)` 记录）。两形态共用 `pdfcore.PrepareSeal` → `sealId` + alpha 元数据（词表见 `UI_SPEC §2`，去背规则见 §5.12 与 FACTS §1.8）。配套 `GET /api/pdf/seal/raw?id=` 只回印章字节给合成/预览|
 |`POST /api/pdf/apply`|**已实现**:矢量落盘词表 `{assetId, instances[]}`，实例字段 `sealId/blend/opacity/scale/pos/anchor/offset/rotation/pages/crossPage/binding/startOffset`（`brightness/saturate` 仅预览，**不发送**；发送即 400）→ 新 `assetId`（kind `applied`）。实例数组是关键：一条请求写完全部实例，同一 `(blend,opacity)` 组走一次 pdfcpu pass|
 |`POST /api/pdf/export`|**已实现（P5）**：两形态靠 `Content-Type` 协商。`application/json` = vector：`{assetId, mode:"vector", pages}`，只按 pages 词表**裁页**（`all` 时原样克隆），不重编码；带 `dpi/quality` 即 400。`multipart/form-data` = raster：表单字段 `spec` 是 JSON（`{assetId, mode:"raster", dpi, quality, pages}`），每页一个文件 `page-<n>`（JPEG/PNG 字节，**页位图由前端 pdf.js 渲染回传**，服务端不 rasterize、不重编码 JPEG）→ 新 `assetId`（kind `exported`）+ `bytesPerPage`。单页图像 > 90 MiB ⇒ 400 `page_too_large`；前端按体积预估**提交前拦截**（`UI_SPEC` W6）|
 |`POST /api/pdf/save`|**已实现**:`{assetId, targetPath|pathGrantId|replaceOriginal}`（三选一，必须且只能给一个）→ `fsx.AtomicWriteFunc` 原子写盘；`replaceOriginal` 用 `tmpstore.Asset.Origin`（open/split/apply 都向前继承）；`{mkdirs:true}` 才允许创建 targetPath 的父目录（批处理 `_batch` 输出），不开时目标目录不存在仍是 400 `bad_body`，防止把文件写进一个拼错的新目录|
-|`GET /api/settings` / `PATCH /api/settings`|读全量设置；`PATCH` 走 `{"patch":{...}}` 信封（嵌套指针字段按需合并）|
+|`GET /api/settings` / `PATCH /api/settings`|读全量设置；`PATCH` 走 `{"patch":{...}}` 信封（嵌套指针字段按需合并）；`recentSeals: []RecentRef` = 最近打开的印章路径（HD8，24 条去重截断，`PATCH` 该字段整组替换 = 兜底删除记录的唯一通道）|
 |`GET /api/seal/preset`|**已实现（P6）**：列出预设 → `{"presets":[{name,imageBytes,updatedAt,params}]}`（索引 `%APPDATA%\AutoStamp\seals\presets.json`）；`params` = `apply.*` + `seal.prepare.*` 白名单，写入前已按 `apply` 词表校验并补默认（`anchor=center`、`binding=right`）|
 |`POST /api/seal/preset`|**已实现（P6）**：`{name,sealId,params}` —— 把该 seal 资产的字节**复制**成 `seals/p-<hash>.png` + 原子重写索引（`fsx.AtomicWrite`）；同名 = 覆盖（PR2）；名字空/带路径分隔符/以点或空格结尾 ⇒ 400 `preset_bad_name`；`sealId` 不在 ⇒ 404 `not_found`；不是印章资产 ⇒ 400 `kind_denied`；参数不合法 ⇒ 400 `bad_body`|
 |`DELETE /api/seal/preset?name=`|**已实现（P6）**：删索引项 + 图片文件（不存在 ⇒ 404 `preset_not_found`）|
@@ -360,7 +384,10 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
      Chromium（`tools/verify/cdp.mjs`，无 npm 依赖），沙箱化 `%APPDATA%`/`%LOCALAPPDATA%`；
      断言 console 0 error、无 404、12 状态机、深链、en/cn i18n 覆盖（含图标按钮的
      `data-i18n-title` tooltip）、窗口标题（`probe('docTitle')` = `AutoStamp <版本>`）、
-     实例增删选中复制、`/api` 往返与 `{"patch":…}` 合并。
+     印章顶栏通道 HD8–HD12 全链（`#btn-seal-upload`/`#seal-recent-select`/`#btn-seal-add`/
+     `#instance-panel`/`#seal-preview`：最近印章进 `settings.recentSeals`、不存在路径自动
+     移除记录、预览卡有像素、加章模式空白处点击落章且 `pages` = 当前页、浮动面板贴选中实例
+     右侧、复位回 settings 默认快照、删除实例后选中顺延且面板跟随）、实例增删选中复制、`/api` 往返与 `{"patch":…}` 合并。
   8. 窗口通道：`node tools/verify/webview-launch.mjs`（真窗口 + 页内 `/api` 请求）与
        `go run ./tools/verify/comprobe`（COM 返回值实测，FACTS §1.6）。
   9. P1 查看链路（P1 起常驻）：`node tools/verify/preview-smoke.mjs` — 用 CDP
@@ -388,10 +415,11 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
       断言叠加层像素 == 同一对颜色在同族渲染器里的独立 blend（±2，取印章框中部避开 AA）。
       「必须与底不同」不是断言：lighten/saturation 与这块实心底组合本来就可能等于底。
   12. P4 落盘回读（P4 起常驻）：`node tools/verify/apply-smoke.mjs`（分段令牌
-      `--only=<matrix|strip|chain|undo>`）—— `盖到 PDF` 之后用 applied 资产重新渲染：
+      `--only=<matrix|strip|perpage|chain|undo>`）—— `盖到 PDF` 之后用 applied 资产重新渲染：
       48 组（16 模式 ×{1.0,0.6,0.3}）与「同一对颜色在同族渲染器里的独立 blend」比对，
       阈值 ≤2、取印章框中部避开抗锯齿（FACTS §1.9）；骑缝落盘断逐页一条、按切分顺序
-      对应印章左右半、条带 bbox 四边 ≤1 pt；保存链断「写盘后磁盘文件再 `fs/pick`+`open`
+      对应印章左右半、条带 bbox 四边 ≤1 pt；**逐页落盘（HD11）断实例 `pages:"2"` 只盖
+      第 2 页：页 2 有印章色、页 1 保持底**；保存链断「写盘后磁盘文件再 `fs/pick`+`open`
       页数 = 切分后的页数」；撤销盖章/撤销切分断 asset 换回 + 实例恢复。取样前必须
       `preview.redraw()`（换文档后快照才重抓，见 §5.18 + FACTS §1.9 —— 这是踩过的坑）。
   13. P5 光栅导出（P5 起常驻）：`node tools/verify/export-smoke.mjs`（分段令牌
@@ -444,7 +472,8 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
 |任务|先读|涉及文件|
 |---|---|---|
 |改切分/骑缝几何|`docs/FACTS.md` §2.3 + §1.8|`internal/pdfcore/split.go`（词表含 `vetoPages`/`splitPages`）、`sealimg.go`（落盘条带）、`web/static/app-preview.js`（`drawSplitMarks` 切点预览）、`web/static/app-overlay.js`（`stripGeometryFor/stripRectsFor` 条带）、`web/static/app-shell.js`（`#split-veto` 逐页否决、`#split-undo`）|
-|改叠加层/印章通道|`docs/FACTS.md` §1.8 + §1.3 + §1.9|`web/static/app-overlay.js`（合成/affordance/滚轮/快照 `state.surface`；实例画布只作 probe 背板、不挂 DOM——单绘制契约 §5.27）、`web/static/app-seal.js`（上传/去背/撤销）、`web/static/app-shell.js`（`sealIdFor`/`restoreInstanceSeals`）、`internal/api/seal.go`|
+|改叠加层/印章通道|`docs/FACTS.md` §1.8 + §1.3 + §1.9|`web/static/app-overlay.js`（合成/affordance/滚轮/快照 `state.surface`；实例画布只作 probe 背板、不挂 DOM——单绘制契约 §5.27；加章模式点击 `addInstanceAt` §5.29）、`web/static/app-seal.js`（multipart 上传 / `prepareFromGrant` pathGrantId 形态 / 去背撤销 / 左列预览 `renderPreview`）、`web/static/app-shell.js`（`currentSeal`/最近印章下拉/浮动面板 `#instance-panel`）、`internal/api/seal.go`（两形态 + `SetRecentSeal`）|
+|改印章顶栏通道 / 实例面板（HD8–HD12）|`docs/UI_SPEC.md` §2/§4/§6/§8 HD8–HD12|`web/static/index.html`（顶栏 `#btn-seal-upload`+`#seal-recent-select`+`#btn-seal-add`、`#seal-preview`、`#instance-panel`）、`web/static/app-shell.js`、`internal/config/{types,store,patch,sanitize}.go`（`recentSeals`、scale 0.05..5）、`internal/api/seal.go`（JSON 形态）、`internal/fsx/pick.go`（`image` 过滤词）|
 |改落盘/撤销/保存|`UI_SPEC §8` W1-W4 + 本文件 §5.16/§5.17 + FACTS §1.9 §2.6|`internal/api/apply.go`、`internal/api/save.go`、`internal/pdfcore/{apply,stamp,blend,validate,pxdims,pages}.go`、`web/static/app-shell.js`（`stampIntoPDF`/`undoRoute`/`submitSave`）、`tools/verify/apply-smoke.mjs`|
 |改导出体积预估|`docs/FACTS.md` §4|`web/static/app-shell.js`（`computeEstimate/refreshEstimate`、`probe('estimate')`）|
 |改混合模式/透明度|`docs/FACTS.md` §1.2/§1.3/§2.2|`internal/pdfcore/blend.go`、`web/static/app-overlay.js`|

@@ -389,6 +389,23 @@ async function checkRealChain(app, pdfPath, sealB64) {
       })
   );
 
+  // adopt() swaps the document asynchronously; the overlay snapshot can catch
+  // the fresh canvas *before* pdf.js fills it (composite base = paper white).
+  // This race only bites when the matrix segment ran first and warmed the
+  // render path (2026-11-04). Settle the page, then re-grab the snapshot via
+  // the documented redraw chain (AGENTS §8.12: sample 前必须 preview.redraw).
+  await waitFor(
+    async () => {
+      await app.evaluate(`window.__autoStampPreview.redraw();`);
+      // the *snapshot* (page source) is what later samples read; wait on it,
+      // not on the live canvas (the old composite can answer GROUND early)
+      const px = await app.evaluate(`window.__autoStampOverlay.sample(100, 100, 2, 2, "page").data.slice(0, 3)`);
+      return Math.abs(px[0] - GROUND[0]) <= 6 && Math.abs(px[1] - GROUND[1]) <= 6 && Math.abs(px[2] - GROUND[2]) <= 6;
+    },
+    8000,
+    "chain 页面背景未渲染进快照(背景仍是纸白)"
+  );
+
   // 页面底像素:先按 §1.3 的公式自己算,再与叠加后的取样比对。A toast/repaint can
   // momentarily clear state.frame, so sampling retries instead of assuming a hit.
   const sampleOf = (expr, ms = 8000) =>

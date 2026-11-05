@@ -3,6 +3,24 @@
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+
+## 2026-11-04 — 新增 §5.28/§5.29/§5.30（HD8–HD12：印章顶栏通道、加章模式 + 逐页落盘、浮动参数面板）+ §6 三行契约 + §8.7/§8.12 断言 + §11 新行
+
+- **来源**：用户 2026-11-04 对话指令（功能调整 1–6），决策登记 = `UI_SPEC §8` HD8–HD12。
+- **§5.28**：印章装载三来源（顶栏 `fs/pick{filter:image}` + `seal/prepare` JSON `{pathGrantId}` 形态
+  记录 `settings.recentSeals`；下拉去后缀名 replay；粘贴/拖拽 multipart 无路径）+ 兜底 = `path_denied`
+  移除选项 + `PATCH settings` 整组替换。记录仍落既有 `%APPDATA%\AutoStamp\settings.json`，不在 exe 目录新建。
+- **§5.29**：`#btn-seal-add` 加章模式（`state.addMode`，不持久化；点击页面空白 = `addInstanceAt`，
+  点击点 → `anchor(center)+offset`）；实例 `pages` 默认 = 放置页（HD11，取代「所有页」语义，
+  `crossPage` 实例仍 `all`）。
+- **§5.30**：`#instance-panel` 浮动面板（贴选中实例右侧、放不下翻转）；六控件 = 混合模式/透明度/
+  明度/饱和度/缩放/旋转；缩放滑杆 0.1..2.0（落盘词表放宽 0.05..5.0）、旋转 −180..180；
+  复位/删除。**本轮后续修正**：复位与默认参数同源 = `DEFAULT_PARAMS` 快照（boot + `applySettings` +
+  `apply` 组 `persist` 刷新）——面板控件镜像选中实例，直接读控件会把现值回显，复位必须回快照。
+- **§6**：`fs/pick` filter 词表（`image` = 印章图）、`seal/prepare` 两形态协商（JSON multipart）、
+  `settings.recentSeals` 字段（24 条去重截断，`PATCH` 整组替换）。
+- **§8.7/§8.12**：shell 契约描述补 HD8–HD12 全链；`apply-smoke` 分段令牌增 `perpage`。
+
 ## 2026-11-04 — 新增 §5.27（预览视口 V4–V6 + ghost 修复）+ §8.9/§8.10 断言扩充 + §11 视口行
 
 - **新增 §5.27（预览视口契约，用户 2026-11-04 人工验收修正指令）**：fit = 整页适配

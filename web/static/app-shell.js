@@ -91,6 +91,10 @@
     applyChain: null, // previous document + instances for 撤销盖章
     vetoed: new Set(), // D3: page numbers the split must skip
     lastInfo: null, // the answer that opened the current document
+    // HD8/HD9/HD10: the seal channel - the seal everything new works with
+    // ({sealId, name, path}; null = nothing opened yet).
+    currentSeal: null,
+    addMode: false, // HD10: fresh off on every load (never persisted)
   };
 
   const escapeHtml = (s) =>
@@ -282,6 +286,9 @@
       api.patchSettings({ [group]: kv })
         .then((res) => {
           state.settings = res.settings;
+          // HD12: the persisted group doubles as the "Reset" target — keep
+          // the snapshot in step with whatever settings the server accepted.
+          if (group === "apply") captureDefaults();
           if (res.warning) toast("warn", res.warning);
         })
         .catch((e) => toast("error", `${e.code}: ${e.message}`));
@@ -310,6 +317,10 @@
         if (field && src[k] !== undefined) writeField(field, src[k]);
       }
     }
+    // HD12: the persisted apply.* group doubles as the "Reset" target —
+    // recapture the snapshot whenever settings land (boot only rewrites the
+    // controls once, so user edits of the panel never poison it).
+    captureDefaults();
   }
 
   function fieldForSetting(group, key) {
@@ -356,6 +367,10 @@
     // CP1: the strip zoom belongs to the selected instance's parameters, and
     // renderInstances runs on every parameter edit, so this keeps it live.
     renderStripPreviews();
+    // HD12: selection changes (including "the selected one was removed")
+    // run through here, so the floating panel follows in one place instead
+    // of being repositioned by every caller by hand.
+    posInstancePanel();
   }
 
   function addInstance(name, params) {
@@ -363,15 +378,19 @@
       id: state.nextInstance++,
       name: name || `Seal ${state.instances.length + 1}`,
       crossPage: Boolean(readField("api.apply.crossPage")),
-      // P2: the panel's apply-group values are this instance's parameters;
-      // settings.json only carries the group as the defaults for a new one.
+      // P2: the instance's own parameter group; settings.json only carries
+      // the group as the defaults for a new one.
       params: params || defaultParams(),
       sealId: null,
-      // U1: which position control this instance answers to. `pos` sends the
-      // page point; `anchor` sends corner + offset. The overlay keeps both in
-      // sync so one geometry shows in both boxes (UI_SPEC §8 U1).
-      geomMode: "anchor",
     };
+    // HD11: the page the instance answers to. A cross-page instance owns every
+    // page it was stamped across; a plain one starts out bound to the page it
+    // was created on (the "instantiate on current page" button, the click of
+    // add-seal mode, the boot default before any document is loaded).
+    if (inst.params["api.apply.pages"] === undefined) {
+      inst.params["api.apply.pages"] =
+        inst.crossPage || !state.file ? "all" : currentPageWord();
+    }
     state.instances.push(inst);
     state.selected = inst.id;
     renderInstances();
@@ -408,8 +427,10 @@
       crossPage: src ? src.crossPage : false,
       params: src ? { ...src.params } : defaultParams(),
       sealId: src ? src.sealId : null,
-      geomMode: src ? src.geomMode || "anchor" : "anchor",
     };
+    // HD11: the copy is placed on the page the user is looking at now; a
+    // cross-page copy keeps the full page list.
+    if (!inst.crossPage && inst.params) inst.params["api.apply.pages"] = currentPageWord();
     state.instances.push(inst);
     state.selected = inst.id;
     renderInstances();
@@ -428,10 +449,40 @@
     Object.keys(PERSIST).filter((f) => f.startsWith("api.apply.") || f === "ui.crosspage.binding")
   );
 
-  function defaultParams() {
+  // HD12: "Reset" and every new instance answer to the *default snapshot* —
+  // the panel controls mirror the selected instance (loadParams), so reading
+  // them live would echo the current values back and the button would be a
+  // no-op. The snapshot comes from boot + every applySettings round-trip.
+  let DEFAULT_PARAMS = null;
+
+  function captureDefaults() {
     const p = {};
-    for (const f of APPLY_FIELDS) p[f] = readField(f);
+    for (const f of APPLY_FIELDS) {
+      const v = readField(f);
+      if (v !== undefined) p[f] = v;
+    }
+    // HD12: the geometry channels have no controls any more (the position
+    // grid and the anchor/offset row are gone): instances always answer to
+    // `center` + offset, and the offset means "page point to stamp". The
+    // server still reads an explicit pos for the stamp-all-pages defaults,
+    // but the canvas never asks for it.
+    p["api.apply.anchor"] = "center";
+    p["api.apply.offset"] = "0,0";
+    DEFAULT_PARAMS = p;
     return p;
+  }
+
+  function defaultParams() {
+    if (DEFAULT_PARAMS) return Object.assign({}, DEFAULT_PARAMS);
+    return captureDefaults();
+  }
+
+  // currentPageWord resolves the page an instance should answer to (HD11):
+  // the page the preview shows, as the server's pages vocabulary.
+  function currentPageWord() {
+    const pv = window.__autoStampPreview;
+    const n = pv && pv.state && pv.state.page ? pv.state.page : 1;
+    return String(n);
   }
 
   function instanceById(id) {
@@ -465,48 +516,54 @@
     inst.params = inst.params || defaultParams();
     if (inst.params[field] === value) return;
     inst.params[field] = value;
-    if (field === "api.apply.crossPage") inst.crossPage = Boolean(value);
-    // U1: the page-point box and the corner+offset pair describe one geometry.
-    // Typing a point switches this instance to `pos` mode (the offset box then
-    // means nothing, so it resets to "0,0" and the point the user typed is
-    // where the box starts); every other position edit - corner, offset, drag,
-    // corner-handle, wheel, rotation - answers to `anchor`, and the point box
-    // is recomputed from the canvas box so both boxes stay truthful.
-    if (field === "api.apply.pos") {
-      inst.geomMode = "pos";
-      inst.params["api.apply.offset"] = "0,0";
-      writeField("api.apply.offset", "0,0");
-    } else if (field === "api.apply.anchor" || field === "api.apply.offset") {
-      inst.geomMode = "anchor";
+    if (field === "api.apply.crossPage") {
+      inst.crossPage = Boolean(value);
+      // CP1/HD11: a cross-page stamp spans every page it lands on; a plain
+      // stamp stays with the page it was created on.
+      if (value) inst.params["api.apply.pages"] = "all";
     }
-    if (inst.geomMode === "anchor") syncPosBox(inst);
     renderInstances();
     notify("autostamp:param", { field, value, instance: inst.id });
   }
 
-  // syncPosBox mirrors the canvas box into the page-point box. The overlay owns
-  // the geometry (anchor + offset + scale + seal aspect), so the shell asks it
-  // for the rect instead of re-deriving the corners here.
-  function syncPosBox(inst) {
-    const ov = window.__autoStampOverlay;
-    if (!ov || !ov.rectFor) return;
-    const box = ov.rectFor(inst);
-    if (!box) return;
-    const v = `${box.x.toFixed(2)},${box.y.toFixed(2)}`;
-    inst.params["api.apply.pos"] = v;
-    writeField("api.apply.pos", v);
-  }
-
-  // setParam is the drag/keyboard route: it writes the control (so the panel
-  // shows the truth) and the change events run, which feeds syncInstanceParam
-  // and the settings persist timer exactly like a real edit.
+  // setParam is the drag/keyboard route. Controls that exist (the floating
+  // panel's blend/opacity/... sliders) answer through the change events, so
+  // the settings persist timer and syncInstanceParam run exactly like a real
+  // edit. Geometry channels that lost their controls in HD12 (offset, and
+  // the retired pos) live on the instance itself.
   function setParam(field, value) {
+    const els = fieldEls(field);
+    if (!els.length) {
+      const inst = selectedInstance();
+      if (!inst) return undefined;
+      inst.params = inst.params || defaultParams();
+      inst.params[field] = value;
+      if (field === "api.apply.crossPage") inst.crossPage = Boolean(value);
+      renderInstances();
+      notify("autostamp:param", { field, value, instance: inst.id });
+      return value;
+    }
+    if (field === "api.apply.scale") growScaleSliders(Number(value));
     writeField(field, value);
-    fieldEls(field).forEach((el) => {
+    els.forEach((el) => {
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
     });
     return readField(field);
+  }
+
+  // HD12: the scale slider's stated range is 10%..200%, but a corner drag or
+  // the keyboard/wheel routes can push past 200%. A range input clamps the
+  // value to its max, so the slider is stretched (up to the vocabulary's 5)
+  // before the value is written - that is how an overshoot shows on the
+  // slider instead of being hidden behind it.
+  function growScaleSliders(value) {
+    if (!Number.isFinite(value)) return;
+    fieldEls("api.apply.scale").forEach((el) => {
+      if (el.type !== "range") return;
+      const need = Math.min(5, Math.max(2, value));
+      if (Number(el.max) < need) el.max = String(+need.toFixed(2));
+    });
   }
 
   function setSealForSelected(sealId) {
@@ -517,6 +574,217 @@
     notify("autostamp:seal", { instance: inst.id, sealId });
     return inst.id;
   }
+  // ---------- HD8/HD9/HD10: the header seal channel ----------
+  //
+  // The header's upload button picks a seal image with the native dialog, the
+  // dropdown replays an entry from settings.recentSeals, and a stale entry is
+  // dropped from both the menu and the settings file (the picker stats the
+  // path first, so the 404 is the server's, not a guess).
+
+  function baseName(path) {
+    const part = String(path || "").split(/[\\/]/).pop() || "";
+    const dot = part.lastIndexOf(".");
+    return dot > 0 ? part.slice(0, dot) : part;
+  }
+
+  function setCurrentSeal(sealId, name, path) {
+    state.currentSeal = sealId ? { sealId, name: name || "", path: path || "" } : null;
+    const sv = window.__autoStampSeal;
+    if (sv && sv.renderPreview) sv.renderPreview();
+    notify("autostamp:seal", { sealId });
+    return state.currentSeal;
+  }
+
+  // HD10: the toggle. Stage gets a data hook so style.css can show a copy
+  // cursor; the button answers to the usual aria-pressed pair.
+  function setAddMode(on) {
+    state.addMode = Boolean(on);
+    const btn = q("#btn-seal-add");
+    if (btn) btn.setAttribute("aria-pressed", String(state.addMode));
+    const stage = q("#preview-stage");
+    if (stage) stage.dataset.add = state.addMode ? "on" : "off";
+    return state.addMode;
+  }
+
+  // HD10+HD11: clicking the page drops the current seal centered on that
+  // point, stamped only on the page it was clicked on.
+  function addInstanceAt(pt) {
+    if (!state.file || !pt) return null;
+    const seal = state.currentSeal;
+    if (!seal || !seal.sealId) {
+      toast("warn", t("seal.addMode.noseal"));
+      return null;
+    }
+    const page = Number(currentPageWord());
+    const dims = (state.file.pages || [])[page - 1] || { width: 0, height: 0 };
+    const params = Object.assign(defaultParams(), {
+      // anchor=center: the offset moves from the page centre, so the click
+      // point turns into the offset that centers the box on it.
+      "api.apply.offset": `${Math.round(pt.x - dims.width / 2)},${Math.round(pt.y - dims.height / 2)}`,
+      "api.apply.pages": String(page),
+    });
+    const id = addInstance(null, params);
+    const inst = instanceById(id);
+    if (inst) inst.sealId = seal.sealId;
+    renderInstances();
+    notify("autostamp:seal", { instance: id, sealId: seal.sealId });
+    return id;
+  }
+
+  function renderRecentSeals() {
+    const sel = q("#seal-recent-select");
+    if (!sel) return [];
+    const list = (state.settings && state.settings.recentSeals) || [];
+    const prev = sel.value;
+    sel.textContent = "";
+    const blank = doc.createElement("option");
+    blank.value = "";
+    sel.append(blank);
+    for (const r of list) {
+      const opt = doc.createElement("option");
+      opt.value = r.path;
+      // HD8: the menu shows the name without the extension; the full path is
+      // the entry's meaning and rides the tooltip.
+      opt.textContent = baseName(r.path);
+      opt.title = r.path;
+      sel.append(opt);
+    }
+    if (Array.from(sel.options).some((o) => o.value === prev)) sel.value = prev;
+    return list.map((r) => r.path);
+  }
+
+  async function pickSealUpload() {
+    let picked;
+    try {
+      picked = await api.pick({ filter: "image" });
+    } catch (e) {
+      toast("error", `${e.code}: ${e.message}`);
+      return null;
+    }
+    if (!picked || picked.cancelled || !picked.picks || !picked.picks.length) return null;
+    const p = picked.picks[0];
+    return openSealByGrant(p.pathGrantId, p.path);
+  }
+
+  async function openRecentSeal(path) {
+    if (!path) return null;
+    try {
+      // The typed-path grant channel stats the file on the way in (AGENTS
+      // §6 fs/pick filePath branch), so a deleted file fails here with
+      // path_denied rather than at prepare time.
+      const picked = await api.pick({ filePath: path, filter: "image" });
+      if (!picked.picks || !picked.picks.length) throw Object.assign(new Error("gone"), { code: "path_denied" });
+      const p = picked.picks[0];
+      return await openSealByGrant(p.pathGrantId, p.path || path);
+    } catch (e) {
+      if (e && e.code === "path_denied") {
+        // The documented fallback: drop the entry from the menu and the
+        // settings record, without asking the user.
+        dropRecentSeal(path);
+        toast("warn", t("seal.recent.stale"));
+        const sel = q("#seal-recent-select");
+        if (sel) sel.value = "";
+        return null;
+      }
+      toast("error", `${e.code || "seal_open"}: ${e.message || String(e)}`);
+      return null;
+    }
+  }
+
+  async function openSealByGrant(pathGrantId, path) {
+    const seal = window.__autoStampSeal;
+    if (!seal || !seal.prepareFromGrant) return null;
+    try {
+      const meta = await seal.prepareFromGrant(pathGrantId, path);
+      setCurrentSeal(meta.sealId, baseName(path), path);
+      // The upload semantics stay (UI_SPEC §8 D4): the seal goes to the
+      // selected instance, exactly like a dropped/pasted image.
+      setSealForSelected(meta.sealId);
+      toast("ok", t("seal.ok"));
+      await refreshSettings();
+      return meta;
+    } catch (e) {
+      if (e && e.code === "path_denied") {
+        dropRecentSeal(path);
+        toast("warn", t("seal.recent.stale"));
+        return null;
+      }
+      toast("error", `${e.code || "seal_prepare"}: ${e.message}`);
+      return null;
+    }
+  }
+
+  // The server records recentSeals on its own (seal/prepare grant branch), so
+  // after every open the local copy is refetched - no duplicate bookkeeping.
+  async function refreshSettings() {
+    try {
+      const res = await api.settings();
+      state.settings = res.settings;
+      renderRecentSeals();
+    } catch (e) {
+      // keep the local list; the next open tries again
+    }
+  }
+
+  // The only settings channel the removal needs: replace the whole group
+  // (AGENTS §6, PERSIST semantics).
+  function dropRecentSeal(path) {
+    const list = ((state.settings && state.settings.recentSeals) || []).filter((r) => r.path !== path);
+    state.settings = state.settings || {};
+    state.settings.recentSeals = list;
+    renderRecentSeals();
+    api.patchSettings({ recentSeals: list }).catch((e) => toast("error", `${e.code}: ${e.message}`));
+    return list;
+  }
+
+  // HD12: the floating parameter panel answers to the selected instance. It
+  // sits beside the box inside the preview column and flips sides when the
+  // right edge runs out of room.
+  function posInstancePanel() {
+    const panel = q("#instance-panel");
+    if (!panel) return null;
+    const inst = selectedInstance();
+    const ov = window.__autoStampOverlay;
+    if (!inst || !ov || !state.file) {
+      panel.hidden = true;
+      return null;
+    }
+    const rect = ov.state.rects.get(inst.id);
+    const cvRect = ov.probe("canvasRect");
+    if (!rect || !cvRect || !ov.state.scale) {
+      panel.hidden = true;
+      return null;
+    }
+    panel.hidden = false;
+    const anchorBox = q("#preview").getBoundingClientRect();
+    const sc = ov.state.scale;
+    const x = cvRect.left + rect.x * sc;
+    const y = cvRect.top + rect.y * sc;
+    const w = rect.w * sc;
+    const h = rect.h * sc;
+    const pw = panel.offsetWidth || 236;
+    const ph = panel.offsetHeight || 220;
+    let left = x + w + 10;
+    if (left + pw > anchorBox.right - 8) left = x - pw - 10;
+    left = Math.max(anchorBox.left + 4, Math.min(left, anchorBox.right - pw - 4));
+    let top = y + h / 2 - ph / 2;
+    top = Math.max(anchorBox.top + 4, Math.min(top, anchorBox.bottom - ph - 4));
+    panel.style.left = `${Math.round(left - anchorBox.left)}px`;
+    panel.style.top = `${Math.round(top - anchorBox.top)}px`;
+    return { left: panel.style.left, top: panel.style.top };
+  }
+
+  // The panel's reset button: defaults from the panel group + HD11's current
+  // page, exactly like a freshly placed instance.
+  function resetInstanceParams() {
+    const inst = selectedInstance();
+    if (!inst) return null;
+    inst.params = defaultParams();
+    inst.params["api.apply.pages"] = inst.crossPage ? "all" : currentPageWord();
+    loadParams(inst);
+    renderInstances();
+    return inst.id;
+  }
 
   // ---------- shortcuts (UI_SPEC §5) ----------
 
@@ -524,6 +792,7 @@
     ["Ctrl+O / Ctrl+S", "open.hint", "save.hint"],
     ["Ctrl+V / 拖入", "load.paste.hint"],
     ["Ctrl+D / Del", "instances.duplicate.btn", "instances.delete.btn"],
+    ["加章模式: 左键页面点击", "app.sealAddMode.btn"],
     ["←↑↓→", "nudge.hint"],
     ["+ / −", "scale.hint"],
     ["1..9 / PgUp/PgDn", "page.hint"],
@@ -563,15 +832,22 @@
     const step = shift ? 10 : 1;
     const delta = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[key];
     if (!delta) return false;
-    // The keyboard route goes through setParam so the value lands in the
-    // selected instance *and* the panel control stays the truth (P2).
-    const [x, y] = parsePos(readField("api.apply.pos"));
-    return setParam("api.apply.pos", `${x + delta[0]},${y + delta[1]}`);
+    // HD12: the pos box is gone; the keyboard moves the instance through its
+    // offset channel (offset = page point under the center anchor).
+    const inst = selectedInstance();
+    if (!inst) return false;
+    const [x, y] = parsePos((inst.params || {})["api.apply.offset"]);
+    return setParam("api.apply.offset", `${Math.round(x + delta[0])},${Math.round(y + delta[1])}`);
   }
 
   function bumpScale(dir) {
-    const v = Number(readField("api.apply.scale")) || 0;
-    const next = Math.max(0.05, Math.min(0.9, +(v + dir * 0.01).toFixed(2)));
+    // The keyboard route reads the *instance's* current value (the panel
+    // controls mirror it), and HD12 raised the ceiling from 0.9 to 5 for the
+    // same reason the corner drag keeps working past 200%.
+    const inst = selectedInstance();
+    const cur = inst ? Number(inst.params && inst.params["api.apply.scale"]) : NaN;
+    const v = Number.isFinite(cur) && cur ? cur : Number(readField("api.apply.scale")) || 0.202;
+    const next = Math.max(0.05, Math.min(5, +(v + dir * 0.01).toFixed(4)));
     return setParam("api.apply.scale", next);
   }
 
@@ -687,7 +963,13 @@
       if (el.type === "checkbox") {
         el.addEventListener("change", () => {
           if (name === "api.apply.crossPage") {
-            state.instances.forEach((i) => { i.crossPage = el.checked; });
+            // HD11: a stamp that turns cross-page spans every page; a stamp
+            // that turns it off lands on the page the user is looking at.
+            state.instances.forEach((i) => {
+              i.crossPage = el.checked;
+              i.params = i.params || defaultParams();
+              i.params["api.apply.pages"] = el.checked ? "all" : currentPageWord();
+            });
             renderInstances();
             setState(el.checked ? "crosspage" : "opened");
           }
@@ -705,20 +987,28 @@
 
     bindSegment("lang-seg", "ui.lang", (v) => applyLang(v));
     bindSegment("theme-seg", "ui.theme", (v) => applyTheme(v));
-    bindSegment("apply-anchor", "api.apply.anchor", (v) => persist("apply", { anchor: v }));
+
     bindSegment("split-mode", "ui.split.mode", (v) => persist("split", { mode: v }));
     bindSegment("export-mode", "api.export.mode", (v) => { persist("export", { mode: v }); refreshEstimate(); });
     bindSegment("export-dpi", "api.export.dpi", (v) => { persist("export", { dpi: v }); refreshEstimate(); });
     bindSegment("crosspage-binding", "ui.crosspage.binding", (v) => {
       if (v === "none") {
         writeField("api.apply.crossPage", false);
-        state.instances.forEach((i) => { i.crossPage = false; });
+        state.instances.forEach((i) => {
+          i.crossPage = false;
+          i.params = i.params || defaultParams();
+          i.params["api.apply.pages"] = currentPageWord(); // HD11
+        });
         renderInstances();
         setState("opened");
         toast("warn", t("crosspage.binding.fixed"));
       } else {
         writeField("api.apply.crossPage", true);
-        state.instances.forEach((i) => { i.crossPage = true; });
+        state.instances.forEach((i) => {
+          i.crossPage = true;
+          i.params = i.params || defaultParams();
+          i.params["api.apply.pages"] = "all"; // HD11/CP1
+        });
         renderInstances();
         setState("crosspage");
       }
@@ -728,11 +1018,14 @@
     q("#instance-add").addEventListener("click", () => addInstance());
     q("#instance-duplicate").addEventListener("click", () => duplicateSelected());
     q("#instance-delete").addEventListener("click", () => deleteSelected());
-    q("#pos-center").addEventListener("click", () => {
-      writeField("api.apply.anchor", "center");
-      qa("#apply-anchor button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.value === "center")));
-      persist("apply", { anchor: "center" });
-    });
+    // HD12: the floating panel's own actions (复位 = defaults + current page,
+    // 删除 = this instance only).
+    q("#instance-reset").addEventListener("click", () => resetInstanceParams());
+    q("#instance-remove").addEventListener("click", () => deleteSelected());
+    // HD8/HD10: the header seal channel + the add-seal-mode toggle.
+    q("#btn-seal-upload").addEventListener("click", () => pickSealUpload());
+    q("#seal-recent-select").addEventListener("change", (e) => openRecentSeal(e.target.value));
+    q("#btn-seal-add").addEventListener("click", () => setAddMode(!state.addMode));
 
     // modal wiring (decision S1)
     q("#save-open").addEventListener("click", () => { setModal("save-modal"); setState("save-confirm"); });
@@ -832,6 +1125,14 @@
     q("#save-pick").addEventListener("click", () => pickSaveTarget());
     q("#modal-layer .scrim").addEventListener("click", () => setModal(null));
     doc.addEventListener("keydown", onKey);
+    // HD12: the floating panel tracks whatever moves the instance box -
+    // every event that repaints the overlay, plus the stage's own scroll
+    // (V5 panning) and window resizes.
+    ["autostamp:param", "autostamp:seal", "autostamp:instance", "autostamp:page", "autostamp:lang"].forEach(
+      (name) => doc.addEventListener(name, () => posInstancePanel()),
+    );
+    q("#preview-stage").addEventListener("scroll", () => posInstancePanel(), { passive: true });
+    window.addEventListener("resize", () => posInstancePanel());
   }
 
   function queuePersist(name) {
@@ -1613,11 +1914,11 @@
           entry.binding = p["ui.crosspage.binding"] !== undefined ? p["ui.crosspage.binding"] : readField("ui.crosspage.binding");
           entry.startOffset = numAt(p, "api.apply.startOffset", "api.apply.startOffset");
         }
-        if (i.geomMode === "pos") entry.pos = p["api.apply.pos"] !== undefined ? p["api.apply.pos"] : readField("api.apply.pos");
-        else {
-          entry.anchor = p["api.apply.anchor"] !== undefined ? p["api.apply.anchor"] : readField("api.apply.anchor");
-          entry.offset = p["api.apply.offset"] !== undefined ? p["api.apply.offset"] : readField("api.apply.offset");
-        }
+        // HD12: one geometry channel for the canvas: anchor + offset (the
+        // pos box never existed for instances any more, and the server's pos
+        // precedence stays available for the stamp-all-pages defaults).
+        entry.anchor = p["api.apply.anchor"] !== undefined ? p["api.apply.anchor"] : readField("api.apply.anchor");
+        entry.offset = p["api.apply.offset"] !== undefined ? p["api.apply.offset"] : readField("api.apply.offset");
         return entry;
       });
   }
@@ -1652,7 +1953,7 @@
     state.applyChain = {
       info: state.lastInfo,
       instances: state.instances.map((i) => ({
-        id: i.id, name: i.name, sealId: i.sealId, crossPage: i.crossPage, geomMode: i.geomMode,
+        id: i.id, name: i.name, sealId: i.sealId, crossPage: i.crossPage,
         params: { ...(i.params || {}) },
       })),
       selected: state.selected,
@@ -1814,6 +2115,9 @@
       .then((res) => {
         state.settings = res.settings;
         applySettings(res.settings);
+        // HD8: the recent-seal menu comes straight from the settings record.
+        renderRecentSeals();
+        setAddMode(false); // HD10: every load starts with the mode off
         if (res.warning) toast("warn", res.warning);
       })
       .catch((e) => toast("error", `${e.code}: ${e.message}`));
@@ -1897,7 +2201,7 @@
           spreadPages: spreadPages(),
           instances: state.instances.map((i) => ({
             id: i.id, sealId: i.sealId || null,
-            geomMode: i.geomMode || "anchor", crossPage: Boolean(i.crossPage),
+            crossPage: Boolean(i.crossPage),
           })),
           stampBody: stampBodyOf(),
           splitBody: splitBodyOf(),
@@ -1927,6 +2231,50 @@
       case "load":
         // PD1/PD2 load-gate readout: what the last paste/drop decided.
         return loadLog;
+      case "page":
+        return Number(currentPageWord());
+      case "addMode":
+        return state.addMode;
+      case "defaults":
+        return DEFAULT_PARAMS ? { ...DEFAULT_PARAMS } : captureDefaults();
+      case "currentSeal":
+        return state.currentSeal ? { ...state.currentSeal } : null;
+      case "recentSeals": {
+        // The menu the user sees + the record they did not (UI_SPEC §8 HD8):
+        // option labels carry the name without the extension, while the full
+        // path list is what settings.recentSeals keeps.
+        const sel = q("#seal-recent-select");
+        const list = (state.settings && state.settings.recentSeals) || [];
+        return {
+          paths: list.map((r) => r.path),
+          names: list.map((r) => baseName(r.path)),
+          optionNames: sel ? Array.from(sel.options).filter((o) => o.value).map((o) => o.textContent) : [],
+          optionValues: sel ? Array.from(sel.options).filter((o) => o.value).map((o) => o.value) : [],
+        };
+      }
+      case "sealPreview": {
+        const card = q("#seal-preview");
+        const cv = q("#seal-preview-canvas");
+        const nm = q("#seal-preview-name");
+        return {
+          visible: Boolean(card && !card.hidden),
+          w: cv ? cv.width : 0,
+          h: cv ? cv.height : 0,
+          name: nm ? nm.textContent : "",
+          drawn: cv ? Boolean(cv.width > 0) : false,
+        };
+      }
+      case "instancePanel": {
+        const panel = q("#instance-panel");
+        const r = panel ? panel.getBoundingClientRect() : null;
+        return {
+          visible: Boolean(panel && !panel.hidden),
+          left: r ? Math.round(r.left) : 0,
+          top: r ? Math.round(r.top) : 0,
+          w: r ? Math.round(r.width) : 0,
+          h: r ? Math.round(r.height) : 0,
+        };
+      }
       default:
         throw new Error(`unknown probe: ${name}`);
     }
@@ -1973,13 +2321,11 @@
       renderVetoChips();
       return [...state.vetoed];
     },
-    setGeomMode: (id, mode) => {
-      const inst = instanceById(id);
-      if (!inst) return null;
-      inst.geomMode = mode === "pos" ? "pos" : "anchor";
-      if (inst.geomMode === "anchor") syncPosBox(inst);
-      return inst.geomMode;
-    },
+    // HD8/HD10/HD12: the header seal channel + the floating panel surface.
+    // The scripts drive the same functions the buttons wire.
+    setCurrentSeal, setAddMode, addInstanceAt, pickSealUpload, openRecentSeal,
+    dropRecentSeal, renderRecentSeals, resetInstanceParams, posInstancePanel,
+    currentPageWord,
   };
 
   if (doc.readyState === "loading") doc.addEventListener("DOMContentLoaded", boot);
