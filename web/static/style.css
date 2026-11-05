@@ -306,7 +306,18 @@ html[data-state="empty"] #stamp-layer { display: none; }
   padding: 8px; display: flex; flex-direction: column; gap: 6px;
 }
 #instance-panel[hidden] { display: none; }
-#instance-panel .ip-title { font-weight: 600; }
+/* HD18: title row = label + minimize button (the panel's own corner). */
+#instance-panel .ip-title { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-weight: 600; }
+#instance-collapse.ip-min { padding: 0; width: 22px; height: 22px; flex: none; }
+/* HD18: the collapsed panel is one square rounded gear button, same anchor. */
+#instance-fab {
+  position: absolute; z-index: 6; width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: var(--shadow); cursor: pointer; color: var(--fg);
+}
+#instance-fab[hidden] { display: none; }
+#instance-fab:hover { border-color: var(--accent); }
 #instance-panel .flabel { font: var(--mono); font-size: 11px; color: var(--muted); }
 #instance-panel .num-pair input[type="range"] { flex: 1; min-width: 0; }
 #instance-panel .num-pair input[type="number"] { width: 56px; }

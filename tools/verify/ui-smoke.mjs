@@ -231,7 +231,11 @@ async function main() {
       out.staleToast = document.documentElement.getAttribute("data-toast") === "true" &&
         (tt.textContent || "").indexOf("no longer exists") >= 0;
       m.clearToast();
+      out.panel0 = m.probe("instancePanel");
+      m.q("#instance-fab").click();
       out.panel = m.probe("instancePanel");
+      m.q("#instance-collapse").click();
+      out.panelBack = m.probe("instancePanel");
       out.preview = m.probe("sealPreview");
       out.consoleBefore = m.probe("console");
       m.q("#btn-console").click();
@@ -254,8 +258,11 @@ async function main() {
     bad("HD8: dropdown values must carry the full path: " + seals.recent.paths.join(" | "));
   cmp("HD8: choosing a deleted file removes the entry + settings record",
     [seals.staleRemoved, seals.staleToast], [true, true]);
-  cmp("HD12: floating panel shows the selected instance's parameters",
-    [seals.panel.visible, seals.panel.hasControls], [true, true]);
+  cmp("HD18/HD12: gear fab opens the panel (params there), minimize collapses again",
+    [seals.panel0.collapsed, seals.panel0.fabVisible, seals.panel0.visible,
+      seals.panel.visible, seals.panel.hasControls,
+      seals.panelBack.collapsed, seals.panelBack.visible],
+    [true, true, false, true, true, true, false]);
   cmp("HD9: bottom-left seal preview paints the current seal",
     [seals.preview.visible, seals.preview.painted, Boolean(seals.preview.name)], [true, true, true]);
   cmp("HD16: the mock toggle flips panel visibility with the aria-pressed pair",

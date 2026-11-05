@@ -191,7 +191,7 @@ async function sealPresetViaUI(app, json, pngB64, name) {
     for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
     const file = new File([buf], ${JSON.stringify(name + ".png")}, { type: "image/png" });
     const meta = await window.__autoStampSeal.prepare(file);
-    window.__autoStampShell.setSealForSelected(meta.sealId);
+    window.__autoStampShell.setCurrentSeal(meta.sealId, name + ".png");
     const nameInput = document.querySelector("#seal-preset-name");
     nameInput.value = ${JSON.stringify(name)};
     nameInput.dispatchEvent(new Event("input", { bubbles: true }));

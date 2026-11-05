@@ -240,8 +240,8 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
     `submitFiles(files, via)` 是唯一装载漏斗 —— 接受条件只有两种：
     **单个 PDF**（`handleFiles` → multipart `pdf/open` → `adopt`，与窗口级拖放同一条链；启动页的
     「打开文件」走 `fs/pick` grant，见 §5.25）或
-    **一张/多张图片**（逐个 `seal/prepare`；单张设给选中实例，多张=第一张给选中实例 +
-    其余每张**新增实例**按文件名命名；空态无文档只 prepare 不指派）。多个 PDF、PDF+图片混拼、
+    **一张/多张图片**（逐个 `seal/prepare`，只设置当前印章——2026-11-05 HD17 起作废
+    「设给选中实例 / 其余新增实例」语义，见 §5.33；空态同样只 prepare 不指派）。多个 PDF、PDF+图片混拼、
     其它类型一律 toast 告警不装载。粘贴：焦点在输入框且含 `text/plain` 时放行（路径框语义）；
     拖拽：`dataTransfer` 不含 `Files` 不 `preventDefault`（文本拖拽不被劫持）。无新路由、无新字段。
 24. **顶栏契约（HD1/HD2/HD3 + HD5，用户 2026-11-03/11-04 对话指令）**：顶栏**没有任何文本**，
@@ -314,6 +314,20 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
     `console.WithRing` 在 stderr 与环上扇出），仅面板可见时 1.5s 轮询（seq 增量，打开时
     从 0 起 = 本次运行全量）。可见性持久化 = `config.UI.ConsoleVisible`
     （`settings.ui.consoleVisible`，默认 false = 隐藏；`PATCH` 整组走既有通道）。
+33. **装载绝不放置实例 + 实例可全删（HD17，用户 2026-11-05 对话指令；修订 §5.23 的
+    「图片设给选中实例 / 其余新增实例」半边）**：所有装载通道（顶栏上传 / 最近下拉 /
+    粘贴 / 拖拽图片）只跑 `seal/prepare` 并设置**当前印章**（预览卡 + 下拉同步），
+    不新增、不改写任何实例——`setSealForSelected` 只作为 verify 脚本的驱动 API 存在，
+    UI 侧不再自动调用。实例创建唯一通道 = 加章模式点击（§5.29）与侧栏「新增实例」
+    按钮：两者都在创建时**快照 `state.currentSeal`**（无当前印章则 `sealId=null`），
+    `pages` = 当前页。删除保护废除（`instances.err.last` i18n 键删除）：`deleteSelected`
+    可删到零 = `selected:null` + 状态 `opened`；boot 不再预置「Seal 1」默认实例。
+34. **实例参数面板默认收起成齿轮按钮（HD18，用户 2026-11-05 对话指令）**：面板标题栏
+    右侧 `#instance-collapse`（minus 图标）收起 ↔ `#instance-fab`（方形圆角 36px 齿轮
+    SVG）展开；`state.panelCollapsed` 默认 `true`（会话态，不进 settings）；收起时齿轮
+    按钮与面板走同一条 `posInstancePanel` 锚点链（选中实例框右侧、翻转/clamp 不变）。
+    probe `instancePanel` 返回 `{visible, collapsed, fabVisible, left, top, w, h}`
+    （尺寸 = 当前可见面的读数）。
 
 
 ## 6. HTTP 契约（`/api/*`，全部 JSON；字段在 **P0.5 与用户确认后**才冻结，改动必须同步本文、`docs/UI_SPEC.md` 与前端）
@@ -397,13 +411,16 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
      Chromium（`tools/verify/cdp.mjs`，无 npm 依赖），沙箱化 `%APPDATA%`/`%LOCALAPPDATA%`；
      断言 console 0 error、无 404、12 状态机、深链、en/cn i18n 覆盖（含图标按钮的
      `data-i18n-title` tooltip）、窗口标题（`probe('docTitle')` = `AutoStamp <版本>`）、
-    印章顶栏通道 HD8–HD16 全链（`#btn-seal-upload`/`#seal-recent-select`/`#btn-seal-add`/
-    `#instance-panel`/`#seal-preview`/`#btn-console`/`#log-console`：最近印章进
+    印章顶栏通道 HD8–HD18 全链（`#btn-seal-upload`/`#seal-recent-select`/`#btn-seal-add`/
+    `#instance-panel`/`#seal-preview`/`#btn-console`/`#log-console`/`#instance-fab`/
+    `#instance-collapse`：最近印章进
     `settings.recentSeals`、不存在路径自动移除记录、预览卡有像素且为左下角 overlay、
     加章模式空白处点击落章且 `pages` = 当前页、浮动面板贴选中实例右侧、复位回 settings
     默认快照、删除实例后选中顺延且面板跟随、打开印章自动成为下拉当前选项、顶栏控件同高
-    34px、后端终端开关开面板 + 日志非空 + `ui.consoleVisible` 持久化）、实例增删选中复制、
-    `/api` 往返与 `{"patch":…}` 合并。
+    34px、后端终端开关开面板 + 日志非空 + `ui.consoleVisible` 持久化、**HD17 装载不动实例
+    （上传 / 下拉 / 拖拽只设当前印章）+ 实例可全删到零 + boot 无预置实例 + 新建实例快照
+    当前印章 + HD18 齿轮 `#instance-fab` ↔ `#instance-collapse` 收起/展开往返**）、
+    实例增删选中复制、`/api` 往返与 `{"patch":…}` 合并。
   8. 窗口通道：`node tools/verify/webview-launch.mjs`（真窗口 + 页内 `/api` 请求）与
        `go run ./tools/verify/comprobe`（COM 返回值实测，FACTS §1.6）。
   9. P1 查看链路（P1 起常驻）：`node tools/verify/preview-smoke.mjs` — 用 CDP
@@ -500,6 +517,7 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
 |改粘贴/拖拽装载|`UI_SPEC §8` PD1/PD2 + 本文件 §5.23/§5.25（无新路由/新字段）|`web/static/app-shell.js`（`submitFiles`/`classifyLoad`/paste/dragover/drop/`state.loadLog`）、`web/static/index.html`（`#drop-hint`；装载入口 = `#empty-pick` + `#empty-path` 回车，无隐藏 `file-input`）、`web/static/style.css`（`[data-drag]`+`#drop-hint`）、`web/static/app-seal.js`（图片经 `seal/prepare`）、`tools/verify/shell-smoke.mjs`（装载断言）|
 |改预览渲染/视口（fit、平移、fit 复位）|`UI_SPEC §8` V4–V6 + 本文件 §5.27 + `docs/FACTS.md` §1|`web/static/app-preview.js`（`fitZoom/stageHeight`、`bindPan`、`probe('pan')`、`panStage`）、`web/static/style.css`（`#preview-stage` `overflow: hidden` + `[data-pan]` cursor）、`tools/verify/preview-smoke.mjs`（fit/平移/fit 复位断言）、`web/static/vendor/pdfjs/`|
 |预览卡 overlay / 下拉当前选项 / 顶栏高度 / 后端终端|`UI_SPEC §8` HD13–HD16 + 本文件 §5.31/§5.32|`web/static/style.css`（`#seal-preview`/`#log-console` overlay 定位 + 顶栏 34px 高度组）、`web/static/index.html`（`#btn-console` + `#log-console`）、`web/static/app-shell.js`（`renderRecentSeals` 当前选项 + `CURRENT_MARK`、`setConsoleVisible`/`pollLogs`、`probe('console')`）、`internal/console/ring.go`（`LogRing` + `WithRing`）、`internal/api/logs.go`、`main.go`（ring 播种）、`internal/config/{types,patch}.go`（`ui.consoleVisible`）、`tools/verify/shell-smoke.mjs`（HD13–HD16 断言）|
+|装载只设当前印章 / 实例全删 / 面板收起（HD17/HD18）|`UI_SPEC §8` HD17/HD18 + 本文件 §5.33/§5.34|`web/static/app-shell.js`（`loadSeals` 只 prepare、`addInstance` 快照 `currentSeal`、`deleteSelected` 删到零、boot 无预置、`panelCollapsed` + `posInstancePanel` 双面锚点、probe `instancePanel`）、`web/static/index.html`（`ip-title` 行 + `#instance-collapse` + `#instance-fab`）、`web/static/style.css`（fab 组）、`web/static/app-seal.js`（upload/revert 不指派）、`docs/ui/mockup.html`（同形镜像）、`tools/verify/shell-smoke.mjs`（HD17/HD18 断言）|
 |新增路由|本文件 §6|`internal/api/register.go`、`web/static/app-api.js`|
 |窗口/端口/浏览器回退|本文件 §5|`host_webview_windows.go`、`internal/app/`|
 |改 UI 契约 / 参数词表 / 顶栏形态|`docs/UI_SPEC.md`（§2 词表、§4 i18n 键表、§6 契约 id、§7 驱动接口、§8 决策表含 HD1–HD16）+ 本文件 §6 + `IMPLEMENTATION_PLAN.md` P0.5|`docs/ui/mockup.html`、`web/static/index.html`（面板标记 + `data-field` + 图标按钮的 `data-i18n-title`；顶栏无文本，启动页入口 = `#empty-pick` + `#empty-path`）、`web/static/app-shell.js`（字段读写/实例/窗口标题 `setDocTitle()` + `probe('docTitle')`/路径框 Enter → `openByPath`）、`web/static/app-i18n.js`（由 §4 生成）、`web/static/style.css`（版式固定 two-col、无密度切档；左列出血 = `#empty-state` 无 margin/radius + `#preview-stage` padding 0 + `.page-frame` 无 radius）、`internal/config/{types,sanitize,patch}.go`（`ui.*` 词表：`lang`/`theme`/`consoleVisible`，已无 `density`）、`main.go`（`windowTitle` = `AutoStamp <版本>`）、`internal/api/{pdf,seal,export}.go`|

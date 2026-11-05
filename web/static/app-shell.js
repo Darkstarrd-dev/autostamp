@@ -91,6 +91,8 @@
     applyChain: null, // previous document + instances for 撤销盖章
     vetoed: new Set(), // D3: page numbers the split must skip
     lastInfo: null, // the answer that opened the current document
+    // HD18 (2026-11-05): the floating panel starts collapsed into the gear fab.
+    panelCollapsed: true,
     // HD8/HD9/HD10: the seal channel - the seal everything new works with
     // ({sealId, name, path}; null = nothing opened yet).
     currentSeal: null,
@@ -383,7 +385,9 @@
       // P2: the instance's own parameter group; settings.json only carries
       // the group as the defaults for a new one.
       params: params || defaultParams(),
-      sealId: null,
+      // HD17 (2026-11-05): a fresh instance snapshots the current seal (the
+      // upload / dropdown / drop channels all keep it in state.currentSeal).
+      sealId: state.currentSeal ? state.currentSeal.sealId : null,
     };
     // HD11: the page the instance answers to. A cross-page instance owns every
     // page it was stamped across; a plain one starts out bound to the page it
@@ -410,14 +414,13 @@
 
   function deleteSelected() {
     if (state.selected === null) return null;
-    if (state.instances.length <= 1) {
-      toast("warn", t("instances.err.last"));
-      return null;
-    }
+    // HD17 (2026-11-05): instances delete down to zero - nothing is ever
+    // auto-placed any more, so an empty list is a legitimate state.
     const id = state.selected;
     state.instances = state.instances.filter((i) => i.id !== id);
-    state.selected = state.instances[0].id;
+    state.selected = state.instances.length ? state.instances[0].id : null;
     renderInstances();
+    setState(state.selected === null ? "opened" : "stamp-selected");
     return id;
   }
 
@@ -775,10 +778,9 @@
     if (!seal || !seal.prepareFromGrant) return null;
     try {
       const meta = await seal.prepareFromGrant(pathGrantId, path);
+      // HD17 (2026-11-05): the dropdown / header channel only sets the current
+      // seal now - instances are only made by add-seal mode / Add instance.
       setCurrentSeal(meta.sealId, baseName(path), path);
-      // The upload semantics stay (UI_SPEC §8 D4): the seal goes to the
-      // selected instance, exactly like a dropped/pasted image.
-      setSealForSelected(meta.sealId);
       toast("ok", t("seal.ok"));
       await refreshSettings();
       return meta;
@@ -820,37 +822,45 @@
   // sits beside the box inside the preview column and flips sides when the
   // right edge runs out of room.
   function posInstancePanel() {
+    // HD18 (2026-11-05): collapsed mode shows the square gear fab instead of
+    // the panel; both anchor to the right edge of the selected instance box.
     const panel = q("#instance-panel");
+    const fab = q("#instance-fab");
     if (!panel) return null;
     const inst = selectedInstance();
     const ov = window.__autoStampOverlay;
+    const collapsed = state.panelCollapsed;
     if (!inst || !ov || !state.file) {
       panel.hidden = true;
+      if (fab) fab.hidden = true;
       return null;
     }
     const rect = ov.state.rects.get(inst.id);
     const cvRect = ov.probe("canvasRect");
     if (!rect || !cvRect || !ov.state.scale) {
       panel.hidden = true;
+      if (fab) fab.hidden = true;
       return null;
     }
-    panel.hidden = false;
+    const shown = collapsed ? (fab || panel) : panel;
+    panel.hidden = collapsed;
+    if (fab) fab.hidden = !collapsed;
     const anchorBox = q("#preview").getBoundingClientRect();
     const sc = ov.state.scale;
     const x = cvRect.left + rect.x * sc;
     const y = cvRect.top + rect.y * sc;
     const w = rect.w * sc;
     const h = rect.h * sc;
-    const pw = panel.offsetWidth || 236;
-    const ph = panel.offsetHeight || 220;
+    const pw = shown.offsetWidth || (collapsed ? 40 : 236);
+    const ph = shown.offsetHeight || (collapsed ? 40 : 220);
     let left = x + w + 10;
     if (left + pw > anchorBox.right - 8) left = x - pw - 10;
     left = Math.max(anchorBox.left + 4, Math.min(left, anchorBox.right - pw - 4));
     let top = y + h / 2 - ph / 2;
     top = Math.max(anchorBox.top + 4, Math.min(top, anchorBox.bottom - ph - 4));
-    panel.style.left = `${Math.round(left - anchorBox.left)}px`;
-    panel.style.top = `${Math.round(top - anchorBox.top)}px`;
-    return { left: panel.style.left, top: panel.style.top };
+    shown.style.left = `${Math.round(left - anchorBox.left)}px`;
+    shown.style.top = `${Math.round(top - anchorBox.top)}px`;
+    return { left: shown.style.left, top: shown.style.top, collapsed };
   }
 
   // The panel's reset button: defaults from the panel group + HD11's current
@@ -1102,6 +1112,16 @@
     // 删除 = this instance only).
     q("#instance-reset").addEventListener("click", () => resetInstanceParams());
     q("#instance-remove").addEventListener("click", () => deleteSelected());
+    // HD18: the panel's minimize button and the gear fab are two ends of one
+    // switch; the state is per-session (default = collapsed), not persisted.
+    q("#instance-collapse").addEventListener("click", () => {
+      state.panelCollapsed = true;
+      posInstancePanel();
+    });
+    q("#instance-fab").addEventListener("click", () => {
+      state.panelCollapsed = false;
+      posInstancePanel();
+    });
     // HD8/HD10: the header seal channel + the add-seal-mode toggle.
     q("#btn-seal-upload").addEventListener("click", () => pickSealUpload());
     q("#seal-recent-select").addEventListener("change", (e) => openRecentSeal(e.target.value === CURRENT_MARK ? "" : e.target.value));
@@ -1631,40 +1651,23 @@
     loadLog = { kind, reason: reason || "", names: (files || []).map((f) => f.name), count: (files || []).length };
   }
 
-  function instanceNameFor(f) {
-    const base = String((f && f.name) || "seal").replace(/\.[^.]+$/, "");
-    return base || "seal";
-  }
-
-  // rollbackInstance is the silent counterpart of deleteSelected: a seal upload
-  // that failed after we already added the instance leaves an empty row behind,
-  // and the last-instance guard would refuse to undo our own rollback.
-  function rollbackInstance(id) {
-    state.instances = state.instances.filter((i) => i.id !== id);
-    if (state.selected === id) state.selected = state.instances.length ? state.instances[0].id : null;
-    renderInstances();
-  }
-
+  // rollbackInstance / instanceNameFor are gone with HD17: loading a seal
+  // never creates or repairs an instance any more.
   async function loadSeals(files) {
-    // seal.upload keeps the exact semantics of the 上传印章 button (type gate,
-    // toast, 撤销 source tracking, setSealForSelected). For several images the
-    // multi-instance decision I1 takes over: first image -> selected instance,
-    // each remaining image -> a fresh instance named after the file. Dropping
-    // N photos stamps N seals instead of quietly loading just one.
+    // HD17 (2026-11-05): loading a seal NEVER touches the instance list - every
+    // source (paste / drag / header upload / recent dropdown) only prepares the
+    // bytes and sets the current seal. Placement lives exclusively in add-seal
+    // mode (and the explicit "Add instance" button), which snapshots whatever
+    // seal is current at creation time.
     noteLoad("seals", "", files);
     const seal = window.__autoStampSeal;
     if (!seal) {
       toast("error", "seal module unavailable");
       return 0;
     }
-    const canAssign = Boolean(state.file) && state.instances.length > 0;
     let ok = 0;
-    for (let i = 0; i < files.length; i += 1) {
-      const f = files[i];
-      const instId = canAssign && i > 0 ? addInstance(instanceNameFor(f)) : null;
-      const meta = await seal.upload(f);
-      if (meta) ok += 1;
-      else if (instId !== null) rollbackInstance(instId);
+    for (const f of files) {
+      if (await seal.upload(f)) ok += 1;
     }
     if (files.length > 1) toast("ok", `${t("load.seals.ok")} ×${ok}/${files.length}`);
     return ok;
@@ -2177,11 +2180,10 @@
     html.dataset.app = "autostamp";
     bindControls();
     renderShortcuts();
-    if (!state.instances.length) {
-      addInstance("Seal 1");
-      setState("empty");
-      setModal(null);
-    }
+    // HD17 (2026-11-05): no boot-time default instance - instances exist only
+    // when the user creates them (add-seal mode click / "Add instance").
+    setState("empty");
+    setModal(null);
     window.addEventListener("hashchange", applyHash);
     applyHash();
     api.health()
@@ -2349,10 +2351,18 @@
         };
       }
       case "instancePanel": {
+        // HD18: `visible` = the full panel is up; fabVisible = the square gear
+        // button; left/top/w/h report whichever surface is up (panel or fab).
         const panel = q("#instance-panel");
-        const r = panel ? panel.getBoundingClientRect() : null;
+        const fab = q("#instance-fab");
+        const panelUp = Boolean(panel && !panel.hidden);
+        const fabUp = Boolean(fab && !fab.hidden);
+        const el = panelUp ? panel : fabUp ? fab : null;
+        const r = el ? el.getBoundingClientRect() : null;
         return {
-          visible: Boolean(panel && !panel.hidden),
+          visible: panelUp,
+          collapsed: Boolean(state.panelCollapsed),
+          fabVisible: fabUp,
           left: r ? Math.round(r.left) : 0,
           top: r ? Math.round(r.top) : 0,
           w: r ? Math.round(r.width) : 0,
@@ -2420,6 +2430,7 @@
     // The scripts drive the same functions the buttons wire.
     setCurrentSeal, setAddMode, addInstanceAt, pickSealUpload, openRecentSeal,
     dropRecentSeal, renderRecentSeals, resetInstanceParams, posInstancePanel,
+    currentSeal: () => (state.currentSeal ? state.currentSeal.sealId : null),
     currentPageWord,
   };
 

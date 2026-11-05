@@ -3,6 +3,12 @@
 > `docs/IMPLEMENTATION_PLAN.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-11-05 — §10.1 登记 HD17–HD18（装载不放置 + 实例全删 + 面板默认收起齿轮）
+
+- §10.1 表新增一行「装载不放置 + 实例全删 + 面板收起（HD17/HD18）」：契约面 §4/§6/§7/§7.1、
+  前端面（`app-shell.js`、`app-seal.js`、`index.html`、`style.css`、mockup 镜像）与 verify
+  脚本调整（shell/ui/overlay/pixel-matrix）；门槛实测右列回填（惯例 follow-up docs commit）。
+
 ## 2026-11-05 — §10.1 登记 HD13–HD16（预览卡 overlay + 下拉当前选项 + 顶栏同高 + 后端终端）
 
 - §10.1 表新增一行「细节调整（HD13–HD16）」：契约面 §2/§4/§6/§7、Go 面 `ring.go` +

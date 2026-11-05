@@ -399,10 +399,12 @@ async function main() {
   const fixedToast = await json("window.__autoStampShell.probe('toast')");
   if (fixedToast.level !== "warn") bad("binding=none must warn, got " + JSON.stringify(fixedToast));
 
-  // instance list (decision I1)
+  // instance list (decision I1) - HD17 (2026-11-05): boot seeds nothing, and
+  // deletion goes all the way to zero (the old last-instance guard is gone).
   const inst = await pageErr(`(function(){
     var s = window.__autoStampShell;
-    var before = s.probe("instanceCount");
+    var boot = s.probe("instanceCount");
+    var before = boot;
     s.addInstance("A");
     s.duplicateSelected();
     var mid = s.probe("instanceCount");
@@ -411,13 +413,14 @@ async function main() {
     var afterDel = s.probe("instanceCount");
     while (s.probe("instanceCount") > 1) s.deleteSelected();
     var lastDelete = s.deleteSelected();
-    return JSON.stringify({ before: before, mid: mid, afterDel: afterDel, lastDelete: lastDelete, one: s.probe("instanceCount"), names: s.probe("instances").map(function(i){return i.name;}) });
+    return JSON.stringify({ boot: boot, before: before, mid: mid, afterDel: afterDel, lastDelete: lastDelete, zero: s.probe("instanceCount"), selNull: s.probe("selected") === null, state: s.probe("state"), names: s.probe("instances").map(function(i){return i.name;}) });
   })()`);
   const instData = JSON.parse(inst);
+  if (instData.boot !== 0) bad("boot must not seed a default instance (HD17): " + inst);
   if (instData.mid !== instData.before + 2) bad("instance add/duplicate: " + inst);
   if (instData.afterDel !== instData.mid - 1) bad("instance delete: " + inst);
-  if (instData.one !== 1) bad("last instance must survive deletion: " + inst);
-  if (instData.lastDelete !== null) bad("deleting the last instance must be refused, got " + instData.lastDelete);
+  if (instData.lastDelete === null || instData.lastDelete === undefined) bad("deleting the last instance must succeed (HD17), got " + inst);
+  if (instData.zero !== 0 || !instData.selNull || instData.state !== "opened") bad("last instance must delete to zero/opened: " + inst);
 
   // ---------- a wired route must not fake success ----------
   // /api/pdf/save is implemented (P4). Two separate truths:
@@ -649,35 +652,31 @@ async function main() {
     out.pageCount = window.__autoStampPreview ? window.__autoStampPreview.probe("pageCount") : -1;
 
     // The shell keeps instances across document switches (W2 clears only
-    // after stamping): the rows left by earlier checks stay live, and that
-    // carry-over is the baseline the I1 checks below build on.
+    // after stamping): the rows left by earlier checks stay live.
     out.slate = { count: s.probe("instanceCount"), seals: window.__autoStampSeal.probe("count") };
 
-    // images: clipboard -> seal/prepare; with a leftover row live, the first
-    // image lands on the selected instance (I1) without crashing (PD1)
+    // HD17 (2026-11-05): images paste/drag ONLY prepare the seal + set the
+    // current seal - instances never change through the load channel.
     out.pastePng1 = pasteEv([png("seal-one.png")]);
     out.sealReady = await wait(function () { return window.__autoStampSeal.probe("count") >= out.slate.seals + 1; }, 6000);
     out.sealCount1 = window.__autoStampSeal.probe("count");
+    out.afterPaste1 = { count: s.probe("instanceCount"), curSeal: s.probe("currentSeal") !== null };
 
-    // with an instance selected, the pasted image must land on it (I1)
+    // "Add instance" snapshots the current seal at creation time (HD17).
     s.addInstance("gate-inst");
-    out.pastePng2 = pasteEv([png("seal-two.png")]);
-    out.assigned = await wait(function () {
+    out.snapSealed = (function () {
       var sel = s.probe("selected");
-      var inst = s.probe("chain").instances.filter(function (i) { return i.id === sel; })[0];
-      return Boolean(inst && inst.sealId);
-    }, 6000);
+      var ins = s.probe("chain").instances.filter(function (i) { return i.id === sel; })[0];
+      return Boolean(ins && ins.sealId);
+    })();
 
-    // several images at once (I1): first -> selected instance; every extra
-    // image -> its own new instance, named after the file (PD1 decision row)
+    // several images at once: still load-only - every image prepares, no new
+    // instances are created (HD17 supersedes the old I1 multi-image rows).
     var base = s.probe("instanceCount");
     out.multiPaste = pasteEv([png("seal-three.png"), png("seal-four.png")]);
-    out.multiSeals = await wait(function () {
-      var ins = s.probe("instances");
-      return ins.length === base + 1 && Boolean(ins[base] && ins[base].sealId);
-    }, 6000);
-    out.newInstances = s.probe("instances").slice(base).map(function (i) { return { name: i.name, seal: Boolean(i.sealId) }; });
-    out.oldInstances = s.probe("instances").slice(0, base).map(function (i) { return { name: i.name, seal: Boolean(i.sealId) }; });
+    out.multiSeals = await wait(function () { return window.__autoStampSeal.probe("count") >= out.sealCount1 + 2; }, 6000);
+    out.multiSame = s.probe("instanceCount") === base;
+    out.currentLast = s.probe("currentSeal") !== null;
 
     // focused field + text/plain keeps the text-paste semantics: no load
     out.passthrough = pasteEv([pdf()], "C:\\\\docs\\\\typed.pdf", document.querySelector("#apply-blend"));
@@ -698,12 +697,12 @@ async function main() {
   truthy("single PDF drop opened the document (PD2)", gate.pdfOpened === true && gate.pdfDrop.during === true && gate.pdfDrop.after === "off" && gate.pageCount >= 1);
   truthy(`the document title carries version + drop name (HD5): ${JSON.stringify(gate.docTitle)}`,
     gate.docTitle === "AutoStamp " + version + " pasted one.pdf");
-  truthy("pasted image prepared a seal (PD1)", gate.pastePng1 === true && gate.sealReady === true && gate.sealCount1 >= 1);
-  truthy("pasted image assigned to the selected instance (PD1/I1)", gate.assigned === true);
-  truthy("pasting two images adds exactly one named instance for the extra image (I1)", gate.multiSeals === true
-    && gate.newInstances.length === 1 && /seal-four/.test(gate.newInstances[0].name) && gate.newInstances[0].seal === true);
-  truthy(`and every pre-existing instance kept a seal (I1/PD1): ${JSON.stringify(gate.oldInstances)}`,
-    gate.oldInstances.length >= 1 && gate.oldInstances.every((i) => i.seal) && gate.oldInstances.some((i) => /gate-inst/.test(i.name)));
+  truthy("pasted image prepared a seal (PD1) without touching instances (HD17)",
+    gate.pastePng1 === true && gate.sealReady === true && gate.sealCount1 >= 1 &&
+      gate.afterPaste1.count === gate.slate.count && gate.afterPaste1.curSeal === true);
+  truthy("Add-instance snapshots the current seal (HD17)", gate.snapSealed === true);
+  truthy(`pasting two images prepares both but creates no instance (HD17): ${JSON.stringify({ base: gate.multiSeals, same: gate.multiSame })}`,
+    gate.multiSeals === true && gate.multiSame === true && gate.currentLast === true);
   truthy("seal count grew with every loaded image", gate.sealCount1 >= 1);
   truthy("text paste in a focused field stays untouched (PD1)", gate.passthrough === false && gate.kindAfterPaste === "seals");
   truthy("file drops are always prevented from default navigation (PD2)", gate.pdfDrop.prevented === true);
@@ -762,10 +761,14 @@ async function main() {
     }
     var out = {};
     try {
+      // HD17: the boot/gate state carries no auto instances; record the entry count.
+      out.countAtStart = s.state.instances.length;
       // 1) HD8: a grant-opened seal is recorded server-side; menu labels drop the extension
       out.opened = await s.openRecentSeal(${JSON.stringify(hdSealPath)});
       await wait(function () { return s.probe("recentSeals").paths.length >= 1; }, 5000);
       out.recent1 = s.probe("recentSeals");
+      // HD17: opening a seal through the dropdown never touches the instance list
+      out.countAfterOpen = s.state.instances.length;
       out.serverRecord = await window.__autoStampApi.request("/api/settings").then(function (r) {
         return ((r.settings || {}).recentSeals || []).map(function (x) { return { path: x.path }; });
       });
@@ -819,7 +822,10 @@ async function main() {
       out.newInstSealed = Boolean(sel && sel.sealId);
       out.newInstPages = sel ? String(sel.params["api.apply.pages"]) : null;
       out.page = String(window.__autoStampPreview.probe("page"));
-      // 5) HD12: the floating panel sits beside the selected instance box
+      // 5) HD18 + HD12: the panel is collapsed by default (gear fab), the fab
+      // opens it, and the panel still pins beside the selected instance box.
+      out.panel0 = s.probe("instancePanel");
+      document.querySelector("#instance-fab").click();
       out.panel = s.probe("instancePanel");
       (function () {
         var ov = window.__autoStampOverlay;
@@ -846,6 +852,15 @@ async function main() {
         out.panelForSel = ov.state.rects.has(s.state.selected) ? true : Boolean(ov.state.rects.get(s.state.selected));
       })();
       out.panelAfterRemove = s.probe("instancePanel");
+      // HD18: the gear fab re-opens the panel, the minimize button collapses it
+      document.querySelector("#instance-fab").click();
+      out.panelReopened = s.probe("instancePanel");
+      document.querySelector("#instance-collapse").click();
+      out.panelRecollapsed = s.probe("instancePanel");
+      // HD17: deletion goes to zero - no guard toast, state back to opened
+      while (s.state.selected !== null) s.deleteSelected();
+      out.zero = { count: s.state.instances.length, selNull: s.probe("selected") === null,
+        state: s.probe("state"), bothHidden: !s.probe("instancePanel").visible && !s.probe("instancePanel").fabVisible };
       s.setAddMode(false); // never leak the mode into later checks
       // HD14: a path-less current seal (paste/drag channel) shows the marker
       // option, and picking the marker is a no-op in the change handler.
@@ -885,6 +900,16 @@ async function main() {
   truthy(`HD12: reset restores the default parameters, remove drops the row (selection moves): ${JSON.stringify({ resetScale: hd.resetScale, defaultScale: hd.defaultScale, counts: [hd.countBefore, hd.countAfterClick, hd.countAfterRemove], panel: hd.panelAfterRemove, forSel: hd.panelForSel })}`,
     hd.resetScale === hd.defaultScale && hd.countAfterRemove === hd.countAfterClick - 1 &&
       hd.selAfterRemove !== hd.idAfterClick && hd.panelAfterRemove.visible === hd.panelForSel);
+  truthy(`HD17: opening a seal through the dropdown never changes the instance list (${JSON.stringify([hd.countAtStart, hd.countAfterOpen])})`,
+    hd.countAfterOpen === hd.countAtStart);
+  truthy(`HD18: the panel starts collapsed (gear fab) and the fab opens it for the pinning check`,
+    hd.panel0 && hd.panel0.visible === false && hd.panel0.collapsed === true && hd.panel0.fabVisible === true);
+  truthy(`HD18: gear fab re-opens, minimize collapses again: ${JSON.stringify({ r: hd.panelReopened, c: hd.panelRecollapsed })}`,
+    hd.panelReopened.visible === true && hd.panelRecollapsed.visible === false &&
+      hd.panelRecollapsed.collapsed === true && hd.panelRecollapsed.fabVisible === true);
+  truthy(`HD17: instances delete down to zero without a guard, panel + fab hide: ${JSON.stringify(hd.zero)}`,
+    hd.zero && hd.zero.count === 0 && hd.zero.selNull === true && hd.zero.state === "opened" &&
+      hd.zero.bothHidden === true);
   truthy(`HD13: the preview card is an overlay at the bottom-left, above the pager rail: ${JSON.stringify(hd.overlay)}`,
     hd.overlay && hd.overlay.visible === true && hd.overlay.dx === 10 &&
       hd.overlay.gapAbovePager >= 0 && hd.overlay.gapAbovePager <= 90);

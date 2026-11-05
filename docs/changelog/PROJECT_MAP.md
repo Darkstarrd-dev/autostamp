@@ -3,6 +3,11 @@
 > `PROJECT_MAP.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-11-05 — HD17/HD18：`app-shell.js` 装载/实例/面板语义修订（`loadSeals` 只 prepare、快照式 `addInstance`、全删、`panelCollapsed` + fab）
+
+- 头「最后核对」并入 HD17–HD18（ui-ids 96、i18n 换键）；`app-seal.js` 行尾注记 upload/revert
+  不指派；`app-shell.js` 新「HD17–HD18 装载/面板语义修订」行。
+
 ## 2026-11-05 — HD13–HD16：`internal/console/ring.go` + `internal/api/logs.go` + 前端 overlay/同高/开关
 
 - 头「最后核对」换成本轮摘要（历轮增量保留在正文之下）；`internal/console` 行补 `ring.go`

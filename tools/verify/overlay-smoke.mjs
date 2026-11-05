@@ -418,6 +418,9 @@ async function main() {
   }
   const metaChip = await app.evaluate(`(() => { const e = document.getElementById('seal-meta'); return e ? e.textContent : ''; })()`);
   truthy(`seal metadata chip shows the alpha readback (${metaChip})`, /[\d]/.test(metaChip));
+  // HD17 (2026-11-05): boot seeds no instance - the geometry sections need one,
+  // and creation snapshots the seal the channel above just opened.
+  await app.evaluate(shellEval("s.addInstance('probe'); true"), true);
   const srcColor = await app.evaluate(
     `(() => {
       const s = window.__autoStampSeal;

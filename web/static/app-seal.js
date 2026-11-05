@@ -93,9 +93,8 @@
     lastFile = file;
     try {
       const meta = await prepare(file);
-      shell().setSealForSelected(meta.sealId);
-      // HD9: the File funnel feeds the preview card too - the current seal is
-      // whatever was opened last, wherever it came from.
+      // HD17 (2026-11-05): upload never touches instances - only the current
+      // seal changes. HD9: the File funnel feeds the preview card too.
       shell().setCurrentSeal(meta.sealId, file.name);
       shell().toast("ok", shell().t("seal.ok"));
       return meta;
@@ -114,7 +113,6 @@
     }
     try {
       const meta = await prepare(lastFile, { despill: false });
-      shell().setSealForSelected(meta.sealId);
       shell().setCurrentSeal(meta.sealId, lastFile.name);
       // The copy is the frozen mock string (seal.despill.revert), so the two
       // surfaces say the same thing about the same action.

@@ -3,6 +3,16 @@
 > `docs/UI_SPEC.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-11-05 — §8 新增 HD17/HD18：装载只设当前印章（实例可全删、boot 无预置）+ 参数面板默认收起齿轮按钮
+
+- 头「最后核对」重写为本轮摘要（HD13–HD18）；§4 换一键（删 `instances.err.last`、增
+  `instance.collapse.btn`，仍 266 键）；§6 ui-ids 增 `instance-collapse`/`instance-fab`
+  （94 → 96）+ §6 段落写明面板默认收起；§7 mock 探针 `instancePanel` 增收起态、§7.1
+  `instancePanel` = `{visible, collapsed, fabVisible, left, top, w, h}`。
+- §8 决策表新增 HD17/HD18 两行（来源 = 用户 2026-11-05 对话指令）+ 表后段落注记（HD17 作废
+  PD1 的图片指派半边与 boot 默认实例；HD18 叠加在 HD12 面板上）。
+
+
 ## 2026-11-05 — §8 新增 HD13–HD16：预览卡 overlay + 下拉当前选项 + 顶栏同高 34px + 后端终端开关
 
 - 头「最后核对」重写为本轮摘要；§2 增 `ui.consoleVisible` 行；§4 增 `app.console.btn`

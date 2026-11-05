@@ -359,9 +359,9 @@ async function checkRealChain(app, pdfPath, sealB64) {
     bad("window.__autoStampShell 未实现(P2 交付物)");
     return;
   }
-  // boot() seeds "Seal 1" (the 12-state contract), so the chain's instance is #2.
-  if (created.count !== 2 || created.selected !== created.id) {
-    bad("实例创建异常: " + JSON.stringify(created).slice(0, 200) + ", want 2 个实例且新建被选中");
+  // HD17 (2026-11-05): boot seeds no instance, so the chain's instance is #1.
+  if (created.count !== 1 || created.selected !== created.id) {
+    bad("实例创建异常: " + JSON.stringify(created).slice(0, 200) + ", want 1 个实例且新建被选中");
     return;
   }
   // The bitmap arrives through the autostamp:seal channel; wait until the seal

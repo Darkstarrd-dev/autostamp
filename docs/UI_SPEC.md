@@ -1,11 +1,11 @@
 # AutoStamp — UI_SPEC（P0.5 UI 契约）
 
-> 最后核对：2026-11-05（§8 新增 HD13–HD16：印章预览卡从常驻底栏改为 `#preview` 左下角
-> overlay、打开的印章自动成为下拉当前选项（无路径印章用 `__current__` 标记项）、顶栏控件
-> 同高 34px、右簇新增后端终端开关 `#btn-console`（`#log-console` 底部 overlay、
-> `GET /api/logs` LogRing 轮询、默认隐藏、持久化 `ui.consoleVisible`）；§2 增
-> `ui.consoleVisible` 行、§4 增 `app.console.btn` 键（265 → 266）、§6 ui-ids 增 3
->（91 → 94）、§7 增 `console` 探针、§7.1 `recentSeals` 增 `selected`；HD8–HD12
+> 最后核对：2026-11-05（§8 新增 HD13–HD18：预览卡 overlay、下拉当前选项、顶栏同高
+> 34px、后端终端开关（HD13–HD16）；**HD17 = 印章装载绝不自动放置/指派实例**（盖章只走
+> 加章模式点击或「新增实例」，实例可全删、启动不预置默认实例）；**HD18 = 参数面板默认
+> 收起成齿轮按钮**（`#instance-collapse` 最小化 ↔ `#instance-fab` 齿轮展开）；§4 换一
+> 键（删 `instances.err.last`、增 `instance.collapse.btn`，仍 266 键）、§6 ui-ids 增 2（94 → 96）；§2 `ui.consoleVisible` 行 + `app.console.btn`
+> 键 + `GET /api/logs`；§7.1 探针 `instancePanel` 增 `collapsed`/`fabVisible`；HD8–HD12
 >（2026-11-04）、顶栏收尾（2026-11-03）与 V4–V6 记录沿用；P2–P6 接线记录沿用
 > 2026-10-30/11-02）。
 > 本文是 **UI 语义唯一权威**：字段名/取值域/控件绑定/DOM id/状态机
@@ -335,9 +335,9 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |instances.add.btn|Add instance|新增实例|
 |instances.delete.btn|Delete|删除|
 |instance.panel.title|Seal options|印章参数|
+|instance.collapse.btn|Minimize|最小化|
 |instance.reset.btn|Reset|复位|
 |instances.duplicate.btn|Duplicate|复制|
-|instances.err.last|At least one stamp instance is required|至少需要保留一个印章实例|
 |instances.rename.placeholder|Instance name|实例名称|
 |load.drop.hint|Drop a PDF to open it, or images to load as seals|拖入 PDF 即打开文档；拖入图片装载为印章|
 |load.paste.hint|paste or drop: one PDF opens, images load as seals|粘贴或拖入：单个 PDF 直接打开，图片装载为印章|
@@ -513,7 +513,7 @@ P0/P1 的 `index.html` 必须使用下表 id（`ui-ids` 块 = `ui-contract.mjs` 
 新增 id 要先登记，mock 缺该 id 即报错。
 
 ```ui-ids
-app-main  app-root  apply-blend  asset-hooks  batch-auto-split  batch-binding  batch-cols  batch-cross-page  batch-files  batch-pick-dir  batch-pick-files  batch-progress  batch-queue  batch-rows  batch-split-mode  batch-start  batch-start-offset  btn-console  btn-open  btn-save  btn-seal-add  btn-seal-upload  btn-shortcuts  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  drop-hint  empty-path  empty-pick  empty-pick-filter  empty-pick-multi  empty-state  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-add  instance-delete  instance-duplicate  instance-panel  instance-remove  instance-reset  lang-seg  log-console  log-console-body  modal-layer  page-pager  panel  panel-actions  panel-batch  panel-crosspage  panel-export  panel-instances  panel-seal  panel-split  password-modal  pixel-readout  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  right-sidebar  save-cancel  save-confirm  save-modal  error-toast  save-open  save-pick  save-source  seal-despill-revert  seal-instances  seal-meta  seal-preset-delete  seal-preset-load  seal-preset-name  seal-preset-save  seal-preset-select  seal-preview  seal-preview-canvas  seal-preview-name  seal-recent-select  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  split-apply  split-mode  split-veto  strip-previews  theme-seg  topbar
+app-main  app-root  apply-blend  asset-hooks  batch-auto-split  batch-binding  batch-cols  batch-cross-page  batch-files  batch-pick-dir  batch-pick-files  batch-progress  batch-queue  batch-rows  batch-split-mode  batch-start  batch-start-offset  btn-console  btn-open  btn-save  btn-seal-add  btn-seal-upload  btn-shortcuts  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  drop-hint  empty-path  empty-pick  empty-pick-filter  empty-pick-multi  empty-state  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-add  instance-collapse  instance-delete  instance-duplicate  instance-fab  instance-panel  instance-remove  instance-reset  lang-seg  log-console  log-console-body  modal-layer  page-pager  panel  panel-actions  panel-batch  panel-crosspage  panel-export  panel-instances  panel-seal  panel-split  password-modal  pixel-readout  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  right-sidebar  save-cancel  save-confirm  save-modal  error-toast  save-open  save-pick  save-source  seal-despill-revert  seal-instances  seal-meta  seal-preset-delete  seal-preset-load  seal-preset-name  seal-preset-save  seal-preset-select  seal-preview  seal-preview-canvas  seal-preview-name  seal-recent-select  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  split-apply  split-mode  split-veto  strip-previews  theme-seg  topbar
 
 ```
 
@@ -524,7 +524,8 @@ app-main  app-root  apply-blend  asset-hooks  batch-auto-split  batch-binding  b
 （`document.title`）同一个串 `AutoStamp <版本> [文件名]`（HD2 修订）。
 `#app-main` 不带版式属性（固定 two-col，HD3）；左列的 `#preview` 无内边距、无圆角（HD7）；
 `#seal-preview`（HD13）与 `#log-console`（HD16，默认隐藏）都是 `#preview` 左下角的绝对定位
-overlay，不占布局。
+overlay，不占布局。印章参数面板**默认收起** = `#instance-fab` 方形圆角齿轮按钮；展开后
+`#instance-panel` 贴选中实例框右侧，`#instance-collapse` 收起（HD18）。
 
 `#preview-stage` **无滚动条**（`overflow: hidden`，V5）：缩放超过容器时平移走程序化
 滚动偏移（`app-preview.js` 的 `bindPan`：Space+方向键 / Space+左键拖动 / 滚轮；
@@ -542,7 +543,7 @@ fit 为整页适配（V4），`#page-frame` 永远完整可见。
 `setParams({api.x: v,…})`、`probe(name)`、`applyLang(lang)`、`applyTheme(t)`、
 `i18n()`（DOM 快照）、`fields()`、`ids()`、`q()/qa()`、`setModal()/clearToast()`。
 `probe` 关键字：`state` `overflow` `images` `instances` `split` `strip` `pixel-blend` `estimate`
-`addMode`（加章模式开关读数）`recentSeals`（下拉 + 记录读数值，见 §8 HD8）`sealPreview`（预览 canvas 尺寸）`instancePanel`（面板可见性/位置）`console`（后端终端面板开关读数，HD16）。
+`addMode`（加章模式开关读数）`recentSeals`（下拉 + 记录读数值，见 §8 HD8）`sealPreview`（预览 canvas 尺寸）`instancePanel`（面板/齿轮按钮可见性 + 位置 + 收起态，HD18）`console`（后端终端面板开关读数，HD16）。
 
 深链：`mockup.html#crosspage`（`hashchange` 会重走状态机）。
 
@@ -572,7 +573,9 @@ tooltip）、`probe(name)`、
 readings, HD8; `selected` = the drop-down's current value, a path or the `__current__`
 marker for path-less seals, HD14)
 `sealPreview` (`{visible, w, h, name, drawn}` the bottom-left overlay card, HD9→HD13)
-`instancePanel` (`{visible, left, top, w, h}` floating panel geometry, HD12)
+`instancePanel` (`{visible, collapsed, fabVisible, left, top, w, h}` floating panel / gear-fab
+geometry, HD12; `collapsed` = panelCollapsed state, `fabVisible` = the square gear button is
+up, HD18; left/top/w/h report whichever surface is up)
 `console` (`{visible, pressed, lines, seq}` the backend-terminal readings, HD16)
 `page` (current page number), `currentSeal` (the current seal's sealId or null).
 
@@ -681,6 +684,8 @@ FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 |HD14|打开的印章要不要自动成为下拉当前选项|不做 / 当前选项 = 刚打开的印章（推荐）|已确认（用户 2026-11-05 对话指令）：任何路径通道打开印章后 `#seal-recent-select` 的 value 同步为该路径；粘贴/拖拽等无路径通道打开的印章以下拉末尾的标记项（value=`__current__`，label=文件名）作为当前选项，选中该项 = 无操作（不重开）|2026-11-05|用户 2026-11-05 对话指令|
 |HD15|顶栏控件高度要不要统一|统一（推荐）/ 保持现状（按钮与下拉不等高）|已确认（用户 2026-11-05 对话指令）：顶栏全部控件同高 34px = 图标按钮（含上传/加章/后端终端/快捷键/保存/打开）、最近印章下拉、语言/主题切档|2026-11-05|用户 2026-11-05 对话指令|
 |HD16|后端终端显示开关放哪里、默认状态、内容是什么|顶栏开关 + 底部 overlay 面板（推荐）/ 弹窗 / 不做|已确认（用户 2026-11-05 对话指令）：右簇快捷键左侧 `#btn-console`（SVG monitor 图标，`aria-pressed` 切档）；`#log-console` = 左列底部 overlay（`GET /api/logs`：`console.LogRing` 400 条尾窗，时间/级别/消息/属性），仅可见时 1.5s 轮询；**默认隐藏**，可见性持久化 `settings.ui.consoleVisible`（默认 false）|2026-11-05|用户 2026-11-05 对话指令|
+|HD17|印章装载会不会自动把印章放到页面上、实例能不能删空|装载绝不放置/指派实例（推荐）/ 保持自动设给选中实例|已确认（用户 2026-11-05 对话指令，**作废 boot 默认实例与「装载自动指派」语义**）：上传按钮、最近下拉、粘贴/拖拽图片一律只设置**当前印章**（预览卡 + 下拉同步），不新增也不改写任何实例；盖章唯一通道 = 加章模式点击（HD10）或「新增实例」按钮（创建时快照当前印章、`pages` = 当前页）；实例**可删到零**（删除保护废除，`instances.err.last` 键删除），空实例列表 = 合法状态；启动不预置默认实例|2026-11-05|用户 2026-11-05 对话指令|
+|HD18|参数面板要不要能收起|默认收起成齿轮按钮（推荐）/ 不可收起|已确认（用户 2026-11-05 对话指令，叠加在 HD12 上）：面板右上角 `#instance-collapse`（minus 图标）→ 收起为**方形圆角齿轮按钮** `#instance-fab`（SVG 齿轮，36px，锚点与面板同侧：选中实例框右侧）；点击齿轮按钮展开面板；**默认收起**，收起态不持久化|2026-11-05|用户 2026-11-05 对话指令|
 
 
 D2–D4、L1、CP1 已在 P0.5 第 1 轮确认（2026-10-29）；D1、I1、S1、E1 在第 2 轮确认（同日）。
@@ -699,6 +704,13 @@ HD13–HD16 是 2026-11-05 用户在对话里直接下的指令（细节调整 4
 「当前选项」同步语义，HD16 新增 `GET /api/logs` 路由（`AGENTS §6`）与设置字段
 `ui.consoleVisible`、i18n 键 `app.console.btn`、ui-ids `btn-console`/`log-console`/
 `log-console-body`（91 → 94）。
+
+HD17/HD18 同样是 2026-11-05 对话指令：HD17 **作废 PD1 的「图片设给选中实例」半边与
+HD8–HD10 的隐含「boot 默认实例 + 装载自动指派」**（装载只设当前印章；实例只在加章模式
+点击 /「新增实例」时创建并快照当前印章；实例可全删；`instances.err.last` 键删除；
+`setSealForSelected` 保留为 verify 脚本驱动 API，UI 侧不再自动调用），HD18 给 HD12 的
+面板加收起形态（ui-ids +`instance-collapse`/`instance-fab`，94 → 96；i18n −1 +1 =
+`instances.err.last` 删、`instance.collapse.btn` 增，仍 266 键；收起态不持久化，默认收起）。
 
 V4–V6 同样是 2026-11-04 用户在人工端到端验收里直接下的修正指令（fit 整页、无滚动条 +
 Space 平移、Ctrl+中键回 fit）；同一轮的「印章 ghost 双绘制」与「明度/饱和度滑杆」是

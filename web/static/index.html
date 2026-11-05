@@ -117,7 +117,7 @@
          to the right edge of the selected instance — flipping to the left edge
          when there is no room, clamped into the column either way. -->
     <div id="instance-panel" hidden>
-      <div class="flabel ip-title"><span data-i18n="instance.panel.title" data-i18n-cn="印章参数">Seal options</span></div>
+      <div class="ip-title"><span class="flabel ip-tname" data-i18n="instance.panel.title" data-i18n-cn="印章参数">Seal options</span><button type="button" id="instance-collapse" class="btn icon ip-min" data-i18n-title="instance.collapse.btn" data-i18n-title-cn="最小化" title="Minimize" aria-label="minimize"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button></div>
       <div class="field">
         <div class="flabel"><span data-i18n="api.apply.blend.ctl" data-i18n-cn="混合模式">apply.blend</span></div>
         <select id="apply-blend" data-field="api.apply.blend">
@@ -191,6 +191,8 @@
         <button type="button" id="instance-remove" class="btn danger" data-i18n="instances.delete.btn" data-i18n-cn="删除">Delete</button>
       </div>
     </div>
+
+    <button type="button" id="instance-fab" hidden data-i18n-title="instance.panel.title" data-i18n-title-cn="印章参数" title="Seal options" aria-label="seal options"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01A1.65 1.65 0 0 0 9 3.09V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 
     <div id="preview-ruler" data-i18n="ruler.hint" data-i18n-cn="页面尺寸（pt）；标尺原点在左上">- x - pt</div>
     <div id="pixel-readout" data-i18n="ruler.hint" data-i18n-cn="页面尺寸（pt）；标尺原点在左上">page size in pt; origin at top-left</div>

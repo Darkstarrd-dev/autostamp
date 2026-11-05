@@ -105,13 +105,15 @@
       s.toast("warn", t("seal.preset.nameNeeded"));
       return null;
     }
-    const inst = s.selectedInstance();
-    if (!inst || !inst.sealId) {
+    // HD17 (2026-11-05): the preset takes the CURRENT seal (instances are no
+    // longer assignment targets); the toast stays honest when nothing is open.
+    const sealId = s.currentSeal();
+    if (!sealId) {
       s.toast("warn", t("seal.preset.noSeal"));
       return null;
     }
     try {
-      const view = await api().presetSave({ name, sealId: inst.sealId, params: panelParams() });
+      const view = await api().presetSave({ name, sealId, params: panelParams() });
       s.toast("ok", t("seal.preset.saved"));
       await refreshPresets();
       const sel = doc.getElementById("seal-preset-select");
@@ -144,9 +146,8 @@
       const sealMod = window.__autoStampSeal;
       if (!sealMod || !sealMod.prepare) throw Object.assign(new Error("seal module unavailable"), { code: "internal" });
       const meta = await sealMod.prepare(file);
-      s.setSealForSelected(meta.sealId);
-      // HD9: a loaded preset is a freshly opened seal - the preview card
-      // switches to it (the preset's own name, not a path basename).
+      // HD17: a loaded preset only becomes the CURRENT seal (HD9 preview card
+      // switches to it too); instances are never re-assigned.
       s.setCurrentSeal(meta.sealId, preset.name);
       const p = preset.params || {};
       s.setParams({
