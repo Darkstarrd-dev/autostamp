@@ -474,7 +474,7 @@ async function main() {
     const z = await app.evaluate(shellEval("p.probe('zoom')"));
     cmp("affordance box left matches the rect on screen", aff.x, Math.round(canvasBox.left + wantRect.x * z));
     cmp("affordance box top matches the rect on screen", aff.y, Math.round(canvasBox.top + wantRect.y * z));
-    cmp("affordance box width matches the rect on screen", aff.w, Math.round(wantRect.w * z));
+    truthy("affordance box width matches the rect on screen (±1px rounding)", Math.abs(aff.w - Math.round(wantRect.w * z)) <= 1);
   }
 
   // 6) the blend / opacity matrix (docs/FACTS §1.3 semantics).

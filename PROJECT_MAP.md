@@ -1,21 +1,13 @@
 # PROJECT_MAP.md — AutoStamp 代码地图
 
-> 最后核对：2026-11-04（**P0–P7 全绿**，出货件 = `build.ps1 -Task stripped,package` 的
-> `dist\autostamp-<rev>-win64.zip`。2026-11-03 增量：PD1/PD2 粘贴/拖拽装载 gate（AGENTS §5.23）、
-> impeccable polish（导出段淡化删除 + `.seg.sm` 内边距）、单 exe 出口 `build1.ps1` + UPX 极限压缩
-> `buildm.ps1`（FACTS §4.3）、顶栏收尾（AGENTS §5.24 + `UI_SPEC §8` HD1–HD3：顶栏只剩图标控件、
-> 版式密度字段与切档删除、最近文件的两个 UI 入口删除而
-> 后端 `config.recentFiles` 保留）。**2026-11-04 增量 = HD4–HD7**（版本号 `0.1-dev`、顶栏去文本 +
-> 按钮重排（快捷键最右）、启动页装载入口只留「打开文件」+ 路径框 Enter、左列预览出血；AGENTS §5.24–
-> §5.26、`UI_SPEC §6` 删 4 个契约 id、i18n 270 → 268）。**前一轮 2026-11-04 = 人工验收修正 V4–V6**
-> （fit 整页、无滚动条 + Space 平移、Ctrl+中键回 fit + 实例画布不挂 DOM 的 ghost 修复；AGENTS §5.27、
-> i18n 268 → 270）。**本轮 2026-11-04 = HD8–HD12**（印章顶栏通道 `#btn-seal-upload`/`#seal-recent-select`/
-> `#btn-seal-add` + `settings.recentSeals` 兜底删记录、左列底部 `#seal-preview`、`#instance-panel`
-> 浮动面板取代侧栏「叠加参数/位置与尺寸」、实例 `pages` = 放置页、复位 = `DEFAULT_PARAMS` 快照；
-> AGENTS §5.28–§5.30；i18n 270 → 265、ui-ids 89 → 91）。P6/P7 的 `internal/presetstore`、`seal_preset.go` 四路由、`fsx` 的
-> `PickDirs`/`ListMatching`、`fs/pick{dir:true}`、`save{mkdirs:true}`、前端批处理跑链（AGENTS §5.21 BM1，
-> **没有后端作业路由/SSE**）、`strictOrigin` 默认开 + `nosniff` 都在下面的表里。`app-crosspage.js`
-> 这个计划名从未创建，真实形态在 `app-overlay.js` + `app-shell.js`。
+> 最后核对：2026-11-05（**P0–P7 全绿 + HD13–HD16 细节调整**：印章预览卡 = `#preview`
+> 左下角 overlay（不再占布局）、下拉自动同步当前打开的印章（无路径印章 = `__current__`
+> 标记项）、顶栏控件同高 34px、后端终端 `#btn-console`/`#log-console` + `GET /api/logs`
+>（`internal/console/ring.go` `LogRing` + `WithRing` 扇出）+ `config.UI.ConsoleVisible`；
+> AGENTS §5.31/§5.32；i18n 265 → 266、ui-ids 91 → 94）。出货件 = `build.ps1 -Task
+> stripped,package` 的 `dist\autostamp-<rev>-win64.zip`；历轮增量（PD1/PD2、build1/buildm、
+> HD1–HD12、V4–V6、P6/P7 接线）见 `docs/changelog/PROJECT_MAP.md`，正文只留当前态事实。
+> `app-crosspage.js` 这个计划名从未创建，真实形态在 `app-overlay.js` + `app-shell.js`。
 >
 > 新增/删除包必须同步本文件（AGENTS §10.1）。阶段状态见 `docs/IMPLEMENTATION_PLAN.md §10`。
 
@@ -39,6 +31,7 @@
 |(续)|`version_test.go`|版本取值表：空/`devel`/伪版本/`+dirty` → dev 横幅，真标签（含 `-rc.1`）原样保留；`ReadBuild()` 永不返回伪版本|P0|
 |(续)|`middleware_test.go`|Host 421 / Origin 403（`strict` 两档：外部 Origin 拒、本机 Origin 通、跨站 GET 放行）、`nosniff` 在 API/静态/403 信封上都在、gzip 只压白名单、panic 恢复、日志级别、`LoopbackListener`、优雅关服|P0+P7|
 |`internal/api`|`register.go`|`Deps`（含 **P6 `Presets *presetstore.Store`**）、`NewMux`（注册静态资产 + `GET /api/health`、`GET/POST /api/settings`、P1 的 `POST /api/fs/pick`、`POST /api/pdf/open`、`GET /api/pdf/raw`、P3 的 `POST /api/pdf/split`、P2 的 `POST /api/pdf/seal/prepare` + `GET /api/pdf/seal/raw`、P4 的 `POST /api/pdf/apply` + `POST /api/pdf/save`、P5 的 `POST /api/pdf/export`、**P6 的 `GET/POST/DELETE /api/seal/preset` + `GET /api/seal/preset/raw`**；未接线的后续路由**不注册**，保留 `ServeMux` 的 405/404，FACTS §1.5）|P0-P6|
+|`internal/api`|`logs.go`|`GET /api/logs`（HD16）：读 `console.LogRing` 400 条尾窗，`{lines, next}` + `?since=` 增量语义|HD16|
 |（续）|`pdf.go`|P1 本地文件通道：`handlePick`（原生选择器 + `filePath` 直开授权）、`handleOpen`（grant/multipart 两形态 + 密码两错误码 + `SetRecent`）、`handleRaw`（`http.ServeContent` 的 Range/ETag + owner 绑定 404）、`pdfcore` 密码错误映射|P1|
 |（续）|`apply.go`|**P4 矢量落盘**：`handleApply`（`{assetId, instances[]}` → `pdfcore.Stamp` → 先 `Validate` 再注册，kind `applied`，失败删临时文件）、`resolveInstance`（词表逐项解析 + 400 分类：`bad_body`/`not_found`/`kind_denied`）、`(blend,opacity)` 分组、`Origin` 向前继承、`openResult` 复用 open 的响应形状|P4|
 |（续）|`pdf_password_test.go`|**AES-256 密码往返**（FACTS §2.8）：无密码 ⇒ `password_required`（pdfcpu 把空密码判 invalid，`inspectAsset` 按契约收口）、错密码 ⇒ `password_invalid`、userPW/ownerPW 都开成功 ⇒ 201 + 页数|
@@ -60,7 +53,7 @@
 |（续）|`list_test.go`|作用域钉死：一层内、扩展名、点文件/子目录排除、空 filter 走 pdf 默认、未知 filter 报错、缺目录报错|P6|
 |`internal/tmpstore`|`store.go`|会话资产库：`Add/AddFile/Get/List/Delete`（owner 绑定 + TTL 2h + 配额 256MiB/2GiB）、`index.json` 持久 + 过期清扫、`GrantPath/CheckGrant/Rename/Rights`（`pathGrantId`）、`SetOrigin/OriginOf`（**P4**：资产来自哪个磁盘文件，split/apply 向前继承，`replaceOriginal` 用）、`ErrNotFound`/`ErrOwner`|P1+P4|
 |`internal/presetstore`|`store.go` / `store_test.go`|**P6 印章预设库**（`%APPDATA%\AutoStamp\seals`）：`presets.json` 索引（`fsx.AtomicWrite` 原子重写）+ 每预设一张 `p-<hash>.png`；`Save/SaveFile/List/Get/Delete/ImageFile`、`ValidateName`（拒路径分隔符/控制字符/尾点）、`Params` = `apply.*` + `seal.prepare.*`；同名 = 覆盖，索引是权威（损坏 ⇒ 按空库 + 警告）|P6|
-|`internal/console`|`logger.go`|`slog` 封装（级别过滤、stderr、`-verbose`）|P0|
+|`internal/console`|`logger.go` + `ring.go`|`slog` 封装（级别过滤、stderr、`-verbose`）+ **HD16**：`LogRing`（400 条尾窗、单调 seq、`Since` 增量）与 `WithRing` 扇出 handler（stderr 与环同写）、`ParseSince`；`ring_test.go` 钉序号/边界/扇出|P0+HD16|
 |`internal/webx`|`json.go`|`Envelope{ok,data,code,error}` + `OK/Created/Fail` + `DecodeJSON`（`http.MaxBytesReader`）|P0|
 |（续）|`session.go`|`SessionHeader = X-AutoStamp-Session`：前端 `crypto.getRandomValues` 生成的 128-bit 令牌 = 资产/grant 的 owner 能力；`SessionOf` 校验格式（缺失 → 400 `bad_session`）、`NewToken` 服务端测试用|P0（P1 全线使用）|
 |`internal/pdfcore`|`read.go`|`Inspect(ctx, r, conf)`：页数、每页 MediaBox pt 尺寸/rotation/`hasFonts`/`hasXObject`、加密探测（`ErrNeedsPassword`/`ErrBadPassword` 再导出 pdfcpu 信号，`DefaultLimits` 显式限流）|P1|
@@ -97,9 +90,10 @@
 |（续）|`web/static/app-api.js` 的 **P6 预设通道**|`presetList/presetSave/presetDelete/presetRawURL/rawBytes`（会话头 + 信封复用同一处）|
 |（续）|`web/static/app-shell.js` 的 **PD1/PD2 装载 gate**（AGENTS §5.23）|窗口级 `paste` + `dragenter/dragover/dragleave/drop`（`dragDepth` 计数 → `#preview[data-drag]` + `#drop-hint`）经 `submitFiles` 单漏斗：`classifyLoad` = `pdf`/`seals`/`reject(multi|mix|other)`（type 门只认 `Files`，无 type 时按扩展名兜底，`app-seal.js` 的 `upload` 门同步兜底）；单 PDF → `handleFiles` multipart `adopt`；图片 → `loadSeals`：单张设给选中实例、多张第一张设给选中 + 其余 `addInstance` 按文件名命名（失败 `rollbackInstance` 不留空行）；焦点输入框含 `text/plain` 的粘贴放行；`probe('load')` 读 `loadLog`|
 |（续）|`web/static/app-shell.js` 的 **HD8–HD12 印章顶栏通道 + 浮动面板**（AGENTS §5.28–§5.30）|`pickSealUpload`（`fs/pick{filter:image}` → `openSealByGrant`）、`openRecentSeal(path)`（下拉 replay：`fs/pick{filePath}` → JSON `seal/prepare`；`path_denied` → `dropRecentSeal` + `PATCH settings` + warn toast）、`setAddMode`/`addInstanceAt`（加章模式：点击空白 = 当前印章 + `pages` 当前页）、`state.currentSeal` + `#seal-preview`、`posInstancePanel`（贴选中实例框、翻转/`renderInstances` 跟随）、`DEFAULT_PARAMS` 快照 + `resetInstanceParams`、`#instance-remove` → `deleteSelected`；`probe('addMode'/'defaults'/'recentSeals'/'sealPreview'/'instancePanel'/'page'/'currentSeal')`|
+|（续）|`web/static/app-shell.js` 的 **HD13–HD16 细节调整**（AGENTS §5.31/§5.32）|`renderRecentSeals` 每次重建后 value = 当前印章路径（HD14），无路径当前印章 = 末尾标记项 `CURRENT_MARK`（change 处理器 no-op）；`setConsoleVisible(on,persist)`（`#btn-console` aria-pressed 对 + `#log-console` hidden + `PATCH settings{ui.consoleVisible}`）+ `pollLogs`（`api.logs` 1.5s 增量轮询，仅面板可见）；`probe('console')`、`probe('recentSeals')` 增 `selected`|
 |`web/static/app-batch.js`|P6 印章**预设库 UI** + **批处理队列**：`window.__autoStampBatch`；预设 存/载/删/列表（列表镜像到印章卡与批处理卡的两个 select）；批处理 = **无后端作业路由的前端跑链**（AGENTS §5.21 BM1）`fs/pick{dir:true}`→`open`→（`split`）→`apply`→`export`(raster，离屏 pdf.js `scale=dpi/72` 回传)→`save{mkdirs}`；`batchTarget()` 输出 `_batch\<原名>.dpi<N>.q<Q>.pdf`（BM2，单扩展名）；`pagesForDoc()` = 预设 pages 词表逐文档求交集（BM5）；并发 `api.batch.concurrency`（1..8）+ 停止；加密行 `batch.status.encrypted`（BM4，不弹密码）；报表 CSV/JSON 由 `Blob`+`a[download]` 生成（不发请求）；`probe("queue"｜"report"｜"presets")` 给 verify|
-|`web/static/app-i18n.js`|en/cn 文案表（由 `tools/verify/gen-i18n.mjs` 从 `docs/UI_SPEC.md §4` 生成，265 键，禁止手改；HD8–HD12 = 删 14 增 9，`empty.pick.btn` = Open file / 打开文件）|
-|`web/static/style.css`|壳样式（版式**固定 two-col** 双栏 + 图标按钮 tooltip / 控件表现代码）+ P1：分页条缩略图（`#page-pager canvas.pg-thumb`）、拖放高亮（`#preview[data-drag]` + `#drop-hint` 悬浮胶囊）；polish：`#panel-export` 段不再有 `opacity:.55` 淡化（误导状态 + 低对比，changelog 2026-11-03）；**左列出血**（HD7，2026-11-04）：`#empty-state` 无 `margin`/`border-radius`、`#preview-stage` `padding: 0`、`.page-frame` 无圆角；`.file-chip` 规则随顶栏文本一起去掉（HD5）|
+|`web/static/app-i18n.js`|en/cn 文案表（由 `tools/verify/gen-i18n.mjs` 从 `docs/UI_SPEC.md §4` 生成，266 键，禁止手改；HD16 增 `app.console.btn`）|
+|`web/static/style.css`|壳样式（版式**固定 two-col** 双栏 + 图标按钮 tooltip / 控件表现代码）+ P1：分页条缩略图（`#page-pager canvas.pg-thumb`）、拖放高亮（`#preview[data-drag]` + `#drop-hint` 悬浮胶囊）；polish：`#panel-export` 段不再有 `opacity:.55` 淡化（误导状态 + 低对比，changelog 2026-11-03）；**左列出血**（HD7，2026-11-04）：`#empty-state` 无 `margin`/`border-radius`、`#preview-stage` `padding: 0`、`.page-frame` 无圆角；`.file-chip` 规则随顶栏文本一起去掉（HD5）；**HD13/HD15/HD16（2026-11-05）**：`#seal-preview` 绝对定位 overlay（左 10px、底 10px，分页条可见时 77px）、`#log-console` 底部 overlay（180px、默认 hidden）、顶栏控件组 `height: 34px`（`.btn.icon`/`.seg.sm`/`#seal-recent-select`）|
 |`web/static/favicon.svg`|图标（`<link rel="icon">`，否则 Chromium 自动 404 `/favicon.ico`，FACTS §1.5）|
 |`web/static/vendor/pdfjs/`|pdf.js 6.4.299 资产（P1 已进）：`build/`（只有 ESM，FACTS §1.1）、`cmaps/`、`standard_fonts/`、`wasm/`、`image_decoders/`、`iccs/`、`web/pdf_viewer.css`（文本层 CSS）；205 文件 / 5,486,850 B，`SHA256.txt` + `web/embed_test.go:TestVendorChecksums` 断言；见该目录 `README.md`|
 

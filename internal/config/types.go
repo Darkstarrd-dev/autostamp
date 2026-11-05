@@ -29,10 +29,12 @@ type Settings struct {
 	RecentSeals []RecentRef `json:"recentSeals,omitempty"`
 }
 
-// UI is the client-side view state (ui.* in UI_SPEC §2; never sent to the API).
+// UI is the client-side view state (ui.* in UI_SPEC §2); it round-trips
+// through /api/settings so the window's look and panel visibility persist.
 type UI struct {
-	Lang  string `json:"lang"`  // en|cn
-	Theme string `json:"theme"` // light|dark
+	Lang           string `json:"lang"`  // en|cn
+	Theme          string `json:"theme"` // light|dark
+	ConsoleVisible bool   `json:"consoleVisible"`
 }
 
 // Security gates the loopback hardening (AGENTS §5.11; P7 enforces it).

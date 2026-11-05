@@ -541,6 +541,7 @@ async function main() {
       right: Math.round(tb.right),
       open: r("#btn-open"), save: r("#btn-save"), shortcuts: r("#btn-shortcuts"),
       upload: r("#btn-seal-upload"), recent: r("#seal-recent-select"), addmode: r("#btn-seal-add"),
+      console: r("#btn-console"),
       lang: r("#lang-seg"), theme: r("#theme-seg")
     });
   })()`);
@@ -552,18 +553,24 @@ async function main() {
     if (!(bar[b].x > bar[a].right)) bad(`#${a} -> #${b} are not consecutive: ${JSON.stringify([bar[a].right, bar[b].x])}`);
     if (bar[b].x - bar[a].right >= 24) bad(`#${a} -> #${b} gap too large (${bar[b].x - bar[a].right})`);
   }
-  const rows = [bar.lang.cy, bar.theme.cy, bar.shortcuts.cy];
-  if (Math.max(...rows) - Math.min(...rows) > 4) bad(`the right cluster is not one row: ${JSON.stringify({ lang: bar.lang.cy, theme: bar.theme.cy, shortcuts: bar.shortcuts.cy })}`);
-  if (!(bar.shortcuts.x > bar.theme.right)) bad(`#btn-shortcuts is not right of the theme switch: ${JSON.stringify([bar.theme.right, bar.shortcuts.x])}`);
+  const rows = [bar.lang.cy, bar.theme.cy, bar.console.cy, bar.shortcuts.cy];
+  if (Math.max(...rows) - Math.min(...rows) > 4) bad(`the right cluster is not one row: ${JSON.stringify(rows)}`);
+  if (!(bar.console.x > bar.theme.right)) bad(`#btn-console is not right of the theme switch: ${JSON.stringify([bar.theme.right, bar.console.x])}`);
+  if (!(bar.shortcuts.x > bar.console.right)) bad(`#btn-shortcuts is not right of the backend-log toggle: ${JSON.stringify([bar.console.right, bar.shortcuts.x])}`);
   if (bar.right - bar.shortcuts.right >= 24) bad(`#btn-shortcuts is not the rightmost control (topbar right ${bar.right}, button right ${bar.shortcuts.right})`);
-  for (const k of ["open", "upload", "addmode", "save", "shortcuts"]) {
+  for (const k of ["open", "upload", "addmode", "save", "console", "shortcuts"]) {
     if (bar[k].icons !== 1) bad(`#btn-${k} must hold exactly one inline svg icon: ${JSON.stringify(bar[k])}`);
     if (bar[k].text !== 0) bad(`#btn-${k} must be icon-only, found ${bar[k].text} text chars`);
     if (bar[k].w < 24 || bar[k].h < 24) bad(`icon button too small: ${k} ${JSON.stringify(bar[k])}`);
   }
+  // HD15 (2026-11-05): every topbar control shares one height (icon buttons,
+  // the recent-seal select, the language/theme segments) == 34px.
+  const hs = [bar.open, bar.upload, bar.recent, bar.addmode, bar.save, bar.lang, bar.theme, bar.console, bar.shortcuts].map((o) => o.h);
+  if (hs.some((h) => h !== hs[0])) bad(`topbar controls are not one height: ${JSON.stringify(hs)}`);
+  if (hs[0] !== 34) bad(`topbar control height = ${hs[0]}, want 34`);
   truthy(`the language switch shows two text choices (中/EN): ${JSON.stringify([bar.lang.text, bar.lang.icons])}`, bar.lang.text > 0 && bar.lang.icons === 0);
   if (bar.theme.icons !== 2) bad(`the theme switch must be two svg icons (sun/moon): ${JSON.stringify(bar.theme)}`);
-  console.log("  topbar:", JSON.stringify({ right: bar.right, open: bar.open.x, save: bar.save.x, lang: bar.lang.x, theme: bar.theme.x, shortcuts: bar.shortcuts.right, icons: [bar.open.icons, bar.save.icons, bar.shortcuts.icons, bar.theme.icons] }));
+  console.log("  topbar:", JSON.stringify({ right: bar.right, open: bar.open.x, save: bar.save.x, lang: bar.lang.x, theme: bar.theme.x, console: bar.console.x, shortcuts: bar.shortcuts.right, icons: [bar.open.icons, bar.save.icons, bar.shortcuts.icons, bar.theme.icons, bar.console.icons] }));
 
   // ---------- PD1/PD2: paste + drop load gate (UI_SPEC §8) ----------
   // Real File objects flow through real ClipboardEvent/DragEvent into the
@@ -769,6 +776,17 @@ async function main() {
       out.staleToast = s.probe("toast") || {};
       // the recorded entry still replays through the same channel
       out.replayed = await s.openRecentSeal(${JSON.stringify(hdSealPath)});
+      // HD14: the opened seal is the drop-down's current option...
+      out.selectedAfter = s.probe("recentSeals").selected;
+      // HD13: ...and the preview card is an overlay in the bottom-left corner,
+      // floating above the pager rail instead of reserving a strip.
+      out.overlay = (function () {
+        var pv = document.querySelector("#preview").getBoundingClientRect();
+        var cardEl = document.querySelector("#seal-preview");
+        var card = cardEl.getBoundingClientRect();
+        var pager = document.querySelector("#page-pager").getBoundingClientRect();
+        return { dx: Math.round(card.left - pv.left), gapAbovePager: Math.round(pager.top - card.bottom), visible: !cardEl.hidden };
+      })();
       // 3) HD9: the bottom-left card shows the current seal, painted
       out.preview = (function () {
         var card = document.querySelector("#seal-preview");
@@ -829,6 +847,15 @@ async function main() {
       })();
       out.panelAfterRemove = s.probe("instancePanel");
       s.setAddMode(false); // never leak the mode into later checks
+      // HD14: a path-less current seal (paste/drag channel) shows the marker
+      // option, and picking the marker is a no-op in the change handler.
+      var cur = s.probe("currentSeal");
+      s.setCurrentSeal(cur.sealId, "pasted.png", "");
+      var mk = s.probe("recentSeals");
+      out.markerSel = mk.selected;
+      out.markerLabel = mk.optionNames.indexOf("pasted.png") >= 0;
+      s.setCurrentSeal(cur.sealId, "company seal", ${JSON.stringify(hdSealPath)});
+      out.restored = s.probe("recentSeals").selected;
     } catch (e) { out.crash = String((e && e.stack) || e); }
     return JSON.stringify(out);
   })()`);
@@ -858,6 +885,56 @@ async function main() {
   truthy(`HD12: reset restores the default parameters, remove drops the row (selection moves): ${JSON.stringify({ resetScale: hd.resetScale, defaultScale: hd.defaultScale, counts: [hd.countBefore, hd.countAfterClick, hd.countAfterRemove], panel: hd.panelAfterRemove, forSel: hd.panelForSel })}`,
     hd.resetScale === hd.defaultScale && hd.countAfterRemove === hd.countAfterClick - 1 &&
       hd.selAfterRemove !== hd.idAfterClick && hd.panelAfterRemove.visible === hd.panelForSel);
+  truthy(`HD13: the preview card is an overlay at the bottom-left, above the pager rail: ${JSON.stringify(hd.overlay)}`,
+    hd.overlay && hd.overlay.visible === true && hd.overlay.dx === 10 &&
+      hd.overlay.gapAbovePager >= 0 && hd.overlay.gapAbovePager <= 90);
+  truthy(`HD14: opened seal becomes the drop-down's current option, path-less seal shows the marker: ${JSON.stringify({ selected: hd.selectedAfter, marker: hd.markerSel })}`,
+    String(hd.selectedAfter).toLowerCase() === hdSealPath.toLowerCase() &&
+      hd.markerSel === "__current__" && hd.markerLabel === true &&
+      String(hd.restored).toLowerCase() === hdSealPath.toLowerCase());
+
+  // ---------- HD16: the backend-terminal toggle + the log tail ----------
+  const hdlog = await json(`(async function () {
+    var s = window.__autoStampShell;
+    function wait(fn, ms) {
+      return new Promise(function (res) {
+        var t0 = Date.now();
+        var iv = setInterval(function () {
+          var done = false;
+          try { done = !!fn(); } catch (e) { done = false; }
+          if (done) { clearInterval(iv); res(true); }
+          else if (Date.now() - t0 > ms) { clearInterval(iv); res(false); }
+        }, 100);
+      });
+    }
+    var out = {};
+    try {
+      out.raw = await window.__autoStampApi.request("/api/logs?since=0");
+      out.before = s.probe("console");
+      document.querySelector("#btn-console").click();
+      out.pollOk = await wait(function () {
+        var p = s.probe("console");
+        return p.visible && p.lines >= 1;
+      }, 8000);
+      out.opened = s.probe("console");
+      out.serverVisible = (await window.__autoStampApi.request("/api/settings")).settings.ui.consoleVisible;
+      document.querySelector("#btn-console").click();
+      await wait(function () { return !s.probe("console").visible; }, 5000);
+      out.closed = s.probe("console");
+      out.serverHidden = (await window.__autoStampApi.request("/api/settings")).settings.ui.consoleVisible;
+    } catch (e) { out.crash = String((e && e.stack) || e); }
+    return JSON.stringify(out);
+  })()`);
+  if (!hdlog || hdlog.crash) bad("HD16 console block crashed: " + (hdlog && hdlog.crash ? String(hdlog.crash).slice(0, 200) : "null"));
+  truthy(`HD16: GET /api/logs carries the startup lines (${JSON.stringify((hdlog.raw && hdlog.raw.lines || []).length)} lines)`,
+    hdlog.raw && Array.isArray(hdlog.raw.lines) &&
+      hdlog.raw.lines.some(function (l) { return /AutoStamp starting/.test(l.message); }));
+  truthy("HD16: hidden by default; the toggle opens a painted panel and persists true",
+    hdlog.before && hdlog.before.visible === false && hdlog.pollOk === true &&
+      hdlog.opened.visible === true && hdlog.opened.pressed === "true" &&
+      hdlog.opened.lines >= 1 && hdlog.serverVisible === true);
+  truthy("HD16: the second click hides the panel and persists false",
+    hdlog.closed.visible === false && hdlog.closed.pressed === "false" && hdlog.serverHidden === false);
 
   // The save click above is deliberate: with no document open the shell must
   // refuse locally, so *nothing* may reach the network (asserted below).

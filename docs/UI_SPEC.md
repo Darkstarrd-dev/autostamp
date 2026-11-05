@@ -1,15 +1,13 @@
 # AutoStamp — UI_SPEC（P0.5 UI 契约）
 
-> 最后核对：2026-11-04（§8 新增 HD8–HD12：印章装载入口移到顶栏（「上传印章」按钮 + 最近
-> 印章下拉，`config.recentSeals` 落 settings.json）、左列底部印章预览、加章模式开关、
-> 实例只作用于放置页（W4 修订）、选中实例浮动参数面板取代「叠加参数/位置与尺寸」两段
-> （滑杆范围 10%..200% 可超出、旋转 −180..180、复位/删除按钮）；§2 改 3 行（filter 词表 +
-> scale 范围 + pos/anchor/offset/pages 转 ctl=no）增 2 行、§4 删 14 键 + 增 9 键（270 → 265）、
-> §6 ui-ids 删 7 增 9（89 → 91）、§7.1 增 `setAddMode`/`openRecentSeal`/`dropRecentSeal`
-> 与 `addMode`/`recentSeals`/`sealPreview`/`instancePanel` 探针、删 `setGeomMode`；
-> §7.1 ghost 修复与 V4–V6 沿用；HD4–HD7 沿用；顶栏收尾的 2026-11-03 记录（§2 删
-> `ui.density`、§4 删 12 键、§6 删 6 个顶栏 id、§7 去 `setDensity`、§7.1 加 `docTitle`、
-> HD1/HD2/HD3，L1/RF1 的 UI 形态作废）沿用；P2–P6 接线记录沿用 2026-10-30/11-02）。
+> 最后核对：2026-11-05（§8 新增 HD13–HD16：印章预览卡从常驻底栏改为 `#preview` 左下角
+> overlay、打开的印章自动成为下拉当前选项（无路径印章用 `__current__` 标记项）、顶栏控件
+> 同高 34px、右簇新增后端终端开关 `#btn-console`（`#log-console` 底部 overlay、
+> `GET /api/logs` LogRing 轮询、默认隐藏、持久化 `ui.consoleVisible`）；§2 增
+> `ui.consoleVisible` 行、§4 增 `app.console.btn` 键（265 → 266）、§6 ui-ids 增 3
+>（91 → 94）、§7 增 `console` 探针、§7.1 `recentSeals` 增 `selected`；HD8–HD12
+>（2026-11-04）、顶栏收尾（2026-11-03）与 V4–V6 记录沿用；P2–P6 接线记录沿用
+> 2026-10-30/11-02）。
 > 本文是 **UI 语义唯一权威**：字段名/取值域/控件绑定/DOM id/状态机
 > 在此冻结；P0 起 `web/static/index.html` 必须照 §1 骨架与 §7 id 搭建，P1–P5 只换数据源。
 > 与 `AGENTS.md` §6 路由字段冲突时：先改本文 + §6（同一提交），再改代码。
@@ -69,6 +67,7 @@ field=api.fs.pick.startDir api=fs.pick.startDir type=text range=abs dir default=
 field=api.open.assetId api=open.assetId type=text range=assetId default=- nullable=yes ctl=no i18nkey=api.open.assetId.ctl decision=-
 field=ui.lang api=- type=segmented range=en|cn default=en nullable=no ctl=yes i18nkey=ui.lang.ctl decision=-
 field=ui.theme api=- type=segmented range=light|dark default=light nullable=no ctl=yes i18nkey=ui.theme.ctl decision=-
+field=ui.consoleVisible api=- type=boolean range=true|false default=false nullable=no ctl=no i18nkey=app.console.btn decision=HD16
 field=decision.assetIds api=- type=display range=5个 assetId chip default=- nullable=yes ctl=yes i18nkey=asset.hint decision=-
 field=api.split.assetId api=split.assetId type=text range=assetId default=- nullable=yes ctl=no i18nkey=api.split.assetId.ctl decision=-
 field=api.apply.assetId api=apply.assetId type=text range=assetId default=- nullable=yes ctl=no i18nkey=api.apply.assetId.ctl decision=-
@@ -285,6 +284,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 |app.shortcuts.btn|Shortcuts|快捷键|
 |app.sealAddMode.btn|Add-seal mode|添加印章模式|
 |app.sealAddMode.hint|when on, a left click on empty page space stamps the current seal at that point|开启后：在页面空白处左键点击，即在点击位置放置当前印章|
+|app.console.btn|Backend log|后端终端|
 |split.undo.btn|Undo split|撤销切分|
 |apply.undo.btn|Undo stamping|撤销盖章|
 |apply.write.btn|Stamp into PDF|盖到 PDF|
@@ -513,14 +513,18 @@ P0/P1 的 `index.html` 必须使用下表 id（`ui-ids` 块 = `ui-contract.mjs` 
 新增 id 要先登记，mock 缺该 id 即报错。
 
 ```ui-ids
-app-main  app-root  apply-blend  asset-hooks  batch-auto-split  batch-binding  batch-cols  batch-cross-page  batch-files  batch-pick-dir  batch-pick-files  batch-progress  batch-queue  batch-rows  batch-split-mode  batch-start  batch-start-offset  btn-open  btn-save  btn-seal-add  btn-seal-upload  btn-shortcuts  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  drop-hint  empty-path  empty-pick  empty-pick-filter  empty-pick-multi  empty-state  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-add  instance-delete  instance-duplicate  instance-panel  instance-remove  instance-reset  lang-seg  modal-layer  page-pager  panel  panel-actions  panel-batch  panel-crosspage  panel-export  panel-instances  panel-seal  panel-split  password-modal  pixel-readout  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  right-sidebar  save-cancel  save-confirm  save-modal  error-toast  save-open  save-pick  save-source  seal-despill-revert  seal-instances  seal-meta  seal-preset-delete  seal-preset-load  seal-preset-name  seal-preset-save  seal-preset-select  seal-preview  seal-preview-canvas  seal-preview-name  seal-recent-select  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  split-apply  split-mode  split-veto  strip-previews  theme-seg  topbar
+app-main  app-root  apply-blend  asset-hooks  batch-auto-split  batch-binding  batch-cols  batch-cross-page  batch-files  batch-pick-dir  batch-pick-files  batch-progress  batch-queue  batch-rows  batch-split-mode  batch-start  batch-start-offset  btn-console  btn-open  btn-save  btn-seal-add  btn-seal-upload  btn-shortcuts  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  drop-hint  empty-path  empty-pick  empty-pick-filter  empty-pick-multi  empty-state  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-add  instance-delete  instance-duplicate  instance-panel  instance-remove  instance-reset  lang-seg  log-console  log-console-body  modal-layer  page-pager  panel  panel-actions  panel-batch  panel-crosspage  panel-export  panel-instances  panel-seal  panel-split  password-modal  pixel-readout  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  right-sidebar  save-cancel  save-confirm  save-modal  error-toast  save-open  save-pick  save-source  seal-despill-revert  seal-instances  seal-meta  seal-preset-delete  seal-preset-load  seal-preset-name  seal-preset-save  seal-preset-select  seal-preview  seal-preview-canvas  seal-preview-name  seal-recent-select  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  split-apply  split-mode  split-veto  strip-previews  theme-seg  topbar
 
 ```
 
-顶栏**没有任何文本**（HD5，2026-11-04）：只有「打开 / 保存」左簇、「语言 / 主题 / 快捷键」右簇，
-全部图标 + `data-i18n-title` tooltip。版本与打开后的文件名只写在**窗口标题**里 —— 原生标题栏
-（Go `windowTitle`）与浏览器标签页（`document.title`）同一个串 `AutoStamp <版本> [文件名]`（HD2 修订）。
-`#app-main` 不带版式属性（固定 two-col，HD3）；左列的 `#preview` 无内边距、无圆角（HD7）。
+顶栏**没有任何文本**（HD5，2026-11-04）：只有图标控件 —— 左簇 = 打开 → 上传印章 → 最近印章
+下拉 → 加章模式开关 → 保存（HD8/HD10），右簇 = 语言 / 主题 / 后端终端（`#btn-console`，HD16）/
+快捷键（最右），全部图标 + `data-i18n-title` tooltip；控件同高 34px（HD15，2026-11-05）。
+版本与打开后的文件名只写在**窗口标题**里 —— 原生标题栏（Go `windowTitle`）与浏览器标签页
+（`document.title`）同一个串 `AutoStamp <版本> [文件名]`（HD2 修订）。
+`#app-main` 不带版式属性（固定 two-col，HD3）；左列的 `#preview` 无内边距、无圆角（HD7）；
+`#seal-preview`（HD13）与 `#log-console`（HD16，默认隐藏）都是 `#preview` 左下角的绝对定位
+overlay，不占布局。
 
 `#preview-stage` **无滚动条**（`overflow: hidden`，V5）：缩放超过容器时平移走程序化
 滚动偏移（`app-preview.js` 的 `bindPan`：Space+方向键 / Space+左键拖动 / 滚轮；
@@ -538,7 +542,7 @@ fit 为整页适配（V4），`#page-frame` 永远完整可见。
 `setParams({api.x: v,…})`、`probe(name)`、`applyLang(lang)`、`applyTheme(t)`、
 `i18n()`（DOM 快照）、`fields()`、`ids()`、`q()/qa()`、`setModal()/clearToast()`。
 `probe` 关键字：`state` `overflow` `images` `instances` `split` `strip` `pixel-blend` `estimate`
-`addMode`（加章模式开关读数）`recentSeals`（下拉 + 记录读数值，见 §8 HD8）`sealPreview`（预览 canvas 尺寸）`instancePanel`（面板可见性/位置）。
+`addMode`（加章模式开关读数）`recentSeals`（下拉 + 记录读数值，见 §8 HD8）`sealPreview`（预览 canvas 尺寸）`instancePanel`（面板可见性/位置）`console`（后端终端面板开关读数，HD16）。
 
 深链：`mockup.html#crosspage`（`hashchange` 会重走状态机）。
 
@@ -564,9 +568,12 @@ tooltip）、`probe(name)`、
 `estimate`（导出体积预估，见 §7 E1）
 `load`（粘贴/拖拽装载读数：`{kind: pdf|seals|reject, reason, names, count}`，见 §8 PD1/PD2）
 `addMode` (add-seal mode boolean) `defaults` (reset snapshot = current defaults group, HD12)
-`recentSeals` (`{paths, names, optionNames, optionValues}` dropdown and record readings, HD8)
-`sealPreview` (`{visible, w, h, name, drawn}` left-column bottom preview, HD9)
+`recentSeals` (`{paths, names, optionNames, optionValues, selected}` dropdown and record
+readings, HD8; `selected` = the drop-down's current value, a path or the `__current__`
+marker for path-less seals, HD14)
+`sealPreview` (`{visible, w, h, name, drawn}` the bottom-left overlay card, HD9→HD13)
 `instancePanel` (`{visible, left, top, w, h}` floating panel geometry, HD12)
+`console` (`{visible, pressed, lines, seq}` the backend-terminal readings, HD16)
 `page` (current page number), `currentSeal` (the current seal's sealId or null).
 
 `window.__autoStampPreview`（`app-preview.js`）：`open(info)`、`setPassword(pw)`、`reload(pw)`、
@@ -670,6 +677,10 @@ FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 |HD10|加章怎么进页面|加章模式开关（推荐）/ 双击页面加章 / 常驻「新增实例」按钮|已确认（用户 2026-11-04 对话指令）：下拉右侧 `#btn-seal-add`（SVG 示意图标，`aria-pressed` 切档，不持久化）；开启后左键点击页面空白处 = 在点击位置用当前印章新增实例；点击已有实例仍是选择/拖动（不叠加点）；没有当前印章时 toast 告警|2026-11-04|用户 2026-11-04 对话指令|
 |HD11|实例作用于哪些页|所有页（原状）/ 在哪页盖章就只在那页（推荐）|已确认（用户 2026-11-04 对话指令，**修订 W4 的交互默认**）：交互实例的 `pages` = 放置/加章所在页（不同页可盖不同章）；落盘语义仍按 W4 词表逐页写；骑缝实例（`crossPage=true`）仍为 `all` 逐页条带（D2/CP1 不变，开启骑缝时实例 `pages` 归 `all`）；批处理 `pagesForDoc`（BM5）不受影响|2026-11-04|用户 2026-11-04 对话指令|
 |HD12|叠加参数/位置尺寸控件放哪里|浮动面板贴选中实例右侧（推荐）/ 留在侧栏 / 弹窗|已确认（用户 2026-11-04 对话指令）：侧栏「叠加参数」「位置与尺寸」两段删除；`#instance-panel` 贴当前选中实例右侧（放不下翻转），成员 = 分组混合模式 `<select>` + 透明度/明度/饱和度/缩放/旋转滑杆（+数值双向绑定）+ 底部「复位」「删除」；**缩放滑杆最左 10% 最右 200%**（默认居中 20.2%），拖边角可超出并在滑杆回显；**旋转滑杆 −180..180** 默认居中 0；复位 = 当前实例参数回 settings 默认组，删除 = 移除当前实例。位置改为画布直接拖放（`pos/anchor/offset/pages` 控件与 `apply-anchor/pos-center/scale-pt` 契约 id 一并删除，`geomMode` 双通道废除，实例几何恒走 anchor+offset）|2026-11-04|用户 2026-11-04 对话指令|
+|HD13|印章预览卡要不要单独开底栏|独立底栏区（HD9 原状）/ 叠加在主页面左下角（推荐）|已确认（用户 2026-11-05 对话指令）：`#seal-preview` 改为 `#preview` 内的绝对定位 overlay（左下，距底 10px；分页条可见时上移至其上方 77px），不再占布局高度；DOM 结构不变、契约 id 不变|2026-11-05|用户 2026-11-05 对话指令|
+|HD14|打开的印章要不要自动成为下拉当前选项|不做 / 当前选项 = 刚打开的印章（推荐）|已确认（用户 2026-11-05 对话指令）：任何路径通道打开印章后 `#seal-recent-select` 的 value 同步为该路径；粘贴/拖拽等无路径通道打开的印章以下拉末尾的标记项（value=`__current__`，label=文件名）作为当前选项，选中该项 = 无操作（不重开）|2026-11-05|用户 2026-11-05 对话指令|
+|HD15|顶栏控件高度要不要统一|统一（推荐）/ 保持现状（按钮与下拉不等高）|已确认（用户 2026-11-05 对话指令）：顶栏全部控件同高 34px = 图标按钮（含上传/加章/后端终端/快捷键/保存/打开）、最近印章下拉、语言/主题切档|2026-11-05|用户 2026-11-05 对话指令|
+|HD16|后端终端显示开关放哪里、默认状态、内容是什么|顶栏开关 + 底部 overlay 面板（推荐）/ 弹窗 / 不做|已确认（用户 2026-11-05 对话指令）：右簇快捷键左侧 `#btn-console`（SVG monitor 图标，`aria-pressed` 切档）；`#log-console` = 左列底部 overlay（`GET /api/logs`：`console.LogRing` 400 条尾窗，时间/级别/消息/属性），仅可见时 1.5s 轮询；**默认隐藏**，可见性持久化 `settings.ui.consoleVisible`（默认 false）|2026-11-05|用户 2026-11-05 对话指令|
 
 
 D2–D4、L1、CP1 已在 P0.5 第 1 轮确认（2026-10-29）；D1、I1、S1、E1 在第 2 轮确认（同日）。
@@ -682,6 +693,12 @@ HD8–HD12 也是 2026-11-04 用户在对话里直接下的指令（印章通道
 实例只作用放置页 + 浮动参数面板取代侧栏两段），来源列同样写「用户 … 对话指令」；HD11 修订了
 W4 的交互默认，HD12 废除了 U1 的 `pos/anchor` 双通道（`geomMode` 从壳中删除）；HD8 的
 「`settings.json` 在应用运行目录」按实现决定落到既有唯一设置文件 `%APPDATA%\AutoStamp\settings.json`。
+
+HD13–HD16 是 2026-11-05 用户在对话里直接下的指令（细节调整 4 项）：HD13 修订 HD9 的形态
+（常驻底栏区 → `#preview` 左下角 overlay，DOM 与契约 id 不变），HD14 在 HD8 的下拉上叠加
+「当前选项」同步语义，HD16 新增 `GET /api/logs` 路由（`AGENTS §6`）与设置字段
+`ui.consoleVisible`、i18n 键 `app.console.btn`、ui-ids `btn-console`/`log-console`/
+`log-console-body`（91 → 94）。
 
 V4–V6 同样是 2026-11-04 用户在人工端到端验收里直接下的修正指令（fit 整页、无滚动条 +
 Space 平移、Ctrl+中键回 fit）；同一轮的「印章 ghost 双绘制」与「明度/饱和度滑杆」是

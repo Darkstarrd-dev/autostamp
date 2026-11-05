@@ -27,7 +27,10 @@ func main() {
 	)
 	flag.Parse()
 
-	log := console.Stderr(*verbose)
+	// HD16: every log record also lands in an in-memory ring so the UI's
+	// backend-terminal panel can tail it through GET /api/logs.
+	logRing := &console.LogRing{}
+	log := console.WithRing(console.Stderr(*verbose), logRing)
 	build := app.ReadBuild()
 	log.Info("AutoStamp starting", "version", build.String(), "pid", os.Getpid())
 
@@ -60,7 +63,7 @@ func main() {
 	}
 	presets := presetstore.New(presetsDir, log)
 
-	mux := api.NewMux(api.Deps{Version: build, Log: log, Settings: settings, Assets: store, Presets: presets})
+	mux := api.NewMux(api.Deps{Version: build, Log: log, LogRing: logRing, Settings: settings, Assets: store, Presets: presets})
 	srv := app.NewServer(ln, mux, log, port, settings.Snapshot().Security.StrictOrigin)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

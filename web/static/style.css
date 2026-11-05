@@ -70,7 +70,9 @@ button { cursor: pointer; color: inherit; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 /* HD1: the remaining topbar controls are icon-only; the icon is decorative,
    the accessible name comes from title/aria-label (i18n via data-i18n-title). */
-.btn.icon { display: inline-flex; align-items: center; justify-content: center; padding: 5px 8px; }
+/* HD15 (2026-11-05): every topbar control shares one 34px height — the icon
+   buttons, the recent-seal select and the language/theme segments align. */
+.btn.icon { display: inline-flex; align-items: center; justify-content: center; height: 34px; padding: 0 8px; }
 .btn.icon .ic, .seg.sm .ic { width: 16px; height: 16px; display: block; }
 .seg.sm button { display: inline-flex; align-items: center; gap: var(--gap-sm); }
 
@@ -78,7 +80,8 @@ button { cursor: pointer; color: inherit; }
 .seg button { border: 0; background: var(--surface); padding: 5px 9px; }
 .seg button + button { border-left: 1px solid var(--border); }
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
-.seg.sm button { padding: 8px 10px; font-size: 12px; }
+.seg.sm { height: 34px; }
+.seg.sm button { height: 100%; padding: 0 10px; font-size: 12px; }
 
 .switch { display: inline-flex; align-items: center; gap: var(--gap-sm); }
 .switch input { width: 15px; height: 15px; accent-color: var(--accent); }
@@ -309,13 +312,17 @@ html[data-state="empty"] #stamp-layer { display: none; }
 #instance-panel .num-pair input[type="number"] { width: 56px; }
 #instance-panel .ip-actions { display: flex; gap: var(--gap-sm); }
 
-/* HD9: the current-seal preview card at the bottom of the left column. */
+/* HD13 (2026-11-05): the current-seal preview is an overlay card at the
+   bottom-left of the main page — it no longer reserves its own strip. */
 #seal-preview {
-  align-self: flex-start; max-width: 190px; margin: 8px;
+  position: absolute; left: 10px; bottom: 10px; z-index: 6; max-width: 190px;
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 8px;
+  border-radius: var(--radius); box-shadow: var(--shadow); padding: 8px;
   display: flex; flex-direction: column; gap: 6px;
 }
+/* The pager rail (border 1 + padding 14 + thumb 56 = 71) sits under the card
+   when a document is open; the overlay floats above it. */
+html:not([data-state="empty"]) #seal-preview { bottom: 77px; }
 #seal-preview[hidden] { display: none; }
 #seal-preview .sp-head { display: flex; gap: 6px; align-items: baseline; font-size: 12px; }
 #seal-preview-name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; }
@@ -331,4 +338,18 @@ html[data-state="empty"] #stamp-layer { display: none; }
 #preview-stage[data-add="on"] .sel-box { cursor: copy; }
 
 /* HD8: the topbar recent-seal drop-down. */
-#seal-recent-select { max-width: 190px; }
+#seal-recent-select { max-width: 190px; height: 34px; }
+/* HD16 (2026-11-05): the backend-terminal overlay across the bottom of the
+   left column; the topbar toggle (HD16) flips settings.ui.consoleVisible. */
+#log-console {
+  position: absolute; left: 10px; right: 10px; bottom: 77px; z-index: 7;
+  height: 180px; overflow: auto; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 8px;
+}
+html[data-state="empty"] #log-console { bottom: 10px; }
+#log-console[hidden] { display: none; }
+#log-console pre {
+  margin: 0; font: var(--mono); font-size: 11px; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-all;
+}

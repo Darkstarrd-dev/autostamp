@@ -300,6 +300,8 @@
     if (s.ui) {
       if (s.ui.theme) applyTheme(s.ui.theme);
       if (s.ui.lang) applyLang(s.ui.lang);
+      // HD16: the persisted visibility restores the backend-terminal panel.
+      setConsoleVisible(Boolean(s.ui.consoleVisible), false);
     }
     const pairs = [
       ["seal", ["despill", "alphaTrim", "resampleDpi"]],
@@ -587,8 +589,14 @@
     return dot > 0 ? part.slice(0, dot) : part;
   }
 
+  // HD14: whatever the current seal is, the drop-down mirrors it - a
+  // path-opened seal selects its recentSeals entry; a pathless one (paste /
+  // drag) gets a marker option that is a no-op when picked.
+  const CURRENT_MARK = "__current__";
+
   function setCurrentSeal(sealId, name, path) {
     state.currentSeal = sealId ? { sealId, name: name || "", path: path || "" } : null;
+    renderRecentSeals();
     const sv = window.__autoStampSeal;
     if (sv && sv.renderPreview) sv.renderPreview();
     notify("autostamp:seal", { sealId });
@@ -604,6 +612,60 @@
     const stage = q("#preview-stage");
     if (stage) stage.dataset.add = state.addMode ? "on" : "off";
     return state.addMode;
+  }
+
+  // HD16: the backend-terminal show/hide toggle. Visibility persists through
+  // settings.ui.consoleVisible (default false = hidden); /api/logs (ring-
+  // backed) is polled only while the panel is open.
+  let logSeq = 0;
+  let logTimer = null;
+
+  function setConsoleVisible(on, persist) {
+    state.consoleVisible = Boolean(on);
+    const btn = q("#btn-console");
+    if (btn) btn.setAttribute("aria-pressed", String(state.consoleVisible));
+    const panel = q("#log-console");
+    if (panel) panel.hidden = !state.consoleVisible;
+    if (state.consoleVisible) {
+      if (!logTimer) logTimer = setInterval(pollLogs, 1500);
+      pollLogs();
+    } else if (logTimer) {
+      clearInterval(logTimer);
+      logTimer = null;
+    }
+    if (!persist) return state.consoleVisible;
+    api.patchSettings({ ui: { consoleVisible: state.consoleVisible } })
+      .then(refreshSettings)
+      .catch((e) => toast("error", `${e.code}: ${e.message}`));
+    return state.consoleVisible;
+  }
+
+  // pollLogs pulls the delta since the last fetched sequence; the ring keeps a
+  // tail, so opening the panel at seq 0 shows the whole current run.
+  async function pollLogs() {
+    if (!state.consoleVisible) return;
+    try {
+      const res = await api.logs(logSeq);
+      logSeq = res.next || logSeq;
+      const lines = res.lines || [];
+      if (!lines.length) return;
+      const pre = q("#log-console-body");
+      if (!pre) return;
+      for (const l of lines) {
+        const span = doc.createElement("span");
+        span.textContent = `${l.time} ${l.level} ${l.message}${l.attrs ? ` ${l.attrs}` : ""}`;
+        pre.append(span, doc.createTextNode("\n"));
+      }
+      // keep the DOM window the same size as the ring's
+      while (pre.childElementCount > 400) {
+        pre.removeChild(pre.firstChild);
+        pre.removeChild(pre.firstChild);
+      }
+      const box = pre.parentElement;
+      if (box) box.scrollTop = box.scrollHeight;
+    } catch (e) {
+      // poll silently: the panel is best-effort
+    }
   }
 
   // HD10+HD11: clicking the page drops the current seal centered on that
@@ -649,7 +711,24 @@
       opt.title = r.path;
       sel.append(opt);
     }
-    if (Array.from(sel.options).some((o) => o.value === prev)) sel.value = prev;
+    // HD14: the current seal becomes the selected option after every render;
+    // a pathless current seal appends the marker option as its stand-in.
+    let target = "";
+    const cur = state.currentSeal;
+    if (cur) {
+      if (cur.path && list.some((r) => r.path === cur.path)) target = cur.path;
+      else if (cur.name && !cur.path) {
+        const mark = doc.createElement("option");
+        mark.value = CURRENT_MARK;
+        mark.textContent = cur.name;
+        mark.title = cur.name;
+        sel.append(mark);
+        target = CURRENT_MARK;
+      }
+    }
+    const values = Array.from(sel.options).map((o) => o.value);
+    if (target && values.includes(target)) sel.value = target;
+    else if (prev && values.includes(prev)) sel.value = prev;
     return list.map((r) => r.path);
   }
 
@@ -799,6 +878,7 @@
     ["Ctrl+wheel", "scale.hint"],
     ["Space + ←↑↓→ / Space + 左键拖动", "view.pan.hint"],
     ["Ctrl + 鼠标中键", "view.fit.hint"],
+    ["顶栏 后端终端 开关", "app.console.btn"],
     ["Esc / ?", "esc.hint", "shortcuts.hint"],
   ];
 
@@ -1024,8 +1104,10 @@
     q("#instance-remove").addEventListener("click", () => deleteSelected());
     // HD8/HD10: the header seal channel + the add-seal-mode toggle.
     q("#btn-seal-upload").addEventListener("click", () => pickSealUpload());
-    q("#seal-recent-select").addEventListener("change", (e) => openRecentSeal(e.target.value));
+    q("#seal-recent-select").addEventListener("change", (e) => openRecentSeal(e.target.value === CURRENT_MARK ? "" : e.target.value));
     q("#btn-seal-add").addEventListener("click", () => setAddMode(!state.addMode));
+    // HD16: the backend-terminal toggle; the initial state rides applySettings.
+    q("#btn-console").addEventListener("click", () => setConsoleVisible(!state.consoleVisible, true));
 
     // modal wiring (decision S1)
     q("#save-open").addEventListener("click", () => { setModal("save-modal"); setState("save-confirm"); });
@@ -2250,6 +2332,8 @@
           names: list.map((r) => baseName(r.path)),
           optionNames: sel ? Array.from(sel.options).filter((o) => o.value).map((o) => o.textContent) : [],
           optionValues: sel ? Array.from(sel.options).filter((o) => o.value).map((o) => o.value) : [],
+          // HD14: the option in use (path or the marker).
+          selected: sel ? sel.value : "",
         };
       }
       case "sealPreview": {
@@ -2273,6 +2357,17 @@
           top: r ? Math.round(r.top) : 0,
           w: r ? Math.round(r.width) : 0,
           h: r ? Math.round(r.height) : 0,
+        };
+      }
+      case "console": {
+        const panel = q("#log-console");
+        const pre = q("#log-console-body");
+        const txt = pre ? pre.textContent.trim() : "";
+        return {
+          visible: Boolean(panel && !panel.hidden),
+          pressed: (q("#btn-console") || {getAttribute: () => null}).getAttribute("aria-pressed"),
+          lines: txt ? txt.split("\n").filter(Boolean).length : 0,
+          seq: logSeq,
         };
       }
       default:

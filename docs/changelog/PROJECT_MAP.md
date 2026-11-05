@@ -3,6 +3,14 @@
 > `PROJECT_MAP.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-11-05 — HD13–HD16：`internal/console/ring.go` + `internal/api/logs.go` + 前端 overlay/同高/开关
+
+- 头「最后核对」换成本轮摘要（历轮增量保留在正文之下）；`internal/console` 行补 `ring.go`
+  （`LogRing`/`WithRing`/`ParseSince` + `ring_test.go`）；`internal/api` 新 `logs.go` 行；
+  `app-shell.js` 新「HD13–HD16 细节调整」行（`CURRENT_MARK`、`setConsoleVisible`/`pollLogs`、
+  probe `console`/`selected`）；`app-i18n.js` 行 266 键；`style.css` 行补 overlay 定位组 +
+  顶栏 34px 组。
+
 ## 2026-11-04 — 视口 V4–V6：`app-preview.js`（fit 整页 + `bindPan`）+ `app-overlay.js`（实例画布 probe 背板）
 
 - 头「最后核对」追加本轮：`fitZoom = min(stageWidth, stageHeight)`（打开默认 fit，两向不溢出）、

@@ -3,6 +3,12 @@
 > `docs/IMPLEMENTATION_PLAN.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-11-05 — §10.1 登记 HD13–HD16（预览卡 overlay + 下拉当前选项 + 顶栏同高 + 后端终端）
+
+- §10.1 表新增一行「细节调整（HD13–HD16）」：契约面 §2/§4/§6/§7、Go 面 `ring.go` +
+  `logs.go` + `ConsoleVisible`、前端面 `index.html`/`style.css`/`app-shell.js`/`app-api.js`
+  + mock 镜像；门槛实测在右列回填（惯例 follow-up docs commit）。
+
 
 ## 2026-11-04 — §10.1 登记 HD8–HD12（顶栏印章通道 + 左下预览 + 加章模式 + 逐页落盘 + 浮动面板）
 

@@ -11,6 +11,7 @@ import (
 
 	"autostamp/internal/app"
 	"autostamp/internal/config"
+	"autostamp/internal/console"
 	"autostamp/internal/presetstore"
 	"autostamp/internal/tmpstore"
 	"autostamp/internal/webx"
@@ -21,6 +22,7 @@ import (
 type Deps struct {
 	Version  app.BuildInfo
 	Log      *slog.Logger
+	LogRing  *console.LogRing
 	Settings *config.Store
 	Assets   *tmpstore.Store
 	Presets  *presetstore.Store
@@ -38,6 +40,9 @@ func NewMux(d Deps) *http.ServeMux {
 	mux.HandleFunc("GET /api/health", handleHealth(d.Version))
 	mux.HandleFunc("GET /api/settings", handleSettingsGet(d.Settings))
 	mux.HandleFunc("POST /api/settings", handleSettingsPost(d.Settings))
+	// HD16: the backend-terminal panel reads the app's own log tail here; the
+	// ring is fed by console.WithRing (main.go), so nothing is re-parsed.
+	mux.HandleFunc("GET /api/logs", handleLogs(d.LogRing))
 
 	// P1: the local-file channel. The upload route is wrapped in
 	// MaxBytesHandler (AGENTS §5.11) so a 300 MB PDF cannot be spooled; the

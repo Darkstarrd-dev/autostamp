@@ -3,6 +3,19 @@
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-11-05 — 新增 §5.31/§5.32（HD13–HD16 细节调整）+ §6 `GET /api/logs` 行 + §8.7 断言扩 + §11 两行
+
+- §5.31：`#seal-preview` 改 `#preview` 内绝对定位 overlay（左下距底 10px，分页条可见时
+  77px），不再占布局；下拉当前选项同步 = 当前印章路径，无路径印章 = `__current__` 标记项
+  （选中 = no-op）。
+- §5.32：顶栏控件同高 34px；`#btn-console` 切 `#log-console`（左列底部 overlay 180px），
+  内容 = `console.LogRing` 400 条尾窗（`WithRing` 扇出），仅可见时 1.5s 轮询；可见性持久化
+  `config.UI.ConsoleVisible`（默认 false = 隐藏）。
+- §6 路由表加 `GET /api/logs`（`{lines,next}` + `?since=` 增量）；§8.7 壳契约描述扩到
+  HD8–HD16（预览卡 overlay 几何、当前选项、同高、开关 + 日志非空 + 持久化）；§11 增
+  「预览卡 overlay / 下拉当前选项 / 顶栏高度 / 后端终端」行，「改 UI 契约」行 `ui.*` 词表
+  补 `consoleVisible`。
+
 
 ## 2026-11-04 — 新增 §5.28/§5.29/§5.30（HD8–HD12：印章顶栏通道、加章模式 + 逐页落盘、浮动参数面板）+ §6 三行契约 + §8.7/§8.12 断言 + §11 新行
 

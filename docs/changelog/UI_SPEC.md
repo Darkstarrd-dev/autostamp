@@ -3,6 +3,15 @@
 > `docs/UI_SPEC.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-11-05 — §8 新增 HD13–HD16：预览卡 overlay + 下拉当前选项 + 顶栏同高 34px + 后端终端开关
+
+- 头「最后核对」重写为本轮摘要；§2 增 `ui.consoleVisible` 行；§4 增 `app.console.btn`
+  （265 → 266）；§6 ui-ids 增 `btn-console`/`log-console`/`log-console-body`（91 → 94）+
+  顶栏段落重写（左簇含印章通道、右簇含后端终端、控件同高、预览卡/终端面板 = overlay）；
+  §7 mock 探针 + `console`，§7.1 `recentSeals` 增 `selected` + `console` 探针行。
+- §8 决策表新增 HD13/HD14/HD15/HD16 四行（来源 = 用户 2026-11-05 对话指令）+ 表后段落注记
+  （HD13 修订 HD9 形态、HD14 叠加在 HD8 下拉上、`api/logs` 路由登记进 AGENTS §6）。
+
 
 ## 2026-11-04 — §8 新增 HD8–HD12：顶栏印章通道 + 左下预览 + 加章模式 + 逐页落盘 + 浮动面板（侧栏两段删除）
 

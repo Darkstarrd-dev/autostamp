@@ -233,10 +233,16 @@ async function main() {
       m.clearToast();
       out.panel = m.probe("instancePanel");
       out.preview = m.probe("sealPreview");
+      out.consoleBefore = m.probe("console");
+      m.q("#btn-console").click();
+      out.consoleOpen = m.probe("console");
+      m.q("#btn-console").click();
+      out.consoleClosed = m.probe("console");
+      out.h = [m.q("#btn-open"), m.q("#seal-recent-select"), m.q("#btn-console"), m.q("#btn-shortcuts")].map(function (e) { return Math.round(e.getBoundingClientRect().height); });
       return out;
     })()`);
-  cmp("HD8: header carries open → seal upload → recent seals → add mode → save → shortcuts", seals.barSeq,
-    "btn-open,btn-seal-upload,seal-recent-select,btn-seal-add,btn-save,btn-shortcuts");
+  cmp("HD8: header carries open → seal upload → recent seals → add mode → save → backend log → shortcuts", seals.barSeq,
+    "btn-open,btn-seal-upload,seal-recent-select,btn-seal-add,btn-save,btn-console,btn-shortcuts");
   if (seals.dead.length) bad("HD11/HD12 deleted ids are back in the mock: " + seals.dead.join(" "));
   cmp("HD11: no pos/anchor/offset/pages input inside the sidebar panel",
     [seals.geoInputs, seals.addModeBefore.on, seals.addModeAfter.on, seals.addModeAfter.cursor, seals.addModeOff.on],
@@ -252,6 +258,12 @@ async function main() {
     [seals.panel.visible, seals.panel.hasControls], [true, true]);
   cmp("HD9: bottom-left seal preview paints the current seal",
     [seals.preview.visible, seals.preview.painted, Boolean(seals.preview.name)], [true, true, true]);
+  cmp("HD16: the mock toggle flips panel visibility with the aria-pressed pair",
+    [seals.consoleBefore.visible, seals.consoleOpen.visible, seals.consoleOpen.pressed,
+      seals.consoleClosed.visible, seals.consoleClosed.pressed],
+    [false, true, "true", false, "false"]);
+  cmp("HD15: the mock topbar controls share one 34px height",
+    [new Set(seals.h).size, seals.h[0]], [1, 34]);
   await evaluate('window.__autoStampMock.setState("empty")');
 
   // 4. i18n coverage: every key resolves to non-empty en and cn

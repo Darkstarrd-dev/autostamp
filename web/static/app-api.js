@@ -160,6 +160,9 @@
     // clamps out-of-range values instead of rejecting them, and reports which
     // value it fixed in `warning`.
     patchSettings: (patch) => request("/api/settings", { method: "POST", body: { patch } }),
+    // HD16: the log tail (ring-backed); poll while the panel is visible and
+    // pass the previous "next" back as "since" so no line is re-sent.
+    logs: (since) => request(`/api/logs?since=${Number(since) || 0}`),
 
     sealPrepareGrant,
 
