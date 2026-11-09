@@ -387,16 +387,25 @@ async function main() {
       m.q('#crosspage-binding button[data-value="alternate"]').click();
       var pressed = m.q('#crosspage-binding button[data-value="alternate"]').getAttribute("aria-pressed");
       var after = m.probe("strip");
+      // UI4 N4: the placement click rides the percent channel - the mock's
+      // crosspage driver clicks at y = 60 on the A4 page model (595.3 x 841.9),
+      // so pct = clamp(round1((1 - pt.y / (pageH - h)) x 100), 0, 100) with
+      // h = apply.scale x page width (the aspect-1 seal fixture).
+      var pctScale = Number(m.S.p["apply.scale"]);
+      var pctTravel = 841.9 - pctScale * 595.3;
+      var pctWant = Math.max(0, Math.min(100, Math.round((1 - 60 / pctTravel) * 1000) / 10));
       return {
         model: m.S.p["ui.crosspage.binding"], pressed: pressed, probe: after,
         placedMode: placed.mode, placedOn: placed.on, placedCp: placed.cpFields,
-        placedOffset: placed.startOffset, sideBefore: before.side,
+        placedOffset: placed.startOffset, pctWant: pctWant, sideBefore: before.side,
         cpVisible: getComputedStyle(m.q("#crosspage-binding")).display !== "none",
       };
     })()`);
-  cmp("SP4 placement: mode button + placed strip at click height",
-    { on: seg.placedOn, cpFields: seg.placedCp, offset: seg.placedOffset, mode: seg.placedMode },
-    { on: true, cpFields: true, offset: 60, mode: "crosspage" });
+  cmp("SP4 placement: mode button + cp group + placed strip instance",
+    { on: seg.placedOn, cpFields: seg.placedCp, mode: seg.placedMode },
+    { on: true, cpFields: true, mode: "crosspage" });
+  truthy(`the placed strip echoes the click-height PERCENT exactly (startOffset=${seg.placedOffset}, want ${seg.pctWant}, 0..100)`,
+    seg.placedOffset >= 0 && seg.placedOffset <= 100 && Math.abs(seg.placedOffset - seg.pctWant) < 0.05);
   cmp("binding segmented writes model + aria (selected strip)", { model: seg.model, pressed: seg.pressed }, { model: "alternate", pressed: "true" });
   cmp("crosspage strips (5-page demo doc, one strip per page)", { strips: seg.probe.strips, side: seg.sideBefore }, { strips: 5, side: "right" });
   truthy("cp group visible on the floating panel (SP4)", seg.cpVisible);

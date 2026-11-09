@@ -100,8 +100,10 @@ func validatePresetParams(in *presetstore.Params) (string, string) {
 	if in.Scale < 0 || in.Scale > 10 {
 		return "bad_body", "scale 需在 0..10"
 	}
-	if in.StartOffset < 0 || in.StartOffset > 1000 {
-		return "bad_body", "startOffset 需在 0..1000"
+	// N4: the preset params are the apply vocabulary, so startOffset here is
+	// the 0..100 percent along the page, not a point offset.
+	if in.StartOffset < 0 || in.StartOffset > 100 {
+		return "bad_body", "startOffset 需在 0..100（%）"
 	}
 	if in.ResampleDPI != 0 && (in.ResampleDPI < 72 || in.ResampleDPI > 600) {
 		return "bad_body", "resampleDpi 需在 72..600"

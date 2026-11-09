@@ -2,6 +2,20 @@
 
 > `docs/IMPLEMENTATION_PLAN.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-09 — §10.1 登记「UI4 轮（N1–N4）」+ 头「最后核对」= UI4 轮摘要
+
+- 头「最后核对」= N1–N4（初始透明度 0.6 会话值复位 / 说明转 tooltip / 骑缝切片仅随机 /
+  `startOffset` = 0..100 百分比）；IP1/IP2 降为「同日前一轮」、Z5 降为「更早一轮」并在其中挂
+  「平均|随机切档已由 N3 作废」注记；计数链 i18n … → 137、ui-ids … → 57。
+- §10.1 新增尾行 **N1–N4 UI4 轮**（状态 = 已实现（本提交））：四段分工（契约面 / Go 面 / UI 面 /
+  verify 面）+ 门槛清单 = `build.ps1 -Task vet,test,verify`（`go vet` + `go test`（config 无
+  `SliceMode`、N4 几何测试）、`ui-contract` **i18n = 137 / ids = 57 / `data-field` −1**、
+  `ui-smoke`、`shell-smoke`（dead id + 死键守卫 + 百分比读数）、
+  `overlay-smoke`/`apply-smoke --only=strip`（`Y = (1 − pct/100) × (pageH − h)` ±1 pt、
+  拖 Δpct = −dy/travel × 100 ±1）、`pixel-matrix`/`preview-smoke` 的 startOffset 取样点）；
+  实测数值与「全绿」措辞由父级在本提交后统一跑一遍回填。
+- Z5 登记行尾挂「切档 + `apply.sliceMode` 已由 N3 删除，仅随机恒生效」标记（指向新行）。
+
 
 ## 2026-11-06 — §10.1 登记「空态只剩一枚大按钮（HD19）」+ 头「最后核对」并入 HD19
 

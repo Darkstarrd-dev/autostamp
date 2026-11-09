@@ -191,7 +191,7 @@ async function main() {
       var forward = Number(num.value) === mid;
       num.value = String(mid + step);
       num.dispatchEvent(new Event("input"));
-      out[f] = { pair: els.length, mid: mid, forward: forward, backward: Number(range.value) === mid + step };
+      out[f] = { pair: els.length, mid: mid, forward: forward, backward: Number(range.value) === mid + step, min: Number(range.min), max: Number(range.max), step: step };
     });
     return JSON.stringify(out);
   })()`);
@@ -200,6 +200,15 @@ async function main() {
     if (!v.forward || !v.backward) bad(`${f}: slider/number are not two-way bound (${JSON.stringify(v)})`);
   }
   console.log("  ok slider/number two-way bound =", Object.keys(pairsData || {}).join(","));
+  // UI4-N4 (2026-11-09): the startOffset pair is a PERCENT control now - the
+  // slider (and the number box beside it) carry min 0 / max 100, so the field
+  // can never be driven past the page. The old 0..200 pt range is gone.
+  const offPair = (pairsData || {})["api.apply.startOffset"];
+  if (!offPair || offPair.min !== 0 || offPair.max !== 100) {
+    bad(`api.apply.startOffset slider bounds: want min 0 / max 100 (percent), got ${JSON.stringify(offPair)}`);
+  } else {
+    console.log(`  ok startOffset slider range = 0..${offPair.max}% step ${offPair.step}`);
+  }
 
   // grouped 16-mode blend select
   const blend = await json(`(function(){
@@ -359,6 +368,22 @@ async function main() {
   await evaluate("window.__autoStampShell.applyLang('en')");
   const enWrong = await renderedWrong("en");
   if (enWrong && enWrong.length) bad("en text not restored: " + enWrong.slice(0, 8).join(" | "));
+  // UI4-N2 (2026-11-09): the static option explanations ride the [data-i18n-
+  // title] channel (title + aria-label), never a visible text node, so the en
+  // twin has to answer on exactly that channel too.
+  const enTipWrong = await pageErr(`(function(){
+    var cat = window.__autoStampI18n.CATALOG;
+    var out = [];
+    document.querySelectorAll('[data-i18n-title]').forEach(function(el){
+      var k = el.getAttribute('data-i18n-title');
+      var e = cat[k];
+      if (!e) return;
+      if (el.getAttribute('title') !== e.en) out.push(k + " title=" + JSON.stringify(el.getAttribute('title')));
+      if (el.getAttribute('aria-label') !== e.en) out.push(k + " aria-label=" + JSON.stringify(el.getAttribute('aria-label')));
+    });
+    return out;
+  })()`);
+  if (enTipWrong && enTipWrong.length) bad("en tooltip not restored to title/aria-label: " + enTipWrong.slice(0, 8).join(" | "));
   truthy("i18n catalog has " + domKeys.size + " keys loaded", (await pageErr("window.__autoStampI18n.keys.length")) >= domKeys.size);
   await evaluate("window.__autoStampShell.applyLang('cn')");
 
@@ -546,7 +571,11 @@ async function main() {
     // HD19 (2026-11-06): the empty state is one centered #empty-pick button +
     // the paste/drag hint. The path box, the multi/filter chips and the
     // grant readout inside the empty state are gone for good.
-    "empty-path", "empty-pick-multi", "empty-pick-filter"];
+    "empty-path", "empty-pick-multi", "empty-pick-filter",
+    // UI4-N3 (2026-11-09): the 骑缝切片 mode segment (#crosspage-slicemode) is
+    // deleted with its whole .field; 随机 is the only slice channel now, so the
+    // id must never come back.
+    "crosspage-slicemode"];
   const revived = await pageErr(`(function(){
     var have = {};
     window.__autoStampShell.ids().forEach(function(id){ have[id] = true; });
@@ -929,8 +958,9 @@ async function main() {
       out.panelRecollapsed = s.probe("instancePanel");
       // 7) SP4 (2026-11-05): cross-page placement mode. Mutual exclusion with
       // the add-seal toggle; a page click drops a strip instance whose
-      // startOffset rides the click height; the panel's cp group shows only for
-      // that selection; binding none demotes it back to a page stamp.
+      // startOffset percent rides the click height (UI4-N4); the panel's cp
+      // group shows only for that selection; binding none demotes it back to a
+      // page stamp.
       var xbtn = document.querySelector("#btn-crosspage-add");
       s.setAddMode(true);
       xbtn.click();
@@ -952,9 +982,30 @@ async function main() {
       (function () {
         var ov = window.__autoStampOverlay;
         var cvr = ov.probe("canvasRect");
-        if (!cvr || xsel === null) { out.xStartOk = false; return; }
-        var want = (cr2.top + 160 - cvr.top) / ov.state.scale;
-        out.xStartOk = Math.abs(out.xPlaced.start - want) <= 10;
+        if (!cvr || xsel === null) { out.xPctOk = false; return; }
+        // UI4-N4: the click height becomes a percent of the strip's travel:
+        //   pct = clamp((1 - pt.y / (pageH - h)) x 100, 0, 100)
+        // with h = the whole strip box height (the probe rect's own h) and
+        // pageH = the page's display height. The same formula gives the box
+        // top; the percent is rounded to one decimal (0.1 % of the travel), so
+        // the box top is compared with room for that rounding (+/-2 pt).
+        var want = (cr2.top + 160 - cvr.top) / ov.state.scale; // click y in page points
+        var mm = ov.state.meta || {};
+        var boxR = ov.state.rects.get(xsel.id) || {};
+        var travel = (mm.height || 0) - (boxR.h || 0);
+        out.xGeom = {
+          clickY: Math.round(want * 10) / 10,
+          pageH: mm.height,
+          boxH: Math.round((boxR.h || 0) * 10) / 10,
+          travel: Math.round(travel * 10) / 10,
+          boxY: Math.round((boxR.y || 0) * 10) / 10,
+          start: out.xPlaced.start,
+        };
+        var pctWant = travel > 0 ? Math.round((1 - want / travel) * 1000) / 10 : 0;
+        pctWant = Math.max(0, Math.min(100, pctWant));
+        out.xPctOk = travel > 0 && Math.abs(out.xPlaced.start - pctWant) <= 1;
+        out.xPctRange = out.xPlaced.start >= 0 && out.xPlaced.start <= 100;
+        out.xBoxOk = travel > 0 && Math.abs((boxR.y || 0) - want) <= 2;
       })();
       // Z3 (2026-11-09, user fix): the placed strip answers the same
       // affordance as any normal stamp - selection box + five handles - and a
@@ -1009,11 +1060,12 @@ async function main() {
         out.stripEdge = pr.strips[0] ? pr.strips[0].edge : null;
         out.stripIndex = pr.strips[0] ? pr.strips[0].index : null;
       })();
-      // Z5 (2026-11-09): 平均|随机 slice simulation. The deterministic core
-      // checks pin the user's mechanism (cover rounds the covered middle;
-      // first 25..50 / last 20..30; Σ=1; a smooth trend — adjacent shares may
-      // never zig-zag), then the live seg/retry/cover chain runs on the placed
-      // strip instance and finally even mode brings back the classic split.
+      // Z5 (2026-11-09): 随机-only slice simulation (UI4-N3 deleted the 平均
+      // branch and its mode segment). The deterministic core checks pin the
+      // user's mechanism (cover rounds the covered middle; first 25..50 / last
+      // 20..30; Σ=1; a smooth trend — adjacent shares may never zig-zag), then
+      // the live retry/cover chain runs on the placed strip instance, which
+      // already carries a random draw from the moment it was placed.
       out.z5 = (function () {
         var o = {};
         function lcg(seed) {
@@ -1036,14 +1088,29 @@ async function main() {
         o.det2 = Math.abs(f2[0] + f2[1] - 1) < 1e-3 && f2[0] >= 0.25 && f2[0] <= 0.5;
         var f1 = s.randomCrossFractions(1, 60, lcg(7));
         o.det1 = f1.length === 1 && f1[0] === 1;
-        // live chain on the placed instance:
+        // live chain on the placed instance: UI4-N3 made the random draw the
+        // only channel, so the placement itself rolled the fractions and there
+        // is no mode segment to click any more.
         var n = s.state.file.pageCount || 1;
-        var seg = document.querySelector("#crosspage-slicemode");
-        seg.querySelector("button[data-value='random']").click();
-        o.modeAfter = seg.querySelector("button[aria-pressed='true']").dataset.value;
         var sl = (xsel.params || {})["api.apply.slices"] || null;
         o.rolled = Array.isArray(sl) && sl.length === n;
-        o.randFieldVisible = !document.querySelector("#instance-panel .cp-rand").hidden;
+        // UI4-N3: the mode control is gone for good, and cover + retry now sit
+        // in the cp group like every other cp field - they show for every
+        // cross-page selection, no "only random" visibility state any more.
+        (function () {
+          var groups = [].slice.call(document.querySelectorAll("#instance-panel .cp-group"));
+          var coverCtl = document.querySelector('[data-field="ui.crosspage.cover"]');
+          var retryBtn = document.querySelector("#crosspage-retry");
+          var coverGroup = coverCtl ? groups.filter(function (g) { return g.contains(coverCtl); })[0] : null;
+          var retryGroup = retryBtn ? groups.filter(function (g) { return g.contains(retryBtn); })[0] : null;
+          o.cpGroups = groups.length;
+          o.cpAllVisible = groups.length === 4 && groups.every(function (g) { return !g.hidden; });
+          o.coverVisible = Boolean(coverCtl && coverGroup && !coverGroup.hidden);
+          o.retryVisible = Boolean(retryBtn && retryGroup && !retryGroup.hidden);
+          o.cpRandGone = !document.querySelector("#instance-panel .cp-rand");
+          o.slicemodeGone = !document.querySelector("#crosspage-slicemode") &&
+            !document.querySelector('[data-field="ui.crosspage.sliceMode"]');
+        })();
         var before = sl ? sl.join(",") : "";
         document.querySelector("#crosspage-retry").click();
         var after = (xsel.params || {})["api.apply.slices"] || [];
@@ -1055,9 +1122,6 @@ async function main() {
           .filter(function (v) { return v > 0; }).length;
         var mm = Math.max(0, n - 2);
         o.coverOk = mm === 0 || cov === Math.round(0.6 * mm);
-        seg.querySelector("button[data-value='even']").click();
-        o.evenCleared = (xsel.params || {})["api.apply.slices"] === undefined;
-        o.evenFieldHidden = document.querySelector("#instance-panel .cp-rand").hidden;
         o.prUneven = s.probe("strips");
         return o;
       })();
@@ -1155,18 +1219,19 @@ async function main() {
       ipscroll.maxScroll > 0 && ipscroll.collapsed === true);
   truthy("SP4: the cross-page toggle is mutually exclusive with the add-seal mode",
     hd.excl && hd.excl.add === false && hd.excl.xOn === true);
-  truthy(`SP4: the page click drops a cross-page strip instance at the click height (start=${hd.xPlaced && hd.xPlaced.start}, scale=${hd.xPlaced && hd.xPlaced.scale})`,
+  truthy(`SP4: the page click drops a cross-page strip instance and its percent lands on the click height (start=${hd.xPlaced && hd.xPlaced.start}, geom=${JSON.stringify(hd.xGeom)}): ${JSON.stringify(hd.xPlaced)}`,
     hd.xPlaced && hd.xPlaced.kept && hd.xPlaced.cross === true &&
-      hd.xPlaced.pages === "all" && hd.xStartOk === true &&
+      hd.xPlaced.pages === "all" && hd.xPctOk === true && hd.xPctRange === true && hd.xBoxOk === true &&
       Math.abs(hd.xPlaced.scale - hd.autoScaleRef) < 1e-9);
   truthy(`Z3: the cross-page strip keeps its selection box + five handles: ${JSON.stringify(hd.xAffordance)}`,
     hd.xAffordance && hd.xAffordance.selected === true && hd.xAffordance.boxRects > 0 &&
       hd.xAffordance.handles === 5);
   truthy(`Z3: a bare click on the strip re-selects it and shows the box (no press-and-hold): ${JSON.stringify(hd.xClick)}`,
     hd.xClick && hd.xClick.selected === true && hd.xClick.boxVisible === true && hd.xClick.state === "stamp-selected");
-  truthy(`SP4: the panel cp group shows for the cross-page selection and echoes the vocabulary: ${JSON.stringify(hd.cpProbe)}`,
-    hd.cpProbe && hd.cpProbe.on === true && hd.cpProbe.cpFields === 3 &&
-      hd.cpProbe.binding === "right" && Math.abs(hd.cpProbe.startOffset - hd.xPlaced.start) <= 1);
+  truthy(`SP4: the panel cp group shows for the cross-page selection and echoes the vocabulary (startOffset back as 0..100 %): ${JSON.stringify(hd.cpProbe)}`,
+    hd.cpProbe && hd.cpProbe.on === true && hd.cpProbe.cpFields === 4 &&
+      hd.cpProbe.binding === "right" && hd.cpProbe.startOffset >= 0 && hd.cpProbe.startOffset <= 100 &&
+      Math.abs(hd.cpProbe.startOffset - hd.xPlaced.start) <= 1);
   truthy(`SP4: one right-edge strip on the current page (count=${hd.stripCount} edge=${hd.stripEdge} index=${hd.stripIndex})`,
     hd.stripCount >= 1 && hd.stripEdge === "right" && hd.stripIndex === 0);
   truthy(`Z5: the deterministic draw honours cover + first/last ranges + Σ=1 + smooth trend: ${JSON.stringify(hd.z5 && hd.z5.det)}`,
@@ -1176,13 +1241,14 @@ async function main() {
       Math.abs(hd.z5.det.sum - 1) <= 1e-3 && hd.z5.det.smoothAdj <= 0.35);
   truthy(`Z5: N=2 spans both pages (Σ=1, first in range) and N=1 takes the whole seal`,
     hd.z5 && hd.z5.det2 === true && hd.z5.det1 === true);
-  truthy(`Z5: the live 随机/重试/覆盖率/平均 chain on the placed strip: ${JSON.stringify(hd.z5 && {
-    mode: hd.z5.modeAfter, rolled: hd.z5.rolled, rand: hd.z5.randFieldVisible,
-    retry: hd.z5.retryOk, cover: hd.z5.coverOk, even: hd.z5.evenCleared, hide: hd.z5.evenFieldHidden,
+  truthy(`Z5: the live 重试/覆盖率 chain plus the N3 cp group (随机 恒生效, no slice-mode control): ${JSON.stringify(hd.z5 && {
+    rolled: hd.z5.rolled, retry: hd.z5.retryOk, cover: hd.z5.coverOk, groups: hd.z5.cpGroups,
+    all: hd.z5.cpAllVisible, coverCtl: hd.z5.coverVisible, retryCtl: hd.z5.retryVisible,
+    mode: hd.z5.slicemodeGone, rand: hd.z5.cpRandGone,
   })}`,
-    hd.z5 && hd.z5.modeAfter === "random" && hd.z5.rolled === true &&
-      hd.z5.randFieldVisible === true && hd.z5.retryOk === true &&
-      hd.z5.coverOk === true && hd.z5.evenCleared === true && hd.z5.evenFieldHidden === true);
+    hd.z5 && hd.z5.rolled === true && hd.z5.retryOk === true && hd.z5.coverOk === true &&
+      hd.z5.cpGroups === 4 && hd.z5.cpAllVisible === true && hd.z5.coverVisible === true &&
+      hd.z5.retryVisible === true && hd.z5.slicemodeGone === true && hd.z5.cpRandGone === true);
   truthy(`SP4: binding=none demotes the selected instance to a current-page stamp: ${JSON.stringify(hd.demoted)}`,
     hd.demoted && hd.demoted.crossPage === false && String(hd.demoted.pages) === String(hd.page) &&
       hd.cpFieldsAfterDemote === 0);

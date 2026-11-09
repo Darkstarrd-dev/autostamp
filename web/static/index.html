@@ -115,7 +115,7 @@
       <div class="ip-title"><span class="flabel ip-tname" data-i18n="instance.panel.title" data-i18n-cn="印章参数">Seal options</span><button type="button" id="instance-collapse" class="btn icon ip-min" data-i18n-title="instance.collapse.btn" data-i18n-title-cn="最小化" title="Minimize" aria-label="minimize"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button></div>
       <div class="field">
         <div class="flabel"><span data-i18n="api.apply.blend.ctl" data-i18n-cn="混合模式">apply.blend</span></div>
-        <select id="apply-blend" data-field="api.apply.blend">
+        <select id="apply-blend" data-field="api.apply.blend" data-i18n-title="api.apply.blend.hint" data-i18n-title-cn="16 种 PDF 混合模式（PDF 表 136），分组选择器；落盘写 ExtGState /BM。">
           <optgroup label="normal" data-i18n="blend.group.normal" data-i18n-cn="正常">Normal</optgroup>
           <option value="normal">normal / 正常 (source-over)</option>
           <optgroup label="lighten" data-i18n="blend.group.lighten" data-i18n-cn="增亮">Lighten</optgroup>
@@ -139,47 +139,41 @@
           <option value="color">color / 颜色</option>
           <option value="luminosity">luminosity / 明度</option>
         </select>
-        <div class="hintline" data-i18n="api.apply.blend.hint" data-i18n-cn="16 种 PDF 混合模式（PDF 表 136），分组选择器；落盘写 ExtGState /BM。">16 blend modes (PDF Table 136) grouped; backend writes ExtGState /BM.</div>
       </div>
       <div class="field">
         <div class="flabel"><span data-i18n="api.apply.opacity.ctl" data-i18n-cn="透明度">apply.opacity 0..1</span></div>
         <div class="num-pair">
-          <input data-field="api.apply.opacity" type="range" min="0" max="1" step="0.05" value="0.6" aria-label="opacity">
+          <input data-field="api.apply.opacity" type="range" min="0" max="1" step="0.05" value="0.6" aria-label="opacity" data-i18n-title="api.apply.opacity.hint" data-i18n-title-cn="0..1，落盘 ExtGState /ca /CA（pdfcpu opacity 同义）。">
           <input data-field="api.apply.opacity" type="number" min="0" max="1" step="0.05" value="0.6" aria-label="opacity">
         </div>
-        <div class="hintline" data-i18n="api.apply.opacity.hint" data-i18n-cn="0..1，0.05 档；落盘写 ExtGState /ca 与 /CA。">0..1; 0.05 steps; /ca /CA at export.</div>
       </div>
       <div class="field">
         <div class="flabel"><span data-i18n="api.apply.brightness.ctl" data-i18n-cn="明度">apply.brightness 0..2</span></div>
         <div class="num-pair">
-          <input data-field="api.apply.brightness" type="range" min="0" max="2" step="0.05" value="1" aria-label="brightness">
+          <input data-field="api.apply.brightness" type="range" min="0" max="2" step="0.05" value="1" aria-label="brightness" data-i18n-title="api.apply.brightness.hint" data-i18n-title-cn="仅预览（前端 ctx.filter brightness），落盘不写。">
           <input data-field="api.apply.brightness" type="number" min="0" max="2" step="0.05" value="1" aria-label="brightness">
         </div>
-        <div class="hintline" data-i18n="api.apply.brightness.hint" data-i18n-cn="0..2；仅预览（ctx.filter）；落盘不发送该参数。">0..2; preview only (ctx.filter); not sent to apply.</div>
       </div>
       <div class="field">
         <div class="flabel"><span data-i18n="api.apply.saturate.ctl" data-i18n-cn="饱和度">apply.saturate 0..3</span></div>
         <div class="num-pair">
-          <input data-field="api.apply.saturate" type="range" min="0" max="3" step="0.05" value="1" aria-label="saturate">
+          <input data-field="api.apply.saturate" type="range" min="0" max="3" step="0.05" value="1" aria-label="saturate" data-i18n-title="api.apply.saturate.hint" data-i18n-title-cn="仅预览（前端 ctx.filter saturate），落盘不写。">
           <input data-field="api.apply.saturate" type="number" min="0" max="3" step="0.05" value="1" aria-label="saturate">
         </div>
-        <div class="hintline" data-i18n="api.apply.saturate.hint" data-i18n-cn="0..3；仅预览（ctx.filter）；落盘不发送该参数。">0..3; preview only (ctx.filter); not sent to apply.</div>
       </div>
       <div class="field">
         <div class="flabel"><span data-i18n="api.apply.scale.ctl" data-i18n-cn="缩放（相对页宽）">apply.scale</span></div>
         <div class="num-pair">
-          <input data-field="api.apply.scale" type="range" min="0.1" max="2" step="0.01" value="0.202" aria-label="scale">
+          <input data-field="api.apply.scale" type="range" min="0.1" max="2" step="0.01" value="0.202" aria-label="scale" data-i18n-title="api.apply.scale.hint" data-i18n-title-cn="印章宽度为相对页宽分数；滑杆最左 10%、最右 200%，拖动边角可超出范围并回显在滑杆上（A4 = 595.3pt）。新放置/复位的印章按 Z2 自动缩放 = 42 mm 章宽 ÷ 页显示宽（A4 竖版即 0.2008）。">
           <input data-field="api.apply.scale" type="number" min="0.05" max="5" step="0.01" value="0.202" aria-label="scale">
         </div>
-        <div class="hintline" data-i18n="api.apply.scale.hint" data-i18n-cn="印章宽度为相对页宽分数；滑杆最左 10%、最右 200%，拖动边角可超出范围并回显在滑杆上（A4 = 595.3pt）。">Seal width as a fraction of page width; slider 10%..200%, corner-drag can exceed and echoes back on the slider.</div>
       </div>
       <div class="field">
         <div class="flabel"><span data-i18n="api.apply.rotation.ctl" data-i18n-cn="旋转（度）">apply.rotation</span></div>
         <div class="num-pair">
-          <input data-field="api.apply.rotation" type="range" min="-180" max="180" step="1" value="0" aria-label="rotation">
+          <input data-field="api.apply.rotation" type="range" min="-180" max="180" step="1" value="0" aria-label="rotation" data-i18n-title="api.apply.rotation.hint" data-i18n-title-cn="-180 到 180；印章绕自身中心旋转。">
           <input data-field="api.apply.rotation" type="number" min="-180" max="180" step="1" value="0" aria-label="rotation">
         </div>
-        <div class="hintline" data-i18n="api.apply.rotation.hint" data-i18n-cn="-180 到 180；印章绕自身中心旋转。">Degrees around the seal centre.</div>
       </div>
       <!-- SP4 (2026-11-05): the cross-page group rides the same floating panel
          and answers to the selected instance; it only shows when that instance
@@ -189,48 +183,34 @@
          beside the six instance controls now. -->
       <div class="field cp-group" hidden>
         <div class="flabel"><span data-i18n="ui.crosspage.binding.ctl" data-i18n-cn="装订边（D2）">Binding edge (D2)</span><span class="tag">ui.crosspage.binding</span></div>
-        <div class="seg sm" id="crosspage-binding" data-field="ui.crosspage.binding">
+        <div class="seg sm" id="crosspage-binding" data-field="ui.crosspage.binding" data-i18n-title="ui.crosspage.binding.hint" data-i18n-title-cn="D2 词表，作用于选中的骑缝实例：right / alternate 逐页跨页，none 把该实例降回普通单页印章。">
           <button type="button" data-value="right" aria-pressed="true" data-i18n="binding.right" data-i18n-cn="单面：右缘连续">Single-sided: right edge</button>
           <button type="button" data-value="alternate" aria-pressed="false" data-i18n="binding.alternate" data-i18n-cn="双面：奇右偶左">Duplex: odd right / even left</button>
           <button type="button" data-value="none" aria-pressed="false" data-i18n="binding.none" data-i18n-cn="无骑缝章">No cross-page seal</button>
         </div>
-        <div class="hintline" data-i18n="ui.crosspage.binding.hint" data-i18n-cn="D2 三档：右缘连续 / 双面奇偶分别左右（左右两块属于同一条分割）/ 无骑缝章。">D2: right edge, duplex alternate, or no cross-page seal.</div>
       </div>
       <div class="field cp-group" hidden>
-        <div class="flabel"><span data-i18n="api.apply.startOffset.ctl" data-i18n-cn="起始位置（pt）">apply.startOffset</span><span class="tag">api.apply.startOffset</span></div>
+        <div class="flabel"><span data-i18n="api.apply.startOffset.ctl" data-i18n-cn="起始位置（%）">apply.startOffset</span><span class="tag">api.apply.startOffset</span></div>
         <div class="num-pair">
-          <input data-field="api.apply.startOffset" type="range" min="0" max="200" step="5" value="0" aria-label="startOffset">
-          <input data-field="api.apply.startOffset" type="number" min="0" max="200" step="5" value="0" aria-label="startOffset">
+          <input data-field="api.apply.startOffset" type="range" min="0" max="100" step="1" value="0" aria-label="startOffset" data-i18n-title="api.apply.startOffset.hint" data-i18n-title-cn="百分比沿页滑动：0% = 条带下缘贴页面下边，100% = 条带上缘贴页面上边；选中骑缝章后纵向拖动即改此值。">
+          <input data-field="api.apply.startOffset" type="number" min="0" max="100" step="1" value="0" aria-label="startOffset">
         </div>
-        <div class="hintline" data-i18n="api.apply.startOffset.hint" data-i18n-cn="沿装订边的起始偏移（pdfcpu offset:0 -N）；0 为页首。选中骑缝章后纵向拖动条带即改这个值。">Start offset along the binding edge (pdfcpu offset:0 -N); 0 sits at the page top. Dragging a selected strip vertically edits this value.</div>
       </div>
-      <!-- Z5 (2026-11-09, 用户指令): 平均|随机 slice simulation. 随机 models a
-           real stamping run: first page 25..50%, last page 20..30%, the cover
-           slider picks how many middle pages get a strip (四舍五入), the rest of
-           the shares drift as one smooth trend along page order, and the retry
-           button re-rolls. The drawn fractions (api.apply.slices) go to the
-          preview and the disk unchanged. -->
+      <!-- N3 (2026-11-09): the 平均|随机切档 is retired - the random draw (Z5)
+           is the ONLY cross-page slice mode now: placement/reset/retry all
+           roll it, and the cover slider below always rides the cp group.
+           Disk fallback (slices omitted) stays the classic equal split. -->
       <div class="field cp-group" hidden>
-        <div class="flabel"><span data-i18n="ui.crosspage.sliceMode.ctl" data-i18n-cn="骑缝切片">Cross-page slices</span><span class="tag">ui.crosspage.sliceMode</span></div>
-        <div class="seg sm" id="crosspage-slicemode" data-field="ui.crosspage.sliceMode">
-          <button type="button" data-value="even" aria-pressed="true" data-i18n="sliceMode.even" data-i18n-cn="平均">Even</button>
-          <button type="button" data-value="random" aria-pressed="false" data-i18n="sliceMode.random" data-i18n-cn="随机">Random</button>
-        </div>
-        <div class="hintline" data-i18n="ui.crosspage.sliceMode.hint" data-i18n-cn="平均=均分到每页；随机模拟真实装订盖章：首页 25~50%、末页 20~30%，其余页按覆盖率取条带并沿页序平滑漂移（重试按钮重新取值）。">Even = classic equal split; Random simulates a real binding run: first page 25..50%, last page 20..30%, middle pages follow the cover share and a smooth drift; the retry button re-rolls.</div>
-      </div>
-      <div class="field cp-group cp-rand" hidden>
         <div class="flabel"><span data-i18n="ui.crosspage.cover.ctl" data-i18n-cn="覆盖率（%）">Cover</span><span class="tag">ui.crosspage.cover</span></div>
         <div class="num-pair">
-          <input data-field="ui.crosspage.cover" type="range" min="0" max="100" step="5" value="75" aria-label="cover">
+          <input data-field="ui.crosspage.cover" type="range" min="0" max="100" step="5" value="75" aria-label="cover" data-i18n-title="ui.crosspage.cover.hint" data-i18n-title-cn="首页末页外的页面有多少比例拿到骑缝章（四舍五入）；如 10 页中间页配 60% = 6 页有章、4 页盖不到。">
           <input data-field="ui.crosspage.cover" type="number" min="0" max="100" step="5" value="75" aria-label="cover">
         </div>
-        <div class="hintline" data-i18n="ui.crosspage.cover.hint" data-i18n-cn="首页末页外的页面有多少比例拿到骑缝章（四舍五入）；如 10 页中间页配 60% = 6 页有章、4 页盖不到。">Share of middle pages that get a strip (rounded); e.g. 10 middle pages at 60% = 6 stamped, 4 missed.</div>
       </div>
-      <div class="field cp-group cp-rand" hidden>
+      <div class="field cp-group" hidden>
         <div class="row">
-          <button type="button" id="crosspage-retry" class="btn" data-i18n="crosspage.retry.btn" data-i18n-cn="重新随机">Re-roll</button>
+          <button type="button" id="crosspage-retry" class="btn" data-i18n="crosspage.retry.btn" data-i18n-cn="重新随机" data-i18n-title="crosspage.retry.hint" data-i18n-title-cn="重新进行一次随机取值（替换当前骑缝实例的切片分布）。">Re-roll</button>
         </div>
-        <div class="hintline" data-i18n="crosspage.retry.hint" data-i18n-cn="重新进行一次随机取值（新的分布替换当前实例的切片）。">Re-rolls the random draw for the selected cross-page instance.</div>
       </div>
       <div class="row ip-actions">
         <button type="button" id="instance-reset" class="btn" data-i18n="instance.reset.btn" data-i18n-cn="复位">Reset</button>
@@ -284,47 +264,41 @@
       <div class="sec-title"><span data-i18n="panel.export.title" data-i18n-cn="导出设置">Export settings</span></div>
       <div class="field">
         <div class="flabel"><span data-i18n="api.export.mode.ctl" data-i18n-cn="导出方式（D1）">export.mode</span><span class="tag">export.mode</span></div>
-        <div class="seg" id="export-mode" data-field="api.export.mode">
+        <div class="seg" id="export-mode" data-field="api.export.mode" data-i18n-title="api.export.mode.hint" data-i18n-title-cn="vector 保留文字/矢量（默认可搜索）；raster 整页位图，抗篡改、便于扫描件。">
           <button type="button" data-value="vector" aria-pressed="true">vector</button>
           <button type="button" data-value="raster">raster</button>
         </div>
-        <div class="hintline" data-i18n="api.export.mode.hint" data-i18n-cn="vector 保留文字/矢量（默认可搜索）；raster 整页位图，抗篡改、便于扫描件。">vector keeps text/vectors (searchable); raster flattens each page to a bitmap.</div>
       </div>
       <div class="field">
         <div class="flabel"><span data-i18n="api.export.dpi.ctl" data-i18n-cn="分辨率 DPI">export.dpi</span><span class="tag">export.dpi</span></div>
-        <div class="seg sm" id="export-dpi" data-field="api.export.dpi">
+        <div class="seg sm" id="export-dpi" data-field="api.export.dpi" data-i18n-title="api.export.dpi.hint" data-i18n-title-cn="raster 模式生效；custom 时取 customDpi。">
           <button type="button" data-value="72">72</button>
           <button type="button" data-value="150" aria-pressed="true">150</button>
           <button type="button" data-value="300">300</button>
           <button type="button" data-value="custom" data-i18n="export.dpi.custom" data-i18n-cn="自定义">Custom</button>
         </div>
-        <div class="hintline" data-i18n="api.export.dpi.hint" data-i18n-cn="raster 模式生效；custom 时取 customDpi。">Effective in raster mode; custom uses customDpi.</div>
       </div>
       <div class="field">
         <div class="flabel"><span data-i18n="api.export.customDpi.ctl" data-i18n-cn="自定义 DPI">export.customDpi</span><span class="tag">export.customDpi</span></div>
-        <div class="num-pair"><input data-field="api.export.customDpi" data-i18n-placeholder="export.customDpi.placeholder" data-i18n-cn-placeholder="96..600" type="number" min="96" max="600" step="1" value="150" aria-label="customDpi"></div>
-        <div class="hintline" data-i18n="api.export.customDpi.hint" data-i18n-cn="96..600，仅 raster 且 dpi=custom 时读取。">96..600, raster + custom only.</div>
+        <div class="num-pair"><input data-field="api.export.customDpi" data-i18n-placeholder="export.customDpi.placeholder" data-i18n-cn-placeholder="96..600" type="number" min="96" max="600" step="1" value="150" aria-label="customDpi" data-i18n-title="api.export.customDpi.hint" data-i18n-title-cn="96..600，仅 raster 且 dpi=custom 时读取。"></div>
       </div>
       <div class="field">
         <div class="flabel"><span data-i18n="api.export.quality.ctl" data-i18n-cn="JPEG 质量">export.quality 40..95</span><span class="tag">export.quality 40..95</span></div>
         <div class="num-pair">
-          <input data-field="api.export.quality" type="range" min="40" max="95" step="5" value="75" aria-label="quality">
+          <input data-field="api.export.quality" type="range" min="40" max="95" step="5" value="75" aria-label="quality" data-i18n-title="api.export.quality.hint" data-i18n-title-cn="40..95；仅 raster。落盘用 stdlib DCTDecode（FACTS §4）。">
           <input data-field="api.export.quality" type="number" min="40" max="95" step="5" value="75" aria-label="quality">
         </div>
-        <div class="hintline" data-i18n="api.export.quality.hint" data-i18n-cn="40..95；仅 raster。落盘用 stdlib DCTDecode（FACTS §4）。">40..95, raster only.</div>
       </div>
       <div class="field">
         <div class="flabel"><span data-i18n="api.export.pages.ctl" data-i18n-cn="导出页">export.pages</span><span class="tag">export.pages</span></div>
         <div class="row">
-          <input data-field="api.export.pages" type="text" size="16" value="all" aria-label="export pages">
+          <input data-field="api.export.pages" type="text" size="16" value="all" aria-label="export pages" data-i18n-title="api.export.pages.hint" data-i18n-title-cn="与 apply.pages 同一词表。">
           <button type="button" class="btn" data-value="all" data-i18n="pages.all.btn" data-i18n-cn="全部">All</button>
         </div>
-        <div class="hintline" data-i18n="api.export.pages.hint" data-i18n-cn="与 apply.pages 同一词表。">Same vocabulary as apply.pages.</div>
       </div>
-      <div id="estimate">
+      <div id="estimate" data-i18n-title="export.estimate.note" data-i18n-title-cn="预估值由 FACTS §4 实测表按页面积与页数缩放；raster 才受 DPI/质量影响。">
         <div class="row"><span data-i18n="export.estimate.label" data-i18n-cn="体积预估">Estimate</span><output id="estimate-total">-</output></div>
         <div class="hintline"><output id="estimate-per-page" data-i18n="export.estimate.hint" data-i18n-cn="每页约 124 KB（150dpi q75，A4 单页）。">-</output></div>
-        <div class="hintline" data-i18n="export.estimate.note" data-i18n-cn="预估值由 FACTS §4 实测表按页面积与页数缩放；raster 才受 DPI/质量影响。">Estimate scales the FACTS 4 measured table by page area and count.</div>
       </div>
     </div>
     <div class="row">
@@ -333,13 +307,11 @@
     </div>
     <div class="field">
       <div class="flabel"><span data-i18n="api.save.targetPath.ctl" data-i18n-cn="目标路径">save.targetPath</span><span class="tag">save.targetPath</span></div>
-      <input data-field="api.save.targetPath" type="text" aria-label="save targetPath">
-      <div class="hintline" data-i18n="api.save.targetPath.hint" data-i18n-cn="留空则用同名 + .stamp.pdf；写盘走 temp+rename（原子写）。">Blank means same name + .stamp.pdf; atomic temp+rename.</div>
+      <input data-field="api.save.targetPath" type="text" aria-label="save targetPath" data-i18n-title="api.save.targetPath.hint" data-i18n-title-cn="留空则用同名 + .stamp.pdf；写盘走 temp+rename（原子写）。">
     </div>
     <div class="field">
       <div class="flabel"><span data-i18n="api.save.replaceOriginal.ctl" data-i18n-cn="替换原文件">save.replaceOriginal</span><span class="tag">save.replaceOriginal</span></div>
-      <label class="switch"><input data-field="api.save.replaceOriginal" type="checkbox"><span data-i18n="save.replace.on" data-i18n-cn="开">on</span></label>
-      <div class="hintline" data-i18n="save.replace.hint" data-i18n-cn="替换原文件需要再确认一次，且会丢弃原 PDF 的可选内容层。">Replacing the original needs a second confirmation.</div>
+      <label class="switch" data-i18n-title="save.replace.hint" data-i18n-title-cn="替换原文件需要再确认一次，且会丢弃原 PDF 的可选内容层。"><input data-field="api.save.replaceOriginal" type="checkbox"><span data-i18n="save.replace.on" data-i18n-cn="开">on</span></label>
     </div>
     <div class="actions">
       <button type="button" class="btn" id="save-cancel" data-i18n="modal.cancel" data-i18n-cn="取消">Cancel</button>
@@ -347,10 +319,9 @@
     </div>
   </div>
 
-  <div class="modal" id="confirm-modal" role="dialog" aria-modal="true">
+  <div class="modal" id="confirm-modal" role="dialog" aria-modal="true" data-i18n-title="confirm.hint" data-i18n-title-cn="将覆盖原文件（原子写：先写临时文件再改名）。此操作不可撤销。">
     <h2 data-i18n="confirm.title" data-i18n-cn="替换原文件？">Replace original file?</h2>
     <div class="hintline" id="confirm-path" data-i18n="top.file.hint" data-i18n-cn="未打开文件">no file open</div>
-    <div class="hintline" data-i18n="confirm.hint" data-i18n-cn="将覆盖原文件（原子写：先写临时文件再改名）。此操作不可撤销。">The original will be overwritten (atomic temp+rename). This cannot be undone.</div>
     <div class="actions">
       <button type="button" class="btn" id="confirm-cancel" data-i18n="confirm.cancel" data-i18n-cn="改存新文件">Save as new file</button>
       <button type="button" class="btn danger" id="confirm-ok" data-i18n="confirm.ok" data-i18n-cn="确认替换">Replace</button>
@@ -361,8 +332,7 @@
     <h2 data-i18n="pw.title" data-i18n-cn="需要口令">Password required</h2>
     <div class="field">
       <div class="flabel"><span data-i18n="api.open.pw.ctl" data-i18n-cn="PDF 口令">open.pw</span><span class="tag">open.pw</span></div>
-      <input data-field="api.open.pw" type="password" aria-label="password">
-      <div class="hintline" data-i18n="api.open.pw.hint" data-i18n-cn="UserPW/OwnerPW 都试；AES-256 读取链路目前 UNVERIFIED（FACTS §6）。">UserPW and OwnerPW are both tried; AES-256 read is UNVERIFIED (FACTS 6).</div>
+      <input data-field="api.open.pw" type="password" aria-label="password" data-i18n-title="api.open.pw.hint" data-i18n-title-cn="UserPW/OwnerPW 都试；AES-256 读取链路目前 UNVERIFIED（FACTS §6）。">
     </div>
     <div class="actions">
       <button type="button" class="btn" id="pw-cancel" data-i18n="modal.cancel" data-i18n-cn="取消">Cancel</button>

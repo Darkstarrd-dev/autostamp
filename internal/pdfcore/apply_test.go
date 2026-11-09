@@ -445,7 +445,7 @@ func TestStampStripBoxUsesWholeSealAspect(t *testing.T) {
 	const (
 		pageW, pageH = 595.0, 842.0 // buildTestPDF's MediaBox
 		scale        = 0.2
-		startOffset  = 40.0
+		startOffset  = 40.0 // N4: percent along the page
 	)
 	fullW := scale * pageW
 	boxH := fullW * (30.0 / 60.0)
@@ -474,8 +474,9 @@ func TestStampStripBoxUsesWholeSealAspect(t *testing.T) {
 		t.Fatal("page 1: no stamp artifact found in the written file")
 	}
 	// The strip's own slot: right edge of the page, y flipped over the display
-	// height (newStamp), height = the whole seal's box height.
-	wantX, wantY := pageW-fullW/2, pageH-startOffset-boxH
+	// height (newStamp): Dy = pageH - Y - boxH with the display-space
+	// Y = (1 - pct/100) x (pageH - boxH), so Dy = pct/100 x (pageH - boxH).
+	wantX, wantY := pageW-fullW/2, (startOffset/100)*(pageH-boxH)
 	for i, m := range tr {
 		if math.Abs(m[4]-wantX) > 0.01 || math.Abs(m[5]-wantY) > 0.01 {
 			t.Errorf("artifact %d: placed at %g,%g want %g,%g (条带框高必须来自整枚印章)", i, m[4], m[5], wantX, wantY)

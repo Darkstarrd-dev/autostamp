@@ -164,7 +164,9 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
    每个输出 PDF 含「原页 + 两块」（实测 pages=3），落库前必须 `Trim`/`ExtractPages` 丢弃原页。
 7. **骑缝章 = 切分 + 逐页条带。** 印章图先由 `internal/pdfcore/sealimg.go`（stdlib 切片）
    切成 N 条，第 i 页放第 i 条（`position:r` 装订边锚点 + `offset:0 -startOffset`
-   为用户可调「起始位置」），再 `MergeCreateFile` 合并；实测产物过 `ValidateFile`。
+   为用户可调「起始位置」；**N4（2026-11-09）起 `startOffset` 的取值域是 0..100 百分比**，落盘
+   条带盒 `Box.Y = (1 − pct/100) × (pageH − h)`，旧 0..200 pt 作废），再 `MergeCreateFile`
+   合并；实测产物过 `ValidateFile`。
 8. **透明度精确落盘。** pdfcpu `opacity:` → `<</CA 0.6 /Type/ExtGState /ca 0.6>>`
    （实测直读对象文本），透明 PNG 自动生成 `/SMask`（`model/image.go:161`），
    不透明图不生成 SMask。像素复核：不透明印章中心 (120,36,120) 与规格算法一致。
@@ -430,7 +432,8 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
 41. **骑缝实例单击可选（Z3，2026-11-09；`UI_SPEC §8` Z3）**：`style.css` 里
    `[data-mode="crosspage"] .sel-box`/`.handle` 的隐藏规则删除（用户报的「点击不显示可选项、
    必须长按才拖」就是这两条）：选中即见绿框 + 四角 + 旋转手柄，按下即拖（纵拖 = `startOffset`，
-   SP4 语义不变）；`hitTest` 对骑缝实例跳过旋转反变换帧（旋转已烘进位图，条带框轴对齐）。
+   SP4 语义不变；**N4（2026-11-09）起这个值是 0..100 百分比**，见 §5.45）；`hitTest` 对骑缝实例
+   跳过旋转反变换帧（旋转已烘进位图，条带框轴对齐）。
    没有新字段、没有新路由。
 42. **骑缝章先旋转后切（Z4，2026-11-09；`UI_SPEC §8` Z4；修订 §5.7/§5.17 的条带语义）**：
    crossPage 实例 `rotation` ≠ 0 时先 `pdfcore.RotatePNG`（`internal/pdfcore/rotate.go`，屏幕
@@ -440,7 +443,9 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
    `rotatedBitmapCanvas`（`rotCache` 按 sealId×deg 缓存）+ `effectiveBitmap` 同源，实例不再经
    `ctx.rotate` 单独旋转。Go 断言 `TestRotatedStripsAreVerticalColumnsOfRotatedSeal` +
    `TestRotatePNGClockwise90GrowsCanvas`；预览侧 `overlay-smoke` strip 旋转渐变三取样与
-   `apply-smoke` strip 旋转竖条（每页上沿=印章左半色、下沿=右半色）钉死同一对语义。
+   `apply-smoke` strip 旋转竖条（每页上沿=印章左半色、下沿=右半色）钉死同一对语义
+   （**N4，2026-11-09**：`startOffset` 改 0..100 百分比 —— `StampGeom.Box` 的 `Y` =
+   `(1 − pct/100) × (pageH − h)`，见 §5.45）。
 43. **骑缝章不匀切片模拟（Z5，2026-11-09；`UI_SPEC §8` Z5；修订 §5.16/§5.42 的切片语义）**：
    cp 组新增「平均|随机」切档（settings `apply.sliceMode`，默认平均）+「覆盖率」滑杆
    （settings `apply.cover`，0..100%，默认 75；仅随机可见）+「重新随机」按钮。随机机制：
@@ -450,8 +455,10 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
    预览 `stripContext` 与落盘 `pdfcore.StripsFractions` 用同一份分布按**累计列**切条
    （`Box` 的 `SlotFrac` 回显；0 槽不盖章），不重掷 RNG。§7 驱动 `randomCrossFractions
    (count, cover, rng)` 供 verify 注入 rng 复现；`probe('strips')` 每条目带 `frac/cum`。
-   「重试」= 对选中实例重掷一次；切回平均删除数组恢复等宽。`overlay-smoke` 不匀四页
-   frac/cum/宽/渐变中心 + `apply-smoke` `[0.7,0.3]`/`[1,0]` 落盘（0 槽无墨）钉死。
+   「重试」= 对选中实例重掷一次。`overlay-smoke` 不匀四页 frac/cum/宽/渐变中心 + `apply-smoke`
+   `[0.7,0.3]`/`[1,0]` 落盘（0 槽无墨）钉死。**（N3，2026-11-09 UI4 轮）「平均|随机」切档作废**
+   —— `ui.crosspage.sliceMode` 字段 + Go config 三件套删除，「切回平均」的通道不复存在，
+   **仅随机恒生效**；请求缺 `slices` 时后端的等宽切只是兜底，UI 不再暴露平均。
 44. **印章参数面板固定到右缘（IP1/IP2，2026-11-09；`UI_SPEC §8` IP1/IP2；作废 §5.30 的
    HD12 悬浮锚点半边 + §5.34 的 HD18 锚位）**：`#instance-panel` 绝对定位 `#preview` 右缘
    （`right:10px` + `top:10px` + `bottom:10px`，宽 236 不变、z 8 不变）全高停靠 +
@@ -463,6 +470,35 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
    （left/top 现来自停靠 CSS）。`shell-smoke`：IP1 停靠几何（右/上/下 gap=10 + 宽 236）+
    IP2 短视口（430 px）强制溢出后 `scrollHeight > clientHeight`、`scrollTop` 滚到底为正值、
    `overflow-y == auto`。没有新字段、没有新路由。
+45. **UI4 轮：初始透明度 + 说明转 tooltip + 骑缝仅随机 + startOffset 百分比（N1–N4，
+   2026-11-09；`UI_SPEC §8` N1–N4；修订 §5.43 的切档语义与 §5.7/§5.17 的条带几何）**：
+   **N1** 初始透明度 = 0.6 —— Go `defaults.go`、`index.html` 控件初值、mock 初值**早已是 0.6**，
+   本轮零代码/零文案/零键改动；用户 `%APPDATA%\AutoStamp\settings.json` 的会话 `apply.opacity`
+   被自动化测试拖拽成 1，由 API/文件复位回 0.6（`api.apply.opacity` 词表不变）。
+   **N2** 说明文字 → tooltip：每条**静态** `hintline` 从界面删除，说明文本改挂所在 `.field`/行容器
+   `data-i18n-title` + `data-i18n-title-cn`（`applyLang` 的 `[data-i18n-title]` → `title` +
+   `aria-label` 通道已存在，JS 不动）；动态读数 `#save-source`、`#confirm-path`、
+   `#estimate-total`/`#estimate-per-page`、空态 `.hint`、`#log-console`、`#drop-hint` 保持可见，
+   `export.estimate.note` 转 title 挂 `#estimate-total` 容器；CSS `.hintline` 保留（仍有可见读数
+   使用）。**i18n 键名与键数不变**，只随 N3 删 4 个。
+   **N3** 骑缝切片 = 仅随机：`SliceMode` **字段整条删除**（`internal/config/types.go` 的字段、
+   `defaults.go` 的 `SliceMode: "even"`、`patch.go` 的 `SliceMode *string` + `setStr`、
+   `sanitize.go` 的 even|random 校验块 = Go 三件套全删），settings 组字段对 −1
+   （`apply.sliceMode`）；**cp 组恒随机**：cover 滑杆与 `#crosspage-retry` 恒随骑缝实例显示
+   （`.cp-rand` 类与 `syncCpGroup` 的 declared 读取删除），新实例与 `#instance-reset` 复位都立即
+   随机取值（取值机制见 §5.43）；`api/apply.go` 的 `slices` 词表与「无 `slices` = 等宽切」兜底
+   不动。旧 settings.json 的 `sliceMode` 键由 Unmarshal **静默忽略**（无 `DisallowUnknownFields`、
+   无迁移）。i18n **141 → 137**（删 `ui.crosspage.sliceMode.ctl`/`.hint`、`sliceMode.even`、
+   `sliceMode.random`），`UI_SPEC §6` ui-ids **58 → 57**（删 `crosspage-slicemode`），
+   `crosspage.retry.noRandom` 键保留（非骑缝实例按重试仍告警）。
+   **N4** `api.apply.startOffset` = **0..100 百分比**（字段名不变）：0% = 条带**下缘**贴页面下边、
+   100% = 条带**上缘**贴页面上边；`travel = pageH_disp − 条带盒高 h`（h = `scale × pageW × aspect`
+   整章盒高）、`Box.Y = (1 − startOffset/100) × travel`（travel 可为负 = 盒比页高，钳位照旧），
+   预览 `app-overlay.rectFor` 与落盘 `pdfcore.StampGeom.Box` **同源**；`sanitize.go` 与
+   `api/apply.go` 的范围校验 0..200 pt → 0..100（错误消息「0..100 %」），
+   `defaultApplyStartOffset` 仍 0；骑缝纵拖 `newPct = basePct − dy/(pageH − h) × 100`
+   （clamp 0..100、`travel ≈ 0` 时不写），放置点击 = `clamp(round1((1 − pt.y/(pageH − h)) × 100),
+   0, 100)`，`probe('crosspageAdd')`/`probe` 的 startOffset 回显就是滑杆百分比。没有新字段/新路由。
 
 ## 6. HTTP 契约（`/api/*`，全部 JSON；字段在 **P0.5 与用户确认后**才冻结，改动必须同步本文、`docs/UI_SPEC.md` 与前端）
 
@@ -474,7 +510,7 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
 |`GET /api/pdf/raw?id=`|原始 PDF 字节（支持 Range/ETag），供 pdf.js 直接取|
 |`POST /api/pdf/split`|**已实现**:切分词表 `{assetId, splitMode, rows, cols, customCuts[], splitVeto, vetoPages[], splitPages}`（词表 = `UI_SPEC §2.2`；`splitVeto` 是指针,`false` 是真答案；`vetoPages` = D3 逐页否决；`splitPages` 用 pages 词表限定可切页）→ 新 `assetId`（kind `split`）+ 同形状页元数据;原资产保留即「撤销切分」的实现|
 |`POST /api/pdf/seal/prepare`|**已实现**：两形态靠 `Content-Type` 协商（HD8）。`multipart/form-data` = 上传印章 PNG（粘贴/拖拽/预设重喂走这条，不记路径）；`application/json` = `{pathGrantId, despill, alphaTrim, resampleDpi}`（顶栏「上传印章」/ 最近印章下拉；成功后 `config.SetRecentSeal(path)` 记录）。两形态共用 `pdfcore.PrepareSeal` → `sealId` + alpha 元数据（词表见 `UI_SPEC §2`，去背规则见 §5.12 与 FACTS §1.8）。配套 `GET /api/pdf/seal/raw?id=` 只回印章字节给合成/预览|
-|`POST /api/pdf/apply`|**已实现**:矢量落盘词表 `{assetId, instances[]}`，实例字段 `sealId/blend/opacity/scale/pos/anchor/offset/rotation/pages/crossPage/binding/startOffset/slices`（`brightness/saturate` 仅预览，**不发送**；发送即 400；`slices` 只随骑缝实例发送 = Z5 不匀切片比例数组，Σ≤1、0 槽 = 该页盖不到）→ 新 `assetId`（kind `applied`）。实例数组是关键：一条请求写完全部实例，同一 `(blend,opacity)` 组走一次 pdfcpu pass|
+|`POST /api/pdf/apply`|**已实现**:矢量落盘词表 `{assetId, instances[]}`，实例字段 `sealId/blend/opacity/scale/pos/anchor/offset/rotation/pages/crossPage/binding/startOffset/slices`（`brightness/saturate` 仅预览，**不发送**；发送即 400；`slices` 只随骑缝实例发送 = Z5 不匀切片比例数组，Σ≤1、0 槽 = 该页盖不到；**`startOffset` 自 N4 起 = 0..100 百分比，不再是 0..200 pt**）→ 新 `assetId`（kind `applied`）。实例数组是关键：一条请求写完全部实例，同一 `(blend,opacity)` 组走一次 pdfcpu pass|
 |`POST /api/pdf/export`|**已实现（P5）**：两形态靠 `Content-Type` 协商。`application/json` = vector：`{assetId, mode:"vector", pages}`，只按 pages 词表**裁页**（`all` 时原样克隆），不重编码；带 `dpi/quality` 即 400。`multipart/form-data` = raster：表单字段 `spec` 是 JSON（`{assetId, mode:"raster", dpi, quality, pages}`），每页一个文件 `page-<n>`（JPEG/PNG 字节，**页位图由前端 pdf.js 渲染回传**，服务端不 rasterize、不重编码 JPEG）→ 新 `assetId`（kind `exported`）+ `bytesPerPage`。单页图像 > 90 MiB ⇒ 400 `page_too_large`；前端按体积预估**提交前拦截**（`UI_SPEC` W6）|
 |`POST /api/pdf/save`|**已实现**:`{assetId, targetPath|pathGrantId|replaceOriginal}`（三选一，必须且只能给一个）→ `fsx.AtomicWriteFunc` 原子写盘；`replaceOriginal` 用 `tmpstore.Asset.Origin`（open/split/apply 都向前继承）；`{mkdirs:true}` 才允许创建 targetPath 的父目录（批处理 `_batch` 输出），不开时目标目录不存在仍是 400 `bad_body`，防止把文件写进一个拼错的新目录|
 |`GET /api/settings` / `PATCH /api/settings`|读全量设置；`PATCH` 走 `{"patch":{...}}` 信封（嵌套指针字段按需合并）；`recentSeals: []RecentRef` = 最近打开的印章路径（HD8，24 条去重截断，`PATCH` 该字段整组替换 = 兜底删除记录的唯一通道）|
@@ -649,7 +685,7 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
 |改切分/落盘/批处理后端词表（UI 已删，SP1）|`UI_SPEC §8` BM1-BM5（历史）+ 本文件 §5.21/§5.36|`internal/api/pdf.go`（`fs/pick` 的 `dir` 分支）、`internal/api/save.go`（`{mkdirs}`）、`internal/fsx/list.go`（`ListPDFs`）、`web/static/app-shell-docops.js`（`runSplit(opts)`/`splitBodyOf` 默认组）、`internal/api/split_test.go`（词表回归）。批处理跑链脚本已随面板删除|
 |改盖章默认值（混合模式 Z1 / 42 mm 自动缩放 Z2）|`UI_SPEC §8` Z1/Z2 + 本文件 §5.39/§5.40|`internal/config/defaults.go`（`Blend: "multiply"`）、`web/static/index.html` + `docs/ui/mockup.html`（`#apply-blend` 的 multiply 选项 `selected`）、`web/static/app-shell-kernel.js`（`autoScale`/`SEAL_DEFAULT_MM`/`MM_TO_PT`）、`web/static/app-shell-seals.js` + `app-shell-instances.js`（创建/复位覆写 scale）、`web/static/app-overlay.js`（blend 回退 multiply）、`tools/verify/shell-smoke.mjs`（Z2 断言：scale×页显示宽 = 119.06 pt）|
 |改骑缝条带旋转 / 可选中性（Z3/Z4）|`UI_SPEC §8` Z3/Z4 + 本文件 §5.41/§5.42（修订 §5.7/§5.17 条带语义）|`internal/pdfcore/rotate.go`（`RotatePNG` 先旋转整枚）、`stamp.go`（`Strips` 切旋转位图、`StampGeom.Aspect` = 旋转 bbox）、`apply.go`（bake-then-slice）、`web/static/app-overlay.js`（`rotatedBitmapCanvas`/`effectiveBitmap`/`rectFor`/`hitTest` 骑缝跳过旋转帧）、`web/static/style.css`（删 crosspage sel-box/handle 隐藏规则）、`internal/pdfcore/rotate_test.go`、`tools/verify/{overlay-smoke,apply-smoke}.mjs`（strip 旋转断言）|
-|改骑缝不匀切片模拟（Z5）|`UI_SPEC §8` Z5 + 本文件 §5.43/§6（apply `slices` 字段）|`internal/pdfcore/stamp.go`（`StripsFractions` 累计列 + `Box` 的 `SlotFrac`）、`apply.go`（实例词表 `slices`）、`apply_test.go`/`stamp_test.go`（分数切片字节）、`internal/config/{types,defaults,patch,sanitize}.go`（`apply.sliceMode`/`apply.cover`）、`web/static/index.html`（cp 组切档/滑杆/重试）、`app-shell-instances.js`（`randomCrossFractions`/`drawCrossSlices`/`retryCrossSlices`）、`app-overlay.js`（`stripContext` frac/cum）、`app-shell-chrome.js`（seg/cover/retry 接线）、`probe('strips')` 读数、`tools/verify/{shell-smoke,overlay-smoke,apply-smoke}.mjs`（Z5 断言）|
+|改骑缝不匀切片模拟（Z5）|`UI_SPEC §8` Z5 + 本文件 §5.43/§6（apply `slices` 字段）|`internal/pdfcore/stamp.go`（`StripsFractions` 累计列 + `Box` 的 `SlotFrac`）、`apply.go`（实例词表 `slices`）、`apply_test.go`/`stamp_test.go`（分数切片字节）、`internal/config/{types,defaults,patch,sanitize}.go`（`apply.cover`；`apply.sliceMode` 已由 N3 删除）、`web/static/index.html`（cp 组滑杆/重试；`#crosspage-slicemode` 切档已由 N3 删除）、`app-shell-instances.js`（`randomCrossFractions`/`drawCrossSlices`/`retryCrossSlices`）、`app-overlay.js`（`stripContext` frac/cum）、`app-shell-chrome.js`（seg/cover/retry 接线）、`probe('strips')` 读数、`tools/verify/{shell-smoke,overlay-smoke,apply-smoke}.mjs`（Z5 断言）。**UI4 轮 N3/N4 修订（2026-11-09）**：N3 删 `SliceMode` 三件套 + `#crosspage-slicemode` + `sliceMode.*` 四键（i18n 141 → 137、ui-ids 58 → 57、settings 字段对 −1），随机恒生效；N4 改 `startOffset` 为 0..100 百分比 —— `stamp.go` 的 `Box.Y = (1 − pct/100) × (pageH − h)`、`sanitize.go`/`apply.go` 校验同步、`apply_test.go`/`stamp_test.go` 断言按百分比、`index.html` 滑杆 `min 0 max 100`、`app-overlay.js` 的 `rectFor` strip 分支与 `moveDrag` 纵拖、`addCrossInstanceAt` 的点击换算、`tools/verify/{overlay,apply}-smoke` 的 startOffset 取样按百分比|
 |改实例参数面板停靠/滚动（IP1/IP2）|`UI_SPEC §8` IP1/IP2 + 本文件 §5.44（作废 §5.30/§5.34 的锚点半边）|`web/static/style.css`（`#instance-panel` = `right/top/bottom:10px` + `overflow-y:auto`；`#instance-fab` 右上角停靠）、`web/static/app-shell-instances.js`（`posInstancePanel` 只留 show/hide）、`docs/ui/mockup.html`（同形镜像）、`tools/verify/shell-smoke.mjs`（IP1 停靠几何 + IP2 短视口滚动断言）|
 |改骑缝章放置/面板组（SP4）|`UI_SPEC §8` SP4 + 本文件 §5.36|`web/static/index.html`（`#btn-crosspage-add`、面板 cp 组）、`web/static/app-shell-seals.js`（`setCrosspageAdd` 互斥）、`web/static/app-shell-instances.js`（`addCrossInstanceAt`/`syncCpGroup`）、`web/static/app-overlay.js`（strip 几何/纵拖 startOffset/手柄）、`web/static/app-shell-chrome.js`（binding seg 实例语义、放置模式按钮接线）、`tools/verify/shell-smoke.mjs`（SP4 断言）与 `overlay-smoke`/`apply-smoke`（条带）|
 |改打包/发布物|本文件 §4（PC1）|`build.ps1`（`Start-Package`：`autostamp-<rev>-win64.zip` = strip 窗口版重命名 `autostamp.exe` + `README.md`，25 MB 体积门）、`README.md`（随 zip 一起出货，必须保持准确）、`build1.ps1`/`buildm.ps1`（单 exe 出口 `dist\autostamp.exe`；极限压缩走 UPX，见 FACTS §4.3）|

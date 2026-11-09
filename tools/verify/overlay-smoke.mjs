@@ -20,7 +20,8 @@
 //   state machine goes stamp-selected -> stamp-dragging/resize -> stamp-selected;
 //   5. cross-page strips: index/count/edge per page, D2 single/double binding,
 //     the seam is pixel-continuous (adjacent strips show adjacent gradient
-//     samples), startOffset moves the strip, and a strip refuses canvas drag;
+//     samples), startOffset (a percent along the page, UI4-N4) moves the strip,
+//     and a strip refuses canvas drag;
 //   6. the pages field limits which pages get a rect;
 //   7. the ctx.filter leak guard (docs/FACTS §1.4) plus a two-instance case that
 //     would fail if the first instance's filter bled into the second.
@@ -688,7 +689,10 @@ async function main() {
       const m = await app.evaluate(shellEval("p.pageMeta(p.probe('page'))"));
       const sw = (SEAL.scale * PAGE.w) / s0.count;
       const x = s0.edge === "right" ? m.width - sw / 2 : sw / 2;
-      const got = await sampleAt(app, x, 40, "composite");
+      const r0 = (await rects(app))[0] || {};
+      // UI4-N4: 0% now pins the strip to the page BOTTOM, so the seam sample
+      // must ride the probe rect's own centre, not the old hard-coded 40 pt.
+      const got = await sampleAt(app, x, (r0.y || 0) + (r0.h || 0) / 2, "composite");
       // the gradient is measured across the whole image width: the band centre
       // of strip i sits at (i + 0.5) / count of the ramp
       const t = (s0.index + 0.5) / s0.count;
@@ -696,15 +700,31 @@ async function main() {
       nearPixel(`page ${page} strip ${s0.index} gradient sample`, got.rgb, want, 6);
     }
 
-    // startOffset moves the strip along the binding edge (UI_SPEC §2)
+    // UI4-N4 (2026-11-09): startOffset is a PERCENT of the strip's travel now -
+    // 0% pins the strip box bottom to the page bottom, 100% pins its top to the
+    // page top. The rect top must be (1 - startOffset/100) x travel, where
+    // travel = page height - the whole strip box height (h = scale x pageW x
+    // aspect, the same mirror pdfcore StampGeom.Box uses) and may be negative.
+    const metaPct = await app.evaluate(shellEval("p.pageMeta(p.probe('page'))"));
+    const stripH = SEAL.scale * PAGE.w; // the square seal fixture: aspect 1
+    const travel = metaPct.height - stripH;
+    truthy(`the strip has real travel at this scale (${travel.toFixed(1)} pt)`, travel > 20);
     await setParams(app, { "api.apply.startOffset": 0 });
     await sleep(200);
-    const rBefore = (await rects(app))[0] || {};
-    await setParams(app, { "api.apply.startOffset": 120 });
+    const rLow = (await rects(app))[0] || {};
+    truthy(`startOffset 0% pins the strip bottom to the page bottom (y=${rLow.y}, want ${travel.toFixed(1)})`,
+      Math.abs(rLow.y - travel) <= 1);
+    await setParams(app, { "api.apply.startOffset": 100 });
     await sleep(200);
-    const rAfter = (await rects(app))[0] || {};
-    cmp("startOffset moves the strip down by the field value", Math.round(rAfter.y - rBefore.y), 120);
-    cmp("startOffset does not change the strip width", rAfter.w, rBefore.w);
+    const rTop = (await rects(app))[0] || {};
+    truthy(`startOffset 100% pins the strip top to the page top (y=${rTop.y})`, Math.abs(rTop.y) <= 1);
+    await setParams(app, { "api.apply.startOffset": 35 });
+    await sleep(200);
+    const rMid = (await rects(app))[0] || {};
+    truthy(`startOffset 35% rides (1 - pct/100) x travel (y=${rMid.y}, want ${(0.65 * travel).toFixed(2)})`,
+      Math.abs(rMid.y - 0.65 * travel) <= 1);
+    cmp("startOffset does not change the strip width", rMid.w, rLow.w);
+    cmp("startOffset does not change the strip height", rMid.h, rLow.h);
 
     // Z5 (2026-11-09): uneven fractions ride the same instance — probe frac/cum
     // and each strip's gradient centre must land at cum + frac/2 of the ramp
@@ -734,9 +754,10 @@ async function main() {
       const sw = UNEVEN[i] * SEAL.scale * mU.width;
       cmp(`uneven width page ${page}`, Math.round((uRect.w || 0) * 100), Math.round(sw * 100));
       // sample the painted strip centre via its own probe rect (the visible
-      // surface), not a hand-computed edge guess
+      // surface), not a hand-computed edge guess: UI4-N4 moved 0% to the page
+      // bottom, so the old fixed y = 40 would land outside the box now.
       const x = (uRect.x || 0) + (uRect.w || 0) / 2;
-      const gotU = await sampleAt(app, x, 40, "composite");
+      const gotU = await sampleAt(app, x, (uRect.y || 0) + (uRect.h || 0) / 2, "composite");
       const tU = cumBefore + UNEVEN[i] / 2;
       const wantU = STOPS.left.map((v, k) => Math.round(v + (STOPS.right[k] - v) * tU));
       nearPixel(`uneven page ${page} strip ${i} gradient centre`, gotU.rgb, wantU, 6);
@@ -775,11 +796,14 @@ async function main() {
     const affClick = (await affordance(app)).find((a) => a.mode === "crosspage") || {};
     cmp("the click shows the selection box without any hold (Z3)", affClick.visible, true);
 
-    // SP4 semantics moved the strip box: its y IS startOffset (left at 120
-    // above), so the press must land INSIDE the box - a press outside would
-    // just clear the selection (bindStage's empty-page rule) and the probe
-    // would read an unselected instance. Drag from the box centre; the drag
-    // rides the vertical startOffset channel, never the offset field.
+    // UI4-N4: the strip box top is (1 - startOffset/100) x travel, so park the
+    // box mid-travel before pressing - the press must land INSIDE the box, a
+    // press outside would just clear the selection (bindStage's empty-page
+    // rule) and the probe would read an unselected instance. Drag from the box
+    // centre; the drag rides the vertical percent channel, never the offset
+    // field, and a downward drag DEcreases the percent.
+    await setParams(app, { "api.apply.startOffset": 60 });
+    await sleep(200);
     const selectedBefore = await app.evaluate(shellEval("s.selectedInstance() ? s.selectedInstance().id : -1"));
     const before = await readParams(app);
     const rr = await rects(app);
@@ -790,9 +814,14 @@ async function main() {
     cmp("strip drag keeps the instance selected (SP4 vertical channel)",
       await app.evaluate(shellEval("s.selectedInstance() ? s.selectedInstance().id : -1")), selectedBefore);
     const zNow = await app.evaluate(shellEval("p.probe('zoom')"));
+    const metaD = await app.evaluate(shellEval("p.pageMeta(p.probe('page'))"));
     const movedStart = Number(after["api.apply.startOffset"]);
-    truthy(`strip drag writes the vertical startOffset channel (${before["api.apply.startOffset"]} -> ${movedStart}, want +${Math.round(40 / zNow)})`,
-      Math.abs(movedStart - (Number(before["api.apply.startOffset"]) + 40 / zNow)) <= 3);
+    // client px -> page points (divide by the view zoom), then percent of the
+    // strip's travel: Delta pct = -dy / (pageH - rect.h) x 100 (+/-1).
+    const dragTravel = metaD.height - rr[0].h;
+    const wantStart = Number(before["api.apply.startOffset"]) - ((40 / zNow) / dragTravel) * 100;
+    truthy(`strip drag writes the vertical percent channel (${before["api.apply.startOffset"]} -> ${movedStart}, want ${wantStart.toFixed(2)})`,
+      Math.abs(movedStart - wantStart) <= 1);
 
     // Z4 (2026-11-09, user fix): rotation on a cross-page instance means
     // rotate-the-whole-seal FIRST, then slice. The test seal is a horizontal

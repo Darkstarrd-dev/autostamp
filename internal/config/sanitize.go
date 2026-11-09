@@ -73,10 +73,12 @@ func Sanitize(s *Settings) error {
 		fail("apply.rotation %g out of -180..180", a.Rotation)
 	}
 	a.Rotation = clampFlt(a.Rotation, -180, 180)
-	if !inRangeF(a.StartOffset, 0, 200) {
-		fail("apply.startOffset %g out of 0..200 pt", a.StartOffset)
+	// N4: startOffset is a percent along the page (0 = strip bottom pinned to
+	// the page bottom, 100 = strip top pinned to the page top), not a point.
+	if !inRangeF(a.StartOffset, 0, 100) {
+		fail("apply.startOffset %g out of 0..100 %%", a.StartOffset)
 	}
-	a.StartOffset = clampFlt(a.StartOffset, 0, 200)
+	a.StartOffset = clampFlt(a.StartOffset, 0, 100)
 	if !validPairs(a.Pos) {
 		fail("apply.pos %q not x,y", a.Pos)
 		a.Pos = Default().Apply.Pos
@@ -98,10 +100,6 @@ func Sanitize(s *Settings) error {
 		// applies the same correction (i18n key crosspage.binding.fixed).
 		fail("ui.crosspage.binding=none while apply.crossPage=true")
 		a.Binding = "right"
-	}
-	if a.SliceMode != "even" && a.SliceMode != "random" {
-		fail("ui.crosspage.sliceMode %q not in even|random", a.SliceMode)
-		a.SliceMode = "even"
 	}
 	if a.Cover < 0 || a.Cover > 100 {
 		fail("ui.crosspage.cover %d out of 0..100", a.Cover)

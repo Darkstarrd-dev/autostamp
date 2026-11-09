@@ -183,6 +183,12 @@ func TestSealPresetErrorCodes(t *testing.T) {
 			code: "bad_body",
 		},
 		{
+			name: "startOffset over the percent range (N4)",
+			body: "{\"name\":\"章\",\"sealId\":\"" + sealID + "\",\"params\":{\"blend\":\"multiply\",\"opacity\":1,\"scale\":1,\"startOffset\":100.5}}",
+			want: http.StatusBadRequest,
+			code: "bad_body",
+		},
+		{
 			name: "missing seal",
 			body: "{\"name\":\"章\",\"sealId\":\"nope\",\"params\":{\"blend\":\"multiply\",\"opacity\":1,\"scale\":1}}",
 			want: http.StatusNotFound,

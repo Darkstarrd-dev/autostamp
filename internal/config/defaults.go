@@ -33,7 +33,6 @@ func Default() Settings {
 			CrossPage:   false,
 			Binding:     "right",
 			StartOffset: 0,
-			SliceMode:   "even", // Z5: 均分 default; random simulates real binding drift
 			Cover:       75,
 		},
 		Split:  Split{Auto: true, Mode: "v2", Rows: 1, Cols: 2, CutFractions: "0.5", Pages: "all"},

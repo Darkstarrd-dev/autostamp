@@ -140,10 +140,11 @@ type StampGeom struct {
 	PosX   float64
 	PosY   float64
 
-	// Cross-page fields: Binding is D2's choice, StartOffset moves the strip
-	// down the page (api.apply.startOffset is the only position field a strip
-	// honours - the plain offset fields are ignored, exactly like the preview
-	// does, because a strip is never draggable).
+	// Cross-page fields: Binding is D2's choice, StartOffset is the N4
+	// percent along the page (api.apply.startOffset, 0..100): 0 pins the
+	// strip box's bottom edge to the page bottom, 100 pins its top edge to
+	// the page top. The plain offset fields are ignored for a strip, exactly
+	// like the preview does, because a strip is never dragged by its offset.
 	CrossPage   bool
 	Binding     BindingSide
 	StartOffset float64
@@ -160,7 +161,7 @@ type StampGeom struct {
 
 // Box computes the instance's rectangle in display space (top-left origin, y
 // down). For a cross-page instance this is the slot-th strip, pinned to the
-// binding edge and moved only by StartOffset.
+// binding edge and moved only by the StartOffset percent (N4).
 //
 // The strip geometry mirrors app-overlay.js rectFor: the *whole* seal box has
 // width = scale x pageWidth, so each strip is that width divided by the page
@@ -202,7 +203,13 @@ func (g StampGeom) Box(pg Page) (Rect, error) {
 		if !leftEdge {
 			x = pageW - w
 		}
-		return Rect{X: x, Y: g.StartOffset, W: w, H: h}, nil
+		// N4: the strip travels along the page in percent of the space the
+		// whole-seal box leaves over the page height (travel = pageH - h), and
+		// the percent is measured from the bottom: 0 keeps the box's lower edge
+		// on the page bottom, 100 puts its upper edge on the page top. travel
+		// < 0 simply means the box is taller than the page, and the formula's
+		// own value stands, which is what the preview draws too.
+		return Rect{X: x, Y: (1 - g.StartOffset/100) * (pageH - h), W: w, H: h}, nil
 	}
 
 	w, h := fullW, fullW*aspect

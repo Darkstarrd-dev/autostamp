@@ -2,6 +2,22 @@
 
 > `PROJECT_MAP.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-09 — UI4 轮（N1–N4）：新增「（续）N1–N4 UI4 轮」行、`stamp.go`/测试行挂 N4 注记、Z5 行挂 N3 注记、计数 137 / 57
+
+- 头「最后核对」= N1–N4 摘要；IP1/IP2 降为「同日前一轮」、Z5 降为「更早一轮」（历轮摘要压成一行
+  注记，禁止堆叠）；计数改 i18n **137** / ui-ids **57** / `data-field` −1（历史链 266/96 → 63 → 59
+  → 56 → 58 → 57 与已删键清单只留在本文历史段与 changelog）。
+- 新增「（续）N1–N4 UI4 轮」行 = 本轮文件面：Go（`internal/config/{types,defaults,patch,sanitize}.go`
+  删 `SliceMode`、`pdfcore/stamp.go` 百分比公式、`api/apply.go` 校验 0..100 + 两个 *_test）；
+  前端（`index.html`/`mockup.html` 的 N2 tooltip + N3 控件删除 + N4 滑杆、四个壳模块接线、
+  `app-overlay.js` 的 `rectFor`/`moveDrag`）；verify（三条 smoke 的 startOffset 百分比断言 +
+  Z5 链删切档步骤）。
+- `internal/pdfcore`：`stamp.go` 行补 **N4** 注记（`StartOffset` = 0..100 百分比 → `Box` 的
+  `Y = (1 − pct/100) × (pageH − h)`）；`stamp_test.go` + `apply_test.go` 行补「断言按百分比」注记 +
+  `sliceMode` 的 even|random 校验测试随 N3 删除。
+- `web/static`：Z5 行挂「「平均|随机」切档已由 N3 作废，仅随机恒生效」注记；`app-i18n.js` 行计数
+  **141 → 137** 并列明删掉的 4 个键，补 N2 的 `[data-i18n-title]` 通道与 N4 换文本注记。
+
 
 ## 2026-11-09 — Z1–Z4：新增 `rotate.go`/`rotate_test.go` 行、`stamp.go` 行换义（Z4）、新增「（续）Z1–Z4」壳行
 

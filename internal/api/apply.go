@@ -276,8 +276,9 @@ func resolveInstance(store *tmpstore.Store, owner string, doc *pdfcore.Doc, i in
 	if in.StartOffset != nil {
 		startOffset = *in.StartOffset
 	}
-	if startOffset < 0 || startOffset > 200 {
-		return pdfcore.StampInstance{}, "bad_body", label + " startOffset 必须在 0..200 之内"
+	// N4: startOffset is a 0..100 percent along the page, not a point.
+	if startOffset < 0 || startOffset > 100 {
+		return pdfcore.StampInstance{}, "bad_body", label + " startOffset 必须在 0..100（%）之内"
 	}
 
 	pages := orDefault(in.Pages, "all") // the UI's All button sends the word

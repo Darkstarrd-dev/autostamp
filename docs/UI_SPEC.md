@@ -1,36 +1,28 @@
 # AutoStamp — UI_SPEC（P0.5 UI 契约）
 
-> 最后核对：2026-11-09（**IP1/IP2 = 印章参数面板停靠轮**：`#instance-panel` 从 HD12 悬浮锚点
-> （贴实例框右侧 + 翻转 + 跟随）改为**停靠 `#preview` 右缘** = `right/top/bottom:10px` +
-> 全高 + `overflow-y:auto`（内容超高出滚动条），`#instance-fab` 齿轮同角停靠；
-> `posInstancePanel` 锚点链删除、只留 show/hide 语义；§8 IP1/IP2、AGENTS §5.44。同日前一轮
-> **Z5 = 骑缝切片模拟轮**：cp 组新增 `ui.crosspage.sliceMode`
-> （平均|随机，默认平均）+ `ui.crosspage.cover` 覆盖率滑杆（0..100，默认 75，仅随机显示）+
-> `#crosspage-retry` 重新随机按钮（仅随机显示）。随机取值 = 首页 25~50%、末页 20~30%、中间页按
-> **覆盖率**取整条页数（四舍五入：10 页中间页 × 60% = 6 页有章、4 页盖不到），拿到的占比沿页序
-> 走一条平滑趋势；结果写入实例参数 `api.apply.slices`（每槽占整章宽的比例，Σ≤1，零槽 = 该页
-> 盖不到），落盘请求逐实例原样发送。落盘 `pdfcore.StripsFractions`（累计列 + 空槽跳过）+
-> `StampGeom.SlotFrac`；预览 `stripContext` 同源 `frac/cum`（`probe('strips')` 新增读数）。
-> 本轮新增：§2 词表 3 行（+1 settings 组字段对：`apply.sliceMode`/`apply.cover`，+1 请求字段
-> `apply.slices`）、§6 ui-ids 56 → 58、§4 132 → 141。同日前一轮 **Z1–Z4 = 盖章默认值与骑缝旋转轮**：
-> Z1 混合模式默认 **multiply / 正片叠底**（Go `apply.blend` 默认与选择器预置 `selected` 对齐，前端未知值回退也改
-> multiply）；Z2 新放置/复位实例的默认尺寸 = **42 mm 印章宽 ÷ 页显示宽**（`autoScale()` 为 §7
-> 驱动 API；竖版页的宽就是短边，A4 竖版 = 0.2008；横版页按 42 mm 目标除以长边；settings 字段默认
-> 仍 0.202）；Z3 骑缝实例**与普通章一样可点选/拖拽**（隐藏 `data-mode="crosspage"` 的 sel-box CSS
-> 删除：单击出绿框 + 四角 + 旋转手柄，按下即拖，纵拖仍走 `startOffset`）；Z4 骑缝章旋转改为
-> **先旋转整枚印章、再切竖条**（`pdfcore.RotatePNG` 把旋转烘进位图后 `Strips` 才切片；预览侧
-> `rotatedBitmapCanvas` + `effectiveBitmap` 同源；条带框纵横比 = 旋转后 bbox）。Z1–Z4 轮**不新增
-> id/键/路由/字段**；§4 只换 `api.apply.scale.hint` 文案。上一轮 **HD19 = 空态简化轮**
-> （2026-11-06：`#empty-state` 只剩一枚居中 156 px 大按钮 `#empty-pick` + 一行提示，
-> `#empty-path`/`#empty-pick-multi`/`#empty-pick-filter` 与 pathGrantId chip 删除，
-> `openByPath(path)` 退化为 §7 驱动 API；§6 ui-ids 59 → 56、§4 144 → 132）。再上一轮 **SP5 = 右侧边栏退场**
-> （2026-11-06：右侧边栏整块删除、「导出设置」段原样迁入保存对话框 `#save-modal`（ui-ids 63 → 59、
-> §4 151 → 144）、`#app-main` grid **单列 full-bleed**、保存对话框入口 = 顶栏「保存」/ Ctrl+S）。
-> 更早一轮 **SP1–SP4 = 侧栏收尾轮**（2026-11-05：删 `#panel-seal`/`#panel-instances`/
-> `#panel-split`/`#panel-batch`/`#panel-crosspage` 与 `#asset-hooks`，ui-ids 96 → 63、§4 267 → 151，
-> `app-batch.js` + `batch-smoke.mjs` 删除，分页条改纯缩略图条，预览卡 z 序，顶栏骑缝章放置开关）。
-> HD13–HD18、HD1–HD7、顶栏收尾（2026-11-03）、V4–V6 与 V7（历史计数 266 → 267 → 151 → 144 → 132
-> 见 `docs/changelog/`）记录沿用；P2–P6 接线记录沿用 2026-10-30/11-02。
+> 最后核对：2026-11-09（**N1–N4 = UI4 轮**：N1 初始透明度 = **0.6**（Go/前端 default 早已 0.6，
+> 本轮只复位被测试拖成 1 的会话 settings 值，代码/文案/键零改动）；N2 **说明文字 → tooltip**：
+> 每条**静态** `hintline` 从界面删除，改挂所在 `.field`/行容器的 `data-i18n-title` +
+> `data-i18n-title-cn`（键名与键数不变；动态读数 `#save-source`/`#confirm-path`/
+> `#estimate-total`/`#estimate-per-page`、空态 `.hint`、`#log-console`、`#drop-hint` 仍可见，
+> CSS `.hintline` 规则保留）；N3 **骑缝切片只有随机**：`ui.crosspage.sliceMode` 切档 +
+> `#crosspage-slicemode` 控件 + Go config 三件套整条删除，cp 组控件恒随骑缝实例显示
+> （Z5 的「平均」档作废；请求缺 `slices` 时后端等宽切仍是兜底）；N4 **`api.apply.startOffset`
+> 改百分比 0..100**：0% = 条带**下缘**贴页面下边、100% = 条带**上缘**贴页面上边，几何
+> `travel = pageH − 条带盒高 h`、`Y = (1 − startOffset/100) × travel`（预览 == 落盘；纵拖与
+> 放置点击都换算成同一百分比）。本轮改动：§2 删 `ui.crosspage.sliceMode` 行 +
+> `api.apply.startOffset` 行改 `0..100（%）`、§4 **141 → 137**（删 sliceMode 族 4 键 +
+> `startOffset.ctl`/`.hint` 换文本）、§6 ui-ids **58 → 57**（删 `crosspage-slicemode`）、
+> §8 新增 N1–N4 四行 + Z5 行挂作废注记。同日前一轮 **IP1/IP2 = 印章参数面板停靠轮**
+> （`#instance-panel` 停靠 `#preview` 右缘全高 + `overflow-y:auto`、`posInstancePanel` 锚点链
+> 删除只留 show/hide，契约面零变化；AGENTS §5.44）。更早一轮 **Z5 = 骑缝切片模拟轮**（覆盖率
+> 滑杆 + 重新随机按钮 + 随机取值写 `api.apply.slices`；其「平均|随机」切档已由本轮 N3 作废，
+> 见 §8 Z5 行注记）。再早 **Z1–Z4 = 盖章默认值与骑缝旋转轮**（blend 默认 multiply、42 mm
+> `autoScale()`、骑缝实例单击可选、先旋转整枚再切竖条）。上一轮 **HD19 = 空态简化**、
+> **SP5 = 右侧边栏退场**、**更早一轮 SP1–SP4 = 侧栏收尾轮**。历史计数链 i18n
+> 266 → 267 → 151 → 144 → 132 → 141 → **137**、ui-ids 96 → 63 → 59 → 56 → 58 → **57**；
+> HD13–HD18、HD1–HD7、顶栏收尾（2026-11-03）、V4–V7 与 P2–P6 接线记录沿用
+> 2026-10-30/11-02/11-03，历轮过程叙述见 `docs/changelog/`。
 > 本文是 **UI 语义唯一权威**：字段名/取值域/控件绑定/DOM id/状态机
 > 在此冻结；P0 起 `web/static/index.html` 必须照 §1 骨架与 §7 id 搭建，P1–P5 只换数据源。
 > 与 `AGENTS.md` §6 路由字段冲突时：先改本文 + §6（同一提交），再改代码。
@@ -125,8 +117,7 @@ field=api.export.quality api=export.quality type=slider+number range=40..95 defa
 field=api.export.pages api=export.pages type=text range=pages词表 default=all nullable=no ctl=yes i18nkey=api.export.pages.ctl decision=-
 field=api.apply.crossPage api=apply.crossPage type=boolean range=bool default=false nullable=no ctl=no i18nkey=- decision=SP4
 field=ui.crosspage.binding api=- type=segmented range=right|alternate|none default=right nullable=no ctl=yes i18nkey=ui.crosspage.binding.ctl decision=D2
-field=api.apply.startOffset api=apply.startOffset type=slider+number range=0..200 default=0 nullable=no ctl=yes i18nkey=api.apply.startOffset.ctl decision=D2 unit=pt
-field=ui.crosspage.sliceMode api=- type=segmented range=even|random default=even nullable=no ctl=yes i18nkey=ui.crosspage.sliceMode.ctl decision=Z5
+field=api.apply.startOffset api=apply.startOffset type=slider+number range=0..100（%） default=0 nullable=no ctl=yes i18nkey=api.apply.startOffset.ctl decision=D2,N4 unit=%
 field=ui.crosspage.cover api=- type=slider+number range=0..100 default=75 nullable=no ctl=yes i18nkey=ui.crosspage.cover.ctl decision=Z5 unit=%
 field=api.apply.slices api=apply.slices type=array range=0..1每槽占比（Σ≤1） default=- nullable=yes ctl=no i18nkey=- decision=Z5
 field=api.save.targetPath api=save.targetPath type=text range=绝对路径 default=- nullable=yes ctl=yes i18nkey=api.save.targetPath.ctl decision=-
@@ -163,16 +154,22 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
   成功后记录路径；顶栏下拉显示 **去后缀** 的名称，value = 完整路径。兜底：下拉选择时
   `fs/pick{filePath}` 报 `path_denied`（文件不存在）→ 前端移除该选项并 `PATCH settings`
   的 `recentSeals` 数组（整组替换）删除该记录。
-- `api.apply.startOffset` 是骑缝条带沿装订边的起始偏移（pdfcpu `offset:0 -N`），与 `api.apply.offset` 独立。
-  SP4（2026-11-05）：选中骑缝实例后**纵向拖拽条带**即写这个值（水平位置属于装订边，不拖）；
-  骑缝章模式的放置点击也以点击点的 y 作为 `startOffset`（见 §8 SP4 行）。
-- Z5（2026-11-09）`ui.crosspage.sliceMode`（均分|随机）+ `ui.crosspage.cover`：随机分布模拟
-  真实装订盖章。前端 `S.drawCrossSlices`（实例级）按约束取值：首页 25~50%、末页 20~30%，
-  中间页按**覆盖率**（= 首页末页外页面的占比，四舍五入；例 10 页中间页 60% = 6 页有章、4 页
-  盖不到）决定哪些页拿到条带，拿到的占比沿页序走**一条平滑趋势**（单段缓变，绝不逐页抖动）。
-  取值结果写入实例参数 `api.apply.slices`（每槽占整章宽的比例，Σ≤1），落盘请求逐实例原样
-  发送（预览/落盘同一份分布，不重掷 RNG）。重试按钮 `#crosspage-retry` = 重新取值一次。
-  `sliceMode=even` 时 slices 为空 = 经典均分（现状不变）。
+- `api.apply.startOffset` 是骑缝条带沿装订边位置的**百分比**（N4，2026-11-09）：取值 0..100，
+  0% = 条带**下缘**贴页面下边、100% = 条带**上缘**贴页面上边；几何 `travel = pageH − 条带盒高
+  h`（= `scale × pageW × aspect` 整章盒高）、`Y = (1 − startOffset/100) × travel`（`travel`
+  可为负 = 盒比页高，钳位照旧），预览 `app-overlay.rectFor` 与落盘 `pdfcore.StampGeom.Box`
+  同一公式。与 `api.apply.offset` 独立。SP4（2026-11-05）：选中骑缝实例后**纵向拖拽条带**即改
+  这个值（水平位置属于装订边，不拖，`Δpct = −dy / travel × 100`）；骑缝章模式的放置点击把点击
+  点 y 换算成同一个百分比写入（见 §8 SP4/N4 行）。
+- Z5（2026-11-09）`ui.crosspage.cover`：随机分布模拟真实装订盖章。前端 `S.drawCrossSlices`
+  （实例级）按约束取值：首页 25~50%、末页 20~30%，中间页按**覆盖率**（= 首页末页外页面的占比，
+  四舍五入；例 10 页中间页 60% = 6 页有章、4 页盖不到）决定哪些页拿到条带，拿到的占比沿页序走
+  **一条平滑趋势**（单段缓变，绝不逐页抖动）。取值结果写入实例参数 `api.apply.slices`（每槽占
+  整章宽的比例，Σ≤1），落盘请求逐实例原样发送（预览/落盘同一份分布，不重掷 RNG）。重试按钮
+  `#crosspage-retry` = 重新取值一次。**N3（2026-11-09）起 Z5 的「平均」档作废**：
+  `ui.crosspage.sliceMode` 字段与切档控件整条删除，随机取值**恒生效**（新骑缝实例与
+  `#instance-reset` 复位都立即随机取值，不再有平均分支）；请求里缺 `slices` 时后端等宽切仍是
+  兜底（`api/apply.go` 的 `slices` 词表不变，只是 UI 不再暴露平均）。
 - `api.export.dpi/customDpi/quality` 仅 `mode=raster` 生效（页位图由前端回传，FACTS §2.4 无 rasterize）。
 - `api.batch.*`（BM1/BM2 的前端跑链词表）：**SP1（2026-11-05）起整段作废** —— 批处理面板随
   右侧边栏移除，前端跑链（`fs/pick(dir) → open → split → apply → export → save(mkdirs)`）与
@@ -192,9 +189,8 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 | 主画布 · 选中实例（`#stamp-layer`） | 普通实例：`apply.offset`（拖框）/ `apply.scale`（四角手柄、`+/−` 快捷键，滑杆回显；Ctrl+滚轮 = 全局整页缩放，V7 取代 V3）/ `apply.rotation`（顶部手柄）。骑缝实例（SP4）：纵拖 = `apply.startOffset`（水平不拖），四角/旋转手柄同普通 | 虚线框 + 手柄 | 无请求（叠加层内部状态） |
 | 实例参数面板（右缘停靠） · 混合模式（`#instance-panel`） | `api.apply.blend` | 分组 `<select>` | `/api/pdf/apply` |
 | 实例参数面板（右缘停靠） · 透明度/明度/饱和度/缩放/旋转 | `api.apply.opacity/brightness/saturate/scale/rotation` | 滑杆 + 数值（双向绑定；scale 10%..200%，可被拖角超出；rotation −180..180） | 同上 / 仅预览 |
-| 实例参数面板（右缘停靠） · 装订边 + 起始位置（SP4，仅骑缝实例显示） | `ui.crosspage.binding` / `api.apply.startOffset` | segmented（纵向堆叠）+ 滑杆/数值 | 同上（几何见 §8 D2/SP4） |
-| 实例参数面板（右缘停靠） · 骑缝切片（Z5，仅骑缝实例） | `ui.crosspage.sliceMode`（平均\|随机） | segmented | `sliceMode` 进 settings；随机时另发 `apply.slices` |
-| 实例参数面板（右缘停靠） · 覆盖率滑杆（Z5，仅随机） | `ui.crosspage.cover` | 滑杆 + 数值（0..100%） | settings（`apply.cover`）；改动即时重掷分布 |
+| 实例参数面板（右缘停靠） · 装订边 + 起始位置（SP4，仅骑缝实例显示；`startOffset` = 百分比 0..100，N4） | `ui.crosspage.binding` / `api.apply.startOffset` | segmented（纵向堆叠）+ 滑杆/数值 | 同上（几何见 §8 D2/SP4/N4） |
+| 实例参数面板（右缘停靠） · 覆盖率滑杆（Z5，仅骑缝实例显示，N3 起恒随 cp 组） | `ui.crosspage.cover` | 滑杆 + 数值（0..100%） | settings（`apply.cover`）；改动即时重掷分布 |
 | 实例参数面板（右缘停靠） · 重新随机（Z5，`#crosspage-retry`） | 重试 = 对选中骑缝实例重新取值一次 | button | 无请求（新分布随下一次 `apply` 落盘） |
 | 实例参数面板（右缘停靠） · 复位 / 删除 | 复位当前实例参数到默认 / 删除当前实例 | 底部两个 button | 无请求 |
 | 左列 · 印章预览（`#seal-preview`） | 当前选/刚打开的印章（响应侧） | 静态 `<canvas>`（透明底棋盘） | 无请求（字节来自 `GET /api/pdf/seal/raw`） |
@@ -220,7 +216,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 `#empty-pick-multi`、「过滤」切档 `#empty-pick-filter` 与 pathGrantId chip 已删
 （§6 ui-ids −3、§4 −12 键），`openByPath(path)` 只剩 §7 驱动 API。
 
-## 4. i18n 清单（key | en | cn；共 141 键，SP1 净删 116 → 151、SP5 再删 7 → 144、HD19 再删 12 → 132、Z5 再加 9 → 141，由 `node tools/verify/gen-i18n.mjs` 生成；生成器打印同数）
+## 4. i18n 清单（key | en | cn；共 137 键，SP1 净删 116 → 151、SP5 再删 7 → 144、HD19 再删 12 → 132、Z5 再加 9 → 141、N3 再删 4 → 137，由 `node tools/verify/gen-i18n.mjs` 生成；生成器打印同数）
 
 规则（AGENTS §7）：每个可见控件/文案必须有 `data-i18n` key，en/cn 两值非空；
 `data-i18n-cn`（及 `-placeholder`、`-title`）提供中文值，en 取元素自身文本或 `class="tag"` 的字段名。
@@ -245,8 +241,8 @@ SP5 起 `ui.lang` / `ui.theme` 的 §2 行改挂切档**自身文案键**（`lan
 |api.apply.saturate.hint|Preview-only (canvas filter), not written to PDF.|仅预览（前端 ctx.filter saturate），落盘不写。|
 |api.apply.scale.ctl|apply.scale|印章宽度（相对页宽）|
 |api.apply.scale.hint|Seal width as a fraction of page width; slider 10%..200%, corner-drag can exceed and echoes back on the slider. Fresh stamps use the Z2 auto scale = 42 mm over the page's display width.|印章宽度为相对页宽分数；滑杆最左 10%、最右 200%，拖动边角可超出范围并回显在滑杆上（A4 = 595.3pt）。新放置/复位的印章按 Z2 自动缩放 = 42 mm 章宽 ÷ 页显示宽（A4 竖版即 0.2008）。|
-|api.apply.startOffset.ctl|apply.startOffset|起始位置（pt）|
-|api.apply.startOffset.hint|Start offset along the binding edge (pdfcpu offset:0 -N).|沿装订边的起始偏移（pdfcpu offset:0 -N）；0 为页首。|
+|api.apply.startOffset.ctl|apply.startOffset|起始位置（%）|
+|api.apply.startOffset.hint|Percent along the page: 0% pins the strip bottom to the page bottom, 100% pins its top to the page top; vertical drag on a selected strip edits this value.|百分比沿页滑动：0% = 条带下缘贴页面下边，100% = 条带上缘贴页面上边；选中骑缝章后纵向拖动即改此值。|
 |api.export.customDpi.ctl|export.customDpi|自定义 DPI|
 |api.export.customDpi.hint|96..600, raster + custom only.|96..600，仅 raster 且 dpi=custom 时读取。|
 |api.export.dpi.ctl|export.dpi|分辨率 DPI|
@@ -352,8 +348,6 @@ SP5 起 `ui.lang` / `ui.theme` 的 §2 行改挂切档**自身文案键**（`lan
 |seal.recent.stale|that seal file no longer exists: removed from the list|该印章文件已不存在：已从下拉列表移除|
 |seal.err.type|Stamp image must be PNG or JPEG with an alpha channel|印章图片必须是带透明通道的 PNG 或 JPEG|
 |seal.err.nosource|Upload a seal image first, then revert|先上传印章图片，再点撤销|
-|sliceMode.even|Even|平均|
-|sliceMode.random|Random|随机|
 |stamp.box.aria|Selected stamp instance position|选中印章实例的位置|
 |shortcuts.hint|shortcut list|快捷键列表|
 |shortcuts.title|Shortcuts|快捷键|
@@ -363,8 +357,6 @@ SP5 起 `ui.lang` / `ui.theme` 的 §2 行改挂切档**自身文案键**（`lan
 |top.file.hint|no file open|未打开文件|
 |ui.crosspage.binding.ctl|Binding edge (D2)|装订边（D2）|
 |ui.crosspage.binding.hint|D2 vocabulary, per selected instance: right / alternate make it span, none demotes it to a page stamp.|D2 词表，作用于**选中的骑缝实例**：right / alternate 逐页跨页，none 把该实例降回普通单页印章。|
-|ui.crosspage.sliceMode.ctl|Cross-page slices|骑缝切片|
-|ui.crosspage.sliceMode.hint|Even = classic equal split; Random simulates a real binding run: first page 25..50%, last page 20..30%, middle shares follow the cover slider and one smooth drift; Re-roll re-rolls.|平均 = 经典均分；随机模拟真实装订盖章：首页 25~50%、末页 20~30%，中间页按覆盖率取条带并沿页序平滑漂移；重新随机换一次值。|
 |ui.crosspage.cover.ctl|Cover|覆盖率（%）|
 |ui.crosspage.cover.hint|Share of middle pages that get a strip (rounded); e.g. 10 middle pages at 60% = 6 stamped, 4 missed.|首页末页外的页面有多少比例拿到骑缝章（四舍五入）；如 10 页中间页配 60% = 6 页有章、4 页盖不到。|
 |view.fit.hint|restore fit (Ctrl+middle click)|恢复整页适配（Ctrl+鼠标中键）|
@@ -400,7 +392,7 @@ P0/P1 的 `index.html` 必须使用下表 id（`ui-ids` 块 = `ui-contract.mjs` 
 新增 id 要先登记，mock 缺该 id 即报错。
 
 ```ui-ids
-app-main  app-root  apply-blend  btn-console  btn-crosspage-add  btn-open  btn-save  btn-seal-add  btn-seal-upload  btn-shortcuts  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  crosspage-retry  crosspage-slicemode  drop-hint  empty-pick  empty-state  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-collapse  instance-fab  instance-panel  instance-remove  instance-reset  lang-seg  log-console  log-console-body  modal-layer  page-pager  panel-export  password-modal  pixel-readout  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  save-cancel  save-confirm  save-modal  error-toast  save-pick  save-source  seal-preview  seal-preview-canvas  seal-preview-name  seal-recent-select  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  theme-seg  topbar
+app-main  app-root  apply-blend  btn-console  btn-crosspage-add  btn-open  btn-save  btn-seal-add  btn-seal-upload  btn-shortcuts  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  crosspage-retry  drop-hint  empty-pick  empty-state  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-collapse  instance-fab  instance-panel  instance-remove  instance-reset  lang-seg  log-console  log-console-body  modal-layer  page-pager  panel-export  password-modal  pixel-readout  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  save-cancel  save-confirm  save-modal  error-toast  save-pick  save-source  seal-preview  seal-preview-canvas  seal-preview-name  seal-recent-select  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  theme-seg  topbar
 
 ```
 
@@ -463,14 +455,16 @@ tooltip）、`probe(name)`、
 `pixel-matrix` 真链路驱动的就是它，而不是直接调预览模块）、
 `setAddMode(on)` (add-seal mode toggle, HD10), `setCrosspageAdd(on)` (cross-page placement
 mode toggle, SP4 — mutually exclusive with addMode, stage hook shared), `addCrossInstanceAt(pt)`
-(the placement: click height → `startOffset`, binding-edge anchored strip instance, SP4),
+(the placement: click height → the `startOffset` **percentage** (N4: `pct = clamp(round1((1 −
+pt.y / (pageH − h)) × 100), 0, 100)`), binding-edge anchored strip instance, SP4),
 `autoScale()` (Z2: the placement scale = 42 mm seal width over the current page's display width;
 drives `addInstanceAt`/`addCrossInstanceAt` and `#instance-reset`),
 `drawCrossSlices(inst)` / `retryCrossSlices()` / `randomCrossFractions(count, cover, rng)`
 (Z5: the 随机 draw rolls/collections per-instance
 `api.apply.slices` — first page 25..50%, last 20..30%, middle pages honour the cover slider
-(rounded) and drift as one smooth trend; retry re-rolls the selected instance; even mode deletes
-the list; `randomCrossFractions` is the pure function behind it, injected with a caller's rng for
+(rounded) and drift as one smooth trend; retry re-rolls the selected instance; the 平均 mode is
+gone since N3, so the random draw is always in effect and there is no equal-split branch;
+`randomCrossFractions` is the pure function behind it, injected with a caller's rng for
 deterministic verify),
 `openRecentSeal(path)` (the topbar dropdown/fallback chain:
 `fs/pick{filePath}` → `seal/prepare(pathGrantId)`, on failure the shell removes the record itself, HD8),
@@ -620,9 +614,13 @@ FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 |Z2|盖章默认尺寸：自动判断竖版/横版，默认纸张 A4，章默认 42 mm，按短边自动算 scale|用户直接指令|已确认（用户 2026-11-09 对话指令）：新放置（加章模式点击 / 骑缝放置）与 `#instance-reset` 复位时，实例 scale = **42 mm 章宽 ÷ 页显示宽**（kernel `autoScale()`，§7 驱动 API；显示宽按 `displayDims` 的 /Rotate 交换判断竖版/横版 —— 竖版页的宽就是短边，A4 竖版 = 0.2008 = 42/210，用户口述的「短边」公式；横版页按 42 mm 目标除以长边，章保持 42 mm）。未打开文档按 A4 短边（595.28 pt）回退；clamp 0.05..5。settings 字段 `apply.scale` 默认仍是 0.202（只作 settings 镜像，`probe('defaults')` 不变）|2026-11-09|用户 2026-11-09 对话指令（4 项一批）|
 |Z3|骑缝章实例点不动：不像普通章那样显示可选项，必须长按左键才能拖动 —— 修正|用户直接指令（bug 修复）|已确认（用户 2026-11-09 对话指令）：骑缝实例**就是普通实例** —— 单击（不按住）即选中并显示绿色 sel-box + 四角 + 旋转手柄，按下即拖（无长按门槛）；纵拖 = `startOffset`（SP4 语义不变）。修复面 = 删除 `style.css` 里 `[data-mode="crosspage"] .sel-box { display:none }` 与 `.handle { display:none }` 两条隐藏规则（它们就是用户报的现象），改挂 `#stamp-layer .instance[data-mode="crosspage"] .sel-box { border-color: var(--success); cursor: ns-resize }` 的可见规则；叠加层 hitTest 对骑缝实例跳过旋转帧（旋转已烘进位图，条带框轴对齐）|2026-11-09|用户 2026-11-09 对话指令（4 项一批）|
 |Z4|骑缝章旋转顺序错误：现在是先切、后旋转、把旋转结果放每页；正确 = 先旋转、再切、每页放的是竖条|用户直接指令（bug 修复）|已确认（用户 2026-11-09 对话指令）：落盘侧 `internal/pdfcore.Apply` 对 crossPage 实例先 `RotatePNG`（整枚印章按 deg 旋转、画布扩到旋转 bbox）再 `Strips` 按**旋转后的位图**切成 N 条竖列进页槽（每页拿到的就是竖条）；预览侧 `app-overlay.js` 用 `rotatedBitmapCanvas`（`rotCache` 按 sealId×deg 缓存）做同源合成，`rectFor` 的条带框纵横比 = 旋转 bbox（90° 时宽高互换），实例不再单独旋转。Go 断言 `TestRotatedStripsAreVerticalColumnsOfRotatedSeal` + `apply-smoke --only=strip`（同 seal 旋转 90：每页上沿=印章左半色、下沿=右半色、条带高 = 旋转 bbox 高）与 `overlay-smoke --only=strip`（旋转渐变三取样）钉死|2026-11-09|用户 2026-11-09 对话指令（4 项一批）|
-|Z5|骑缝章面板新增「平均\|随机」可选项 + 百分比滑条 + 重试按钮：模拟真实装订下骑缝章各页位置水平不一致 / 部分页盖不到|用户直接指令（机制已在指令中写明）|已确认（用户 2026-11-09 对话指令；滑条语义经 ask 轮用户自定义输入补全：**覆盖率 = 除首页末页外页面拿到骑缝章的占比，例 60% × 10 中间页 = 6 页有章 4 页盖不到，四舍五入**）：cp 组新增 `ui.crosspage.sliceMode`（平均|随机，默认平均）+ `ui.crosspage.cover`（0..100%，默认 75；仅随机可见）+ `#crosspage-retry` 重新随机（仅随机可见）。随机机制：首页必得 25~50%、末页必得 20~30%、中间页按覆盖率四舍五入决定哪些页有章（其余页 = 盖不到，切片 0），拿到的占比沿页序**一条平滑趋势**（单段缓变，不允许逐页剧烈波动），重试 = 重新取值一次。实现决定：取值写实例参数 `api.apply.slices`（Σ≤1），apply 请求逐实例原样发送（预览/落盘同一份分布，不重掷 RNG）；落盘 `pdfcore.StripsFractions` 按累计列切条、0 槽跳过盖章；新 §2 词表 3 行 + settings `apply.sliceMode`/`apply.cover` 两字段（`ui.*` 语义进 settings 不走请求）；§6 ui-ids +`crosspage-slicemode`/`crosspage-retry`（56 → 58）；§4 +9 键（132 → 141）|2026-11-09|用户 2026-11-09 对话指令（ask 轮自定义输入定滑条语义）|
+|Z5|骑缝章面板新增「平均\|随机」可选项 + 百分比滑条 + 重试按钮：模拟真实装订下骑缝章各页位置水平不一致 / 部分页盖不到|用户直接指令（机制已在指令中写明）|已确认（用户 2026-11-09 对话指令；滑条语义经 ask 轮用户自定义输入补全：**覆盖率 = 除首页末页外页面拿到骑缝章的占比，例 60% × 10 中间页 = 6 页有章 4 页盖不到，四舍五入**）：cp 组新增 `ui.crosspage.sliceMode`（平均\|随机，默认平均）+ `ui.crosspage.cover`（0..100%，默认 75；仅随机可见）+ `#crosspage-retry` 重新随机（仅随机可见）。随机机制：首页必得 25~50%、末页必得 20~30%、中间页按覆盖率四舍五入决定哪些页有章（其余页 = 盖不到，切片 0），拿到的占比沿页序**一条平滑趋势**（单段缓变，不允许逐页剧烈波动），重试 = 重新取值一次。实现决定：取值写实例参数 `api.apply.slices`（Σ≤1），apply 请求逐实例原样发送（预览/落盘同一份分布，不重掷 RNG）；落盘 `pdfcore.StripsFractions` 按累计列切条、0 槽跳过盖章；新 §2 词表 3 行 + settings `apply.sliceMode`/`apply.cover` 两字段（`ui.*` 语义进 settings 不走请求）；§6 ui-ids +`crosspage-slicemode`/`crosspage-retry`（56 → 58）；§4 +9 键（132 → 141）（**N3 起平均模式作废**：本行的 `ui.crosspage.sliceMode` 切档 + settings `apply.sliceMode` + `#crosspage-slicemode` + i18n `sliceMode.*` 四键已由 UI4 轮整条删除，随机分布恒生效）|2026-11-09|用户 2026-11-09 对话指令（ask 轮自定义输入定滑条语义）|
 |IP1|印章参数面板改为**固定到右侧边栏**（预览区右缘），不再显示在印章右侧悬浮|用户直接指令（HD12 悬浮锚点形态作废）|已确认（用户 2026-11-09 对话指令）：`#instance-panel` 绝对定位在 `#preview` 右缘（`right:10px; top:10px; bottom:10px; width:236px`，z 8 不变），齿轮 fab `#instance-fab` 同角停靠；`posInstancePanel` 的「贴选中实例框右侧 + 翻转 + 跟随」锚点链删除（函数只留 show/hide 语义，§7 名字保留），面板不再随实例位置移动；SP5 的「无侧栏形态」指旧 `#right-sidebar` 导出面板，本面板是预览区内的 overlay 停靠，不占用布局、SP5 作废的 id 不复活|2026-11-09|用户 2026-11-09 对话指令（两项一批）|
 |IP2|印章参数面板内容超出容器高度时显示滚动条|用户直接指令|已确认（用户 2026-11-09 对话指令）：IP1 的全高停靠（`top/bottom:10px`）+ `overflow-y: auto`（`overscroll-behavior: contain`）—— 内容（含 Z5 cp 组）超出预览高度时滚动条出现，滚轮/拖动不会把滚动冒泡到预览；验收 = `shell-smoke` IP2 短视口（430 px）强制溢出：`scrollHeight > clientHeight`、`scrollTop` 滚到底为正值、`overflow-y == auto`|2026-11-09|用户 2026-11-09 对话指令（两项一批）|
+|N1|初始透明度 = 0.6（用户报告会话里被拖成 1）|用户直接指令|已确认（用户 2026-11-09 对话指令）：代码 default **早已是 0.6**（Go `defaults.go`、`index.html` 控件初值、mock 初值三处一致），因此本轮**零代码/零文案/零键改动**；用户 `%APPDATA%\AutoStamp\settings.json` 的会话 `apply.opacity` 被自动化测试拖拽成 1，由 API/文件复位回 0.6。`api.apply.opacity` 词表行、范围、默认值全部不变|2026-11-09|用户 2026-11-09 对话指令（四项一批）|
+|N2|每条选项说明还留在界面上吗|用户直接指令|已确认（用户 2026-11-09 对话指令）：**说明文字全量转 tooltip** —— 每条**静态** `hintline`（`X.hint`）从界面删除，说明文本改挂所在 `.field`/行容器：`data-i18n-title="X.hint"` + `data-i18n-title-cn="<cn 原文逐字>"`（`applyLang` 的 `[data-i18n-title]` → `title` + `aria-label` 通道已存在，无需改 JS）。**i18n 键名与键数不变**（141 中只有 4 个随 N3 删）。保持可见的动态读数不转 tooltip：`#save-source`、`#confirm-path`（`top.file.hint`）、`#estimate-total`/`#estimate-per-page` 读数行（`export.estimate.hint`）、空态 `.hint`（`empty.hint`）、`#log-console`、`#drop-hint`；`export.estimate.note` 改转 title 挂 `#estimate-total` 容器。CSS `.hintline` 规则保留（仍有可见读数使用）|2026-11-09|用户 2026-11-09 对话指令（四项一批）|
+|N3|骑缝切片的「平均\|随机」切档还保留吗|用户直接指令|已确认（用户 2026-11-09 对话指令）：**整条作废** —— `ui.crosspage.sliceMode` 字段（settings 组 `apply.sliceMode`）、`#crosspage-slicemode` 控件与 Go config 三件套（`types.go` 的 `SliceMode`、`defaults.go` 的 `SliceMode: "even"`、`patch.go` 的指针字段 + `setStr`、`sanitize.go` 的 even\|random 校验）全部删除，**无迁移**：旧 settings.json 的 `sliceMode` 键由 Unmarshal 静默忽略（无 `DisallowUnknownFields`）。cp 组的覆盖率滑杆与 `#crosspage-retry` **恒随骑缝实例显示**（`.cp-rand` 类与 `syncCpGroup` 的 declared 读取删除）；新骑缝实例与 `#instance-reset` 复位都立即随机取值（现状即如此，只是不再有平均分支）。`api/apply.go` 的 `slices` 词表与「无 `slices` = 等宽切」的后端兜底**不动**，UI 不再暴露平均。i18n 删 4 键（`ui.crosspage.sliceMode.ctl`/`.hint`、`sliceMode.even`、`sliceMode.random`）→ **137**；§6 ui-ids 删 `crosspage-slicemode` → **57**；`crosspage.retry.noRandom` 键保留（非骑缝实例按重试仍告警）|2026-11-09|用户 2026-11-09 对话指令（四项一批）|
+|N4|`api.apply.startOffset` 的取值域与语义|用户直接指令|已确认（用户 2026-11-09 对话指令）：**改成百分比 0..100** —— 字段名不变，**0% = 条带下缘贴页面下边、100% = 条带上缘贴页面上边**。几何 `travel = pageH_disp − 条带盒高 h`（= `scale × pageW × aspect` 的整章盒高）、`box.Y = (1 − startOffset/100) × travel`（`travel` 可为负 = 盒比页高，钳位照旧），预览 `app-overlay.rectFor` 与落盘 `pdfcore.StampGeom.Box` 同一公式（`Y: g.StartOffset` → 百分比公式）。滑杆/数框 `min 0 max 100 step 1`，ctl 文案 = 「起始位置（%）」，hint 换 §4 新文本。Go：`sanitize.go` 的 StartOffset 0..200 pt → 0..100（消息「0..100 %」）、`api/apply.go` 校验同步（`defaultApplyStartOffset` 仍 0）。纵拖 = `newPct = basePct − dy/(pageH − rect.h) × 100`（clamp 0..100、`toFixed(2)`，`travel ≈ 0` 时不写）；放置点击 = `pct = clamp(round1((1 − pt.y/(pageH − h)) × 100), 0, 100)`|2026-11-09|用户 2026-11-09 对话指令（四项一批）|
 
 SP5 是 2026-11-06 用户在对话里直接下的指令：**右侧边栏整块删除** —— SP1 之后它只剩
 「导出设置 + 动作段」，SP5 把这最后两段也拆掉：「导出设置」段（含 `#estimate` 体积预估）

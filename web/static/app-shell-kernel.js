@@ -48,7 +48,6 @@
     "api.apply.crossPage": ["apply", "crossPage"],
     "ui.crosspage.binding": ["apply", "binding"],
     "api.apply.startOffset": ["apply", "startOffset"],
-    "ui.crosspage.sliceMode": ["apply", "sliceMode"],
     "ui.crosspage.cover": ["apply", "cover"],
     "api.export.mode": ["export", "mode"],
     "api.export.dpi": ["export", "dpi"],
@@ -330,7 +329,7 @@
       // SP1: the seal-prepare options, the split vocabulary and the batch
       // group lost their controls - the server-side defaults (Go config) are
       // what seal/apply/export/split now run on.
-      ["apply", ["blend", "opacity", "brightness", "saturate", "scale", "pos", "anchor", "offset", "rotation", "pages", "crossPage", "binding", "startOffset", "sliceMode", "cover"]],
+      ["apply", ["blend", "opacity", "brightness", "saturate", "scale", "pos", "anchor", "offset", "rotation", "pages", "crossPage", "binding", "startOffset", "cover"]],
       ["export", ["mode", "dpi", "customDpi", "quality", "pages"]],
     ];
     for (const [group, keys] of pairs) {

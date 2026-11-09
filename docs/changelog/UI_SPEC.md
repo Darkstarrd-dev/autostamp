@@ -2,6 +2,27 @@
 
 > `docs/UI_SPEC.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-09 — §8 新增 N1–N4：UI4 轮（透明度 0.6 / 说明转 tooltip / 骑缝仅随机 / startOffset 百分比）
+
+- 头「最后核对」= N1–N4 摘要；IP1/IP2 降为「同日前一轮」、Z5 降为「更早一轮」，历轮摘要压成一行
+  注记（禁止堆叠）；计数链 i18n … → 141 → **137**、ui-ids … → 58 → **57**。
+- §2：删 `ui.crosspage.sliceMode` 词表行（N3）；`api.apply.startOffset` 行改 `range=0..100（%）` +
+  `unit=%` + `decision=D2,N4`；语义要点两处重写（`startOffset` = 百分比 +
+  `travel = pageH − 条带盒高`、`Y = (1 − startOffset/100) × travel`；Z5 的随机分布段落改为
+  「恒生效」分支，删「`sliceMode=even` 时 slices 为空 = 经典均分」句）。
+- §3：删「骑缝切片（切档）」行；「装订边 + 起始位置」行括注 `startOffset` = 百分比 0..100；
+  覆盖率滑杆行去「仅随机」→「仅骑缝实例显示，N3 起恒随 cp 组」。
+- §4：**141 → 137**（删 `ui.crosspage.sliceMode.ctl`/`.hint`、`sliceMode.even`、
+  `sliceMode.random` 四行）；`api.apply.startOffset.ctl` 的 cn 改「起始位置（%）」、
+  `api.apply.startOffset.hint` 换百分比语义双语双值；计数头补「N3 再删 4 → 137」。
+- §6：ui-ids **58 → 57**（永久删 `crosspage-slicemode`；`crosspage-binding`/`crosspage-retry` 存活）。
+- §7.1：`addCrossInstanceAt(pt)` 的落点改写成「点击高度 → `startOffset` 百分比（clamp 公式）」；
+  Z5 驱动清单删「even mode deletes the list」→「平均 mode 已由 N3 消失，随机取值恒生效」。
+- §8：新增 **N1–N4** 四行决策（来源 = 用户 2026-11-09 对话指令，四项一批）；Z5 行尾挂
+  「N3 起平均模式作废」注记。
+- 本轮契约汇总：i18n **137**、ui-ids **57**、`data-field` −1（`ui.crosspage.sliceMode`）、
+  字段/状态/路由不变；N1（会话值复位）与 N2（界面承载改 tooltip）都**不动词表**。
+
 
 ## 2026-11-09 — §8 新增 IP1/IP2：印章参数面板停靠右缘 + 超高滚动条
 

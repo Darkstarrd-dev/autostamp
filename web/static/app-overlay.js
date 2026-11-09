@@ -196,14 +196,18 @@
     const off = parsePair(p["api.apply.offset"], 0, 0);
 
     if (strip) {
-      // Cross-page (UI_SPEC §2/§8, decision D2 + SP4): the band hugs the
-      // binding edge and only startOffset moves it down the page (the vertical
-      // drag writes it). The plain offset channel is deliberately ignored here
-      // too - the strip has no horizontal position to drag, and the disk side
-      // writes position:r / offset:0 -startOffset.
+      // Cross-page (UI_SPEC §2/§8, decision D2 + SP4 + N4): the band hugs
+      // the binding edge and only startOffset moves it along the page — and
+      // since N4 (2026-11-09) that channel is a PERCENT (0..100): 0% pins the
+      // strip bottom to the page bottom, 100% pins its top to the page top.
+      // travel = pageH − whole-box h (the strip h, fullW×aspect), so
+      // y = (1 − pct/100) × travel (negative travel = box taller than the
+      // page, formula still pins both ends). The disk mirror is
+      // pdfcore StampGeom.Box (same formula); the plain offset channel stays
+      // ignored - the strip's horizontal slot IS the binding edge.
       const start = num(p["api.apply.startOffset"], 0);
       const x = strip.edge === "left" ? 0 : pageW - w;
-      const y = start;
+      const y = (1 - start / 100) * (meta.height - h);
       return { x, y, w, h, cx: x + w / 2, cy: y + h / 2, strip };
     }
 
@@ -608,9 +612,16 @@
     switch (d.mode) {
       case "move":
         if (p["api.apply.crossPage"]) {
-          // SP4: the vertical drag is the startOffset channel (pt.y - the
-          // strip's slot is the binding edge, so dx has nothing to do).
-          shell().setParam("api.apply.startOffset", +(d.baseStart + dy).toFixed(1));
+          // SP4 + N4: the vertical drag is the percent startOffset channel
+          // (pt.y; the strip's slot is the binding edge, so dx has nothing to
+          // do). y = (1 − pct/100) × travel  ⇒  Δpct = −dy/travel × 100,
+          // clamped to the vocabulary range 0..100.
+          const travel = state.meta ? state.meta.height - d.rect.h : d.rect.h;
+          if (Math.abs(travel) > 1e-9) {
+            const next = Math.max(0, Math.min(100,
+              +(d.baseStart - (dy / travel) * 100).toFixed(2)));
+            shell().setParam("api.apply.startOffset", next);
+          }
         } else {
           // The plain instance moves by offset (pt, y down).
           writeOffset(d.baseOffset[0] + dx, d.baseOffset[1] + dy);
@@ -684,8 +695,8 @@
   // the current seal centered on the click instead - on the page being shown
   // (HD11), which is the whole point of the mode. SP4: with the cross-page
   // add mode on, the press places a cross-page *strip* instance - the click's
-  // height becomes the startOffset, and the strip anchors on the binding edge
-  // of every page (the same instance answers on all of them).
+  // height becomes the percent startOffset (N4), and the strip anchors on the
+  // binding edge of every page (the same instance answers on all of them).
   function bindStage() {
     const stage = q("#preview-stage");
     if (!stage) return;

@@ -313,33 +313,15 @@
       }
       S.persist("apply", { binding: v });
     });
-    // Z5 (2026-11-09, 用户指令): 平均|随机 per cross-page instance. The seg is
-    // instance-scoped like the binding edge: random rolls the simulated
-    // binding distribution (first page 25..50%, last 20..30%, cover slider
-    // picks how many middle pages get a strip); even deletes the slice list
-    // and the classic split takes over. persist mirrors the group default.
-    bindSegment("crosspage-slicemode", "ui.crosspage.sliceMode", (v) => {
-      const inst = S.selectedInstance();
-      if (!inst || !inst.crossPage) {
-        S.toast("warn", S.t("crosspage.binding.fixed"));
-        return;
-      }
-      inst.params = inst.params || S.defaultParams();
-      inst.params["ui.crosspage.sliceMode"] = v;
-      S.drawCrossSlices(inst); // even: drops slices; random: rolls a fresh draw
-      S.renderInstances();
-      S.persist("apply", { sliceMode: v });
-    });
-    // The cover slider re-rolls on commit (the generic input wiring already
-    // synced the instance param + queued the persist).
+    // N3 (2026-11-09): the 平均|随机切档 is gone - the random draw (Z5) is
+    // the only mode, so there is no per-instance seg any more. The cover
+    // slider re-rolls on commit (the generic input wiring already synced the
+    // instance param + queued the persist).
     qa('#instance-panel [data-field="ui.crosspage.cover"]').forEach((el) => {
       el.addEventListener("change", () => {
         const inst = S.selectedInstance();
         if (!inst || !inst.crossPage) return;
-        const mode = inst.params && inst.params["ui.crosspage.sliceMode"] !== undefined
-          ? inst.params["ui.crosspage.sliceMode"]
-          : S.readField("ui.crosspage.sliceMode");
-        if (mode === "random") S.drawCrossSlices(inst);
+        S.drawCrossSlices(inst);
       });
     });
     // 重试: re-run the random draw for the selected cross-page instance.

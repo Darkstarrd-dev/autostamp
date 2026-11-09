@@ -15,7 +15,9 @@
     data-i18n=[key]          text/label i18n key (docs/UI_SPEC.md 4)
     data-i18n-cn=[…]         cn value of that key (en is the element's own text)
     data-i18n-cn-[placeholder] cn value of data-i18n-[placeholder]
-    data-i18n-title=[key]      tooltip/aria-label i18n key (icon-only controls)
+    data-i18n-title=[key]      tooltip/aria-label i18n key (icon-only controls +
+                               every static option description, UI4 N2: the hint
+                               text rides the .field / row container it describes)
     data-i18n-title-cn=[…]     cn value of that key (en is the element's title attribute)
     data-contract          container for the *Id display hooks
     data-state             <html data-state> = UI_SPEC §1 state machine state
@@ -333,7 +335,6 @@ html[data-modal="confirm"] #confirm-modal { display: flex; }
 .modal h2 { margin: 0 0 4px; font-size: 16px; }
 .modal .btnrow { display: flex; gap: var(--gap); justify-content: flex-end; }
 .modal .pathbox { font: var(--mono); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 8px; word-break: break-all; }
-.modal .danger-hint { color: var(--error); font-size: 12px; }
 .modal table { border-collapse: collapse; width: 100%; font: var(--mono); }
 .modal td { border-bottom: 1px solid var(--border); padding: 4px 6px; }
 .modal td:first-child { color: var(--muted); width: 40%; }
@@ -467,7 +468,7 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
          column has no room). HD9: #seal-preview is the bottom-left card. -->
     <div id="instance-panel" hidden>
       <div class="ip-title"><span class="flabel ip-tname" data-i18n="instance.panel.title" data-i18n-cn="印章参数">Seal options</span><button type="button" id="instance-collapse" class="btn icon ip-min" data-i18n-title="instance.collapse.btn" data-i18n-title-cn="最小化" title="Minimize" aria-label="minimize"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button></div>
-      <div class="field">
+      <div class="field" data-i18n-title="api.apply.blend.hint" data-i18n-title-cn="16 种 PDF 混合模式（PDF 表 136），分组选择器；落盘写 ExtGState /BM。" title="16 blend modes (PDF Table 136) grouped; backend writes ExtGState /BM." aria-label="16 blend modes (PDF Table 136) grouped; backend writes ExtGState /BM.">
         <div class="flabel"><span data-i18n="api.apply.blend.ctl" data-i18n-cn="混合模式">apply.blend</span></div>
         <select id="apply-blend" data-field="api.apply.blend">
           <optgroup label="normal" data-i18n="blend.group.normal" data-i18n-cn="正常">Normal</optgroup>
@@ -493,48 +494,42 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
           <option value="color">color / 颜色</option>
           <option value="luminosity">luminosity / 明度</option>
         </select>
-        <div class="hintline" data-i18n="api.apply.blend.hint" data-i18n-cn="16 种 PDF 混合模式（PDF 表 136），分组选择器；落盘写 ExtGState /BM。">16 blend modes (PDF Table 136) grouped; backend writes ExtGState /BM.</div>
       </div>
-      <div class="field">
+      <div class="field" data-i18n-title="api.apply.opacity.hint" data-i18n-title-cn="0..1，落盘 ExtGState /ca /CA（pdfcpu opacity 同义）。" title="0..1 writes ExtGState /CA and /ca." aria-label="0..1 writes ExtGState /CA and /ca.">
         <div class="flabel"><span data-i18n="api.apply.opacity.ctl" data-i18n-cn="透明度">apply.opacity 0..1</span></div>
         <div class="num-pair">
           <input data-field="api.apply.opacity" type="range" min="0" max="1" step="0.05" value="0.6" aria-label="opacity">
           <input data-field="api.apply.opacity" type="number" min="0" max="1" step="0.05" value="0.6" aria-label="opacity">
         </div>
-        <div class="hintline" data-i18n="api.apply.opacity.hint" data-i18n-cn="0..1，0.05 档；落盘写 ExtGState /ca 与 /CA。">0..1; 0.05 steps; /ca /CA at export.</div>
       </div>
-      <div class="field">
+      <div class="field" data-i18n-title="api.apply.brightness.hint" data-i18n-title-cn="仅预览（前端 ctx.filter brightness），落盘不写。" title="Preview-only (canvas filter), not written to PDF." aria-label="Preview-only (canvas filter), not written to PDF.">
         <div class="flabel"><span data-i18n="api.apply.brightness.ctl" data-i18n-cn="明度">apply.brightness 0..2</span></div>
         <div class="num-pair">
           <input data-field="api.apply.brightness" type="range" min="0" max="2" step="0.05" value="1" aria-label="brightness">
           <input data-field="api.apply.brightness" type="number" min="0" max="2" step="0.05" value="1" aria-label="brightness">
         </div>
-        <div class="hintline" data-i18n="api.apply.brightness.hint" data-i18n-cn="0..2；仅预览（ctx.filter）；落盘不发送该参数。">0..2; preview only (ctx.filter); not sent to apply.</div>
       </div>
-      <div class="field">
+      <div class="field" data-i18n-title="api.apply.saturate.hint" data-i18n-title-cn="仅预览（前端 ctx.filter saturate），落盘不写。" title="Preview-only (canvas filter), not written to PDF." aria-label="Preview-only (canvas filter), not written to PDF.">
         <div class="flabel"><span data-i18n="api.apply.saturate.ctl" data-i18n-cn="饱和度">apply.saturate 0..3</span></div>
         <div class="num-pair">
           <input data-field="api.apply.saturate" type="range" min="0" max="3" step="0.05" value="1" aria-label="saturate">
           <input data-field="api.apply.saturate" type="number" min="0" max="3" step="0.05" value="1" aria-label="saturate">
         </div>
-        <div class="hintline" data-i18n="api.apply.saturate.hint" data-i18n-cn="0..3；仅预览（ctx.filter）；落盘不发送该参数。">0..3; preview only (ctx.filter); not sent to apply.</div>
       </div>
-      <div class="field">
+      <div class="field" data-i18n-title="api.apply.scale.hint" data-i18n-title-cn="印章宽度为相对页宽分数；滑杆最左 10%、最右 200%，拖动边角可超出范围并回显在滑杆上（A4 = 595.3pt）。新放置/复位的印章按 Z2 自动缩放 = 42 mm 章宽 ÷ 页显示宽（A4 竖版即 0.2008）。" title="Seal width as a fraction of page width; slider 10%..200%, corner-drag can exceed and echoes back on the slider. Fresh stamps use the Z2 auto scale = 42 mm over the page's display width." aria-label="Seal width as a fraction of page width; slider 10%..200%, corner-drag can exceed and echoes back on the slider. Fresh stamps use the Z2 auto scale = 42 mm over the page's display width.">
         <div class="flabel"><span data-i18n="api.apply.scale.ctl" data-i18n-cn="缩放（相对页宽）">apply.scale</span></div>
         <div class="num-pair">
           <input data-field="api.apply.scale" type="range" min="0.1" max="2" step="0.01" value="0.202" aria-label="scale">
           <input data-field="api.apply.scale" type="number" min="0.05" max="5" step="0.01" value="0.202" aria-label="scale">
         </div>
         <span class="opt-label" id="scale-pt">scale 0.202 = 120pt / 42mm</span>
-        <div class="hintline" data-i18n="api.apply.scale.hint" data-i18n-cn="印章宽度为相对页宽分数；滑杆最左 10%、最右 200%，拖动边角可超出范围并回显在滑杆上（A4 = 595.3pt）。">Seal width as a fraction of page width; slider 10%..200%, corner-drag can exceed and echoes back on the slider.</div>
       </div>
-      <div class="field">
+      <div class="field" data-i18n-title="api.apply.rotation.hint" data-i18n-title-cn="-180 到 180；印章绕自身中心旋转。" title="Degrees around the seal centre." aria-label="Degrees around the seal centre.">
         <div class="flabel"><span data-i18n="api.apply.rotation.ctl" data-i18n-cn="旋转（度）">apply.rotation</span></div>
         <div class="num-pair">
           <input data-field="api.apply.rotation" type="range" min="-180" max="180" step="1" value="0" aria-label="rotation">
           <input data-field="api.apply.rotation" type="number" min="-180" max="180" step="1" value="0" aria-label="rotation">
         </div>
-        <div class="hintline" data-i18n="api.apply.rotation.hint" data-i18n-cn="-180 到 180；印章绕自身中心旋转。">Degrees around the seal centre.</div>
       </div>
       <!-- SP4 (2026-11-05): the cross-page group rides the same floating panel
            and answers to the selected instance; it only shows when that instance
@@ -542,46 +537,34 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
            sidebar 骑缝章 section is gone: the values bind the same vocabulary as
            before (ui.crosspage.binding / api.apply.startOffset), they just live
            beside the six instance controls now. -->
-      <div class="field cp-group" hidden>
+      <div class="field cp-group" hidden data-i18n-title="ui.crosspage.binding.hint" data-i18n-title-cn="D2 词表，作用于选中的骑缝实例：right / alternate 逐页跨页，none 把该实例降回普通单页印章。" title="D2 vocabulary, per selected instance: right / alternate make it span, none demotes it to a page stamp." aria-label="D2 vocabulary, per selected instance: right / alternate make it span, none demotes it to a page stamp.">
         <div class="flabel"><span data-i18n="ui.crosspage.binding.ctl" data-i18n-cn="装订边（D2）">Binding edge (D2)</span><span class="tag">ui.crosspage.binding</span></div>
         <div class="seg sm" id="crosspage-binding" data-field="ui.crosspage.binding">
           <button type="button" data-value="right" aria-pressed="true" data-i18n="binding.right" data-i18n-cn="单面：右缘连续">Single-sided: right edge</button>
           <button type="button" data-value="alternate" aria-pressed="false" data-i18n="binding.alternate" data-i18n-cn="双面：奇右偶左">Duplex: odd right / even left</button>
           <button type="button" data-value="none" aria-pressed="false" data-i18n="binding.none" data-i18n-cn="无骑缝章">No cross-page seal</button>
         </div>
-        <div class="hintline" data-i18n="ui.crosspage.binding.hint" data-i18n-cn="D2 三档：右缘连续 / 双面奇偶分别左右（左右两块属于同一条分割）/ 无骑缝章。">D2: right edge, duplex alternate, or no cross-page seal.</div>
       </div>
-      <div class="field cp-group" hidden>
-        <div class="flabel"><span data-i18n="api.apply.startOffset.ctl" data-i18n-cn="起始位置（pt）">apply.startOffset</span><span class="tag">api.apply.startOffset</span></div>
+      <div class="field cp-group" hidden data-i18n-title="api.apply.startOffset.hint" data-i18n-title-cn="百分比沿页滑动：0% = 条带下缘贴页面下边，100% = 条带上缘贴页面上边；选中骑缝章后纵向拖动即改此值。" title="Percent along the page: 0% pins the strip bottom to the page bottom, 100% pins its top to the page top; vertical drag on a selected strip edits this value." aria-label="Percent along the page: 0% pins the strip bottom to the page bottom, 100% pins its top to the page top; vertical drag on a selected strip edits this value.">
+        <div class="flabel"><span data-i18n="api.apply.startOffset.ctl" data-i18n-cn="起始位置（%）">apply.startOffset</span><span class="tag">api.apply.startOffset</span></div>
         <div class="num-pair">
-          <input data-field="api.apply.startOffset" type="range" min="0" max="200" step="5" value="0" aria-label="startOffset">
-          <input data-field="api.apply.startOffset" type="number" min="0" max="200" step="5" value="0" aria-label="startOffset">
+          <input data-field="api.apply.startOffset" type="range" min="0" max="100" step="1" value="0" aria-label="startOffset">
+          <input data-field="api.apply.startOffset" type="number" min="0" max="100" step="1" value="0" aria-label="startOffset">
         </div>
-        <div class="hintline" data-i18n="api.apply.startOffset.hint" data-i18n-cn="沿装订边的起始偏移（pdfcpu offset:0 -N）；0 为页首。选中骑缝章后纵向拖动条带即改这个值。">Start offset along the binding edge (pdfcpu offset:0 -N); 0 sits at the page top. Dragging a selected strip vertically edits this value.</div>
       </div>
-      <!-- Z5 (2026-11-09): 平均|随机 mirror of the app shell index.html — the seg,
-           the cover slider (随机 only) and the retry button live in the cp group. -->
-      <div class="field cp-group" hidden>
-        <div class="flabel"><span data-i18n="ui.crosspage.sliceMode.ctl" data-i18n-cn="骑缝切片">Cross-page slices</span><span class="tag">ui.crosspage.sliceMode</span></div>
-        <div class="seg sm" id="crosspage-slicemode" data-field="ui.crosspage.sliceMode">
-          <button type="button" data-value="even" aria-pressed="true" data-i18n="sliceMode.even" data-i18n-cn="平均">Even</button>
-          <button type="button" data-value="random" aria-pressed="false" data-i18n="sliceMode.random" data-i18n-cn="随机">Random</button>
-        </div>
-        <div class="hintline" data-i18n="ui.crosspage.sliceMode.hint" data-i18n-cn="平均=均分到每页；随机模拟真实装订盖章：首页 25~50%、末页 20~30%，其余页按覆盖率取条带并沿页序平滑漂移（重试按钮重新取值）。">Even = classic equal split; Random simulates a real binding run: first page 25..50%, last page 20..30%, middle pages follow the cover share and a smooth drift; the retry button re-rolls.</div>
-      </div>
-      <div class="field cp-group cp-rand" hidden>
+      <!-- Z5 + N3 (2026-11-09): 随机恒生效 - the 平均|随机 seg is gone (UI4 N3), so
+           the cover slider and the retry button ride the cp group itself. -->
+      <div class="field cp-group" hidden data-i18n-title="ui.crosspage.cover.hint" data-i18n-title-cn="首页末页外的页面有多少比例拿到骑缝章（四舍五入）；如 10 页中间页配 60% = 6 页有章、4 页盖不到。" title="Share of middle pages that get a strip (rounded); e.g. 10 middle pages at 60% = 6 stamped, 4 missed." aria-label="Share of middle pages that get a strip (rounded); e.g. 10 middle pages at 60% = 6 stamped, 4 missed.">
         <div class="flabel"><span data-i18n="ui.crosspage.cover.ctl" data-i18n-cn="覆盖率（%）">Cover</span><span class="tag">ui.crosspage.cover</span></div>
         <div class="num-pair">
           <input data-field="ui.crosspage.cover" type="range" min="0" max="100" step="5" value="75" aria-label="cover">
           <input data-field="ui.crosspage.cover" type="number" min="0" max="100" step="5" value="75" aria-label="cover">
         </div>
-        <div class="hintline" data-i18n="ui.crosspage.cover.hint" data-i18n-cn="首页末页外的页面有多少比例拿到骑缝章（四舍五入）；如 10 页中间页配 60% = 6 页有章、4 页盖不到。">Share of middle pages that get a strip (rounded); e.g. 10 middle pages at 60% = 6 stamped, 4 missed.</div>
       </div>
-      <div class="field cp-group cp-rand" hidden>
+      <div class="field cp-group" hidden data-i18n-title="crosspage.retry.hint" data-i18n-title-cn="重新进行一次随机取值（替换当前骑缝实例的切片分布）。" title="Re-rolls the random draw for the selected cross-page instance." aria-label="Re-rolls the random draw for the selected cross-page instance.">
         <div class="row">
           <button type="button" id="crosspage-retry" class="btn" data-i18n="crosspage.retry.btn" data-i18n-cn="重新随机">Re-roll</button>
         </div>
-        <div class="hintline" data-i18n="crosspage.retry.hint" data-i18n-cn="重新进行一次随机取值（新的分布替换当前实例的切片）。">Re-rolls the random draw for the selected cross-page instance.</div>
       </div>
       <div class="row ip-actions">
         <button type="button" id="instance-reset" class="btn" data-i18n="instance.reset.btn" data-i18n-cn="复位">Reset</button>
@@ -591,12 +574,11 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
 
     <button type="button" id="instance-fab" data-i18n-title="instance.panel.title" data-i18n-title-cn="印章参数" title="Seal options" aria-label="seal options"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01A1.65 1.65 0 0 0 9 3.09V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 
-    <div id="seal-preview" hidden>
+    <div id="seal-preview" hidden data-i18n-title="api.seal.prepare.despill.hint" data-i18n-title-cn="对白底扫描件即时去背；预览可撤销，预设保存时保留 alpha。" title="White-background keying applied live; reversible before save." aria-label="White-background keying applied live; reversible before save.">
       <div class="sp-head"><span data-i18n="seal.preview.title" data-i18n-cn="印章预览">Seal preview</span><span id="seal-preview-name"></span></div>
       <canvas id="seal-preview-canvas" width="150" height="150" aria-label="seal preview"></canvas>
       <!-- The card paints the live seal/prepare result, so it carries the two
            prepare-channel strings the upload accepts (D4, UI_SPEC §4). -->
-      <div class="hintline" data-i18n="api.seal.prepare.despill.hint" data-i18n-cn="对白底扫描件即时去背；预览可撤销，预设保存时保留 alpha。">White-background keying applied live; reversible before save.</div>
       <div class="hintline" data-i18n="seal.err.type" data-i18n-cn="印章图片必须是带透明通道的 PNG 或 JPEG">Stamp image must be PNG or JPEG with an alpha channel</div>
     </div>
 
@@ -619,15 +601,14 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
          modal). -->
     <div class="section" id="panel-export">
       <div class="sec-title"><span data-i18n="panel.export.title" data-i18n-cn="导出设置">Export settings</span></div>
-      <div class="field">
+      <div class="field" data-i18n-title="api.export.mode.hint" data-i18n-title-cn="vector 保留文字/矢量（默认可搜索）；raster 整页位图，抗篡改、便于扫描件。" title="vector keeps text/vectors (searchable); raster flattens each page to a bitmap." aria-label="vector keeps text/vectors (searchable); raster flattens each page to a bitmap.">
         <div class="flabel"><span data-i18n="api.export.mode.ctl" data-i18n-cn="导出方式（D1）">export.mode</span><span class="tag">export.mode</span></div>
         <div class="seg" id="export-mode" data-field="api.export.mode">
           <button type="button" data-value="vector" aria-pressed="true">vector</button>
           <button type="button" data-value="raster">raster</button>
         </div>
-        <div class="hintline" data-i18n="api.export.mode.hint" data-i18n-cn="vector 保留文字/矢量（默认可搜索）；raster 整页位图，抗篡改、便于扫描件。">vector keeps text/vectors (searchable); raster flattens each page to a bitmap.</div>
       </div>
-      <div class="field">
+      <div class="field" data-i18n-title="api.export.dpi.hint" data-i18n-title-cn="raster 模式生效；custom 时取 customDpi。" title="Effective in raster mode; custom uses customDpi." aria-label="Effective in raster mode; custom uses customDpi.">
         <div class="flabel"><span data-i18n="api.export.dpi.ctl" data-i18n-cn="分辨率 DPI">export.dpi</span><span class="tag">export.dpi</span></div>
         <div class="seg sm" id="export-dpi" data-field="api.export.dpi">
           <button type="button" data-value="72">72</button>
@@ -635,33 +616,28 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
           <button type="button" data-value="300">300</button>
           <button type="button" data-value="custom" data-i18n="export.dpi.custom" data-i18n-cn="自定义">Custom</button>
         </div>
-        <div class="hintline" data-i18n="api.export.dpi.hint" data-i18n-cn="raster 模式生效；custom 时取 customDpi。">Effective in raster mode; custom uses customDpi.</div>
       </div>
-      <div class="field">
+      <div class="field" data-i18n-title="api.export.customDpi.hint" data-i18n-title-cn="96..600，仅 raster 且 dpi=custom 时读取。" title="96..600, raster + custom only." aria-label="96..600, raster + custom only.">
         <div class="flabel"><span data-i18n="api.export.customDpi.ctl" data-i18n-cn="自定义 DPI">export.customDpi</span><span class="tag">export.customDpi</span></div>
         <div class="num-pair"><input data-field="api.export.customDpi" data-i18n-placeholder="export.customDpi.placeholder" data-i18n-cn-placeholder="96..600" type="number" min="96" max="600" step="1" value="150" aria-label="customDpi"></div>
-        <div class="hintline" data-i18n="api.export.customDpi.hint" data-i18n-cn="96..600，仅 raster 且 dpi=custom 时读取。">96..600, raster + custom only.</div>
       </div>
-      <div class="field">
+      <div class="field" data-i18n-title="api.export.quality.hint" data-i18n-title-cn="40..95；仅 raster。落盘用 stdlib DCTDecode（FACTS §4）。" title="40..95, raster only." aria-label="40..95, raster only.">
         <div class="flabel"><span data-i18n="api.export.quality.ctl" data-i18n-cn="JPEG 质量">export.quality 40..95</span><span class="tag">export.quality 40..95</span></div>
         <div class="num-pair">
           <input data-field="api.export.quality" type="range" min="40" max="95" step="5" value="75" aria-label="quality">
           <input data-field="api.export.quality" type="number" min="40" max="95" step="5" value="75" aria-label="quality">
         </div>
-        <div class="hintline" data-i18n="api.export.quality.hint" data-i18n-cn="40..95；仅 raster。落盘用 stdlib DCTDecode（FACTS §4）。">40..95, raster only.</div>
       </div>
-      <div class="field">
+      <div class="field" data-i18n-title="api.export.pages.hint" data-i18n-title-cn="与 apply.pages 同一词表。" title="Same vocabulary as apply.pages." aria-label="Same vocabulary as apply.pages.">
         <div class="flabel"><span data-i18n="api.export.pages.ctl" data-i18n-cn="导出页">export.pages</span><span class="tag">export.pages</span></div>
         <div class="row">
           <input data-field="api.export.pages" type="text" size="16" value="all" aria-label="export pages">
           <button type="button" class="btn" data-value="all" data-i18n="pages.all.btn" data-i18n-cn="全部">All</button>
         </div>
-        <div class="hintline" data-i18n="api.export.pages.hint" data-i18n-cn="与 apply.pages 同一词表。">Same vocabulary as apply.pages.</div>
       </div>
-      <div id="estimate" data-warn="false">
+      <div id="estimate" data-warn="false" data-i18n-title="export.estimate.note" data-i18n-title-cn="预估值由 FACTS §4 实测表按页面积与页数缩放；raster 才受 DPI/质量影响。" title="Estimate scales the FACTS 4 measured table by page area and count." aria-label="Estimate scales the FACTS 4 measured table by page area and count.">
         <div class="row"><span data-i18n="export.estimate.label" data-i18n-cn="体积预估">Estimate</span><span class="big" id="estimate-total">356 KB</span></div>
         <div class="hintline" id="estimate-per-page" data-i18n="export.estimate.hint" data-i18n-cn="每页约 124 KB（150dpi q75，A4 单页）。">about 124 KB/page (150dpi q75, A4).</div>
-        <div class="note" data-i18n="export.estimate.note" data-i18n-cn="预估值由 FACTS §4 实测表按页面积与页数缩放；raster 才受 DPI/质量影响。">Estimate scales the FACTS 4 measured table by page area and count.</div>
         <div class="note" data-i18n="warn.export.tooBig" data-i18n-cn="单页位图超过 90 MB 上限：请把 DPI 降到 300 或少选几页。">page bitmap exceeds the 90 MB cap: lower DPI to 300 or fewer pages</div>
       </div>
     </div>
@@ -669,15 +645,13 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
       <button type="button" id="save-pick" class="btn" data-i18n="save.pick.btn" data-i18n-cn="系统文件选择器">System file picker</button>
       <span class="chip" data-field="api.fs.pick.pathGrantId" data-field-role="display" data-i18n="api.fs.pick.pathGrantId.ctl" data-i18n-cn="授权句柄">pathGrantId: -</span>
     </div>
-    <div class="field">
+    <div class="field" data-i18n-title="api.save.targetPath.hint" data-i18n-title-cn="留空则用同名 + .stamp.pdf；写盘走 temp+rename（原子写）。" title="Blank means same name + .stamp.pdf; atomic temp+rename." aria-label="Blank means same name + .stamp.pdf; atomic temp+rename.">
       <div class="flabel"><span data-i18n="api.save.targetPath.ctl" data-i18n-cn="目标路径">save.targetPath</span><span class="tag">save.targetPath</span></div>
       <input data-field="api.save.targetPath" type="text" value="C:\docs\contract.stamp.pdf">
-      <div class="hintline" data-i18n="api.save.targetPath.hint" data-i18n-cn="留空则用同名 + .stamp.pdf；写盘走 temp+rename（原子写）。">Blank means same name + .stamp.pdf; atomic temp+rename.</div>
     </div>
-    <div class="field">
+    <div class="field" data-i18n-title="save.replace.hint" data-i18n-title-cn="替换原文件需要再确认一次，且会丢弃原 PDF 的可选内容层。" title="Replacing the original needs a second confirmation." aria-label="Replacing the original needs a second confirmation.">
       <div class="flabel"><span data-i18n="api.save.replaceOriginal.ctl" data-i18n-cn="替换原文件">save.replaceOriginal</span><span class="tag">save.replaceOriginal</span></div>
       <label class="switch"><input data-field="api.save.replaceOriginal" type="checkbox"><span data-i18n="save.replace.on" data-i18n-cn="开">on</span></label>
-      <div class="danger-hint" data-i18n="save.replace.hint" data-i18n-cn="替换原文件需要再确认一次，且会丢弃原 PDF 的可选内容层。">Replacing the original needs a second confirmation.</div>
     </div>
     <div class="btnrow">
       <button type="button" class="btn" id="save-cancel" data-i18n="modal.cancel" data-i18n-cn="取消">Cancel</button>
@@ -685,10 +659,9 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
     </div>
   </div>
 
-  <div class="modal" id="confirm-modal" role="dialog">
+  <div class="modal" id="confirm-modal" role="dialog" data-i18n-title="confirm.hint" data-i18n-title-cn="将覆盖原文件（原子写：先写临时文件再改名）。此操作不可撤销。" title="The original will be overwritten (atomic temp+rename). This cannot be undone." aria-label="The original will be overwritten (atomic temp+rename). This cannot be undone.">
     <h2 data-i18n="confirm.title" data-i18n-cn="替换原文件？">Replace original file?</h2>
     <div class="pathbox">C:\docs\contract.pdf</div>
-    <div class="danger-hint" data-i18n="confirm.hint" data-i18n-cn="将覆盖原文件（原子写：先写临时文件再改名）。此操作不可撤销。">The original will be overwritten (atomic temp+rename). This cannot be undone.</div>
     <div class="btnrow">
       <button type="button" class="btn" id="confirm-cancel" data-i18n="confirm.cancel" data-i18n-cn="改存新文件">Save as new file</button>
       <button type="button" class="btn danger" id="confirm-ok" data-i18n="confirm.ok" data-i18n-cn="确认替换">Replace</button>
@@ -698,10 +671,9 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
   <div class="modal" id="password-modal" role="dialog">
     <h2 data-i18n="pw.title" data-i18n-cn="需要口令">Password required</h2>
     <div class="pathbox">C:\docs\secret.pdf</div>
-    <div class="field">
+    <div class="field" data-i18n-title="api.open.pw.hint" data-i18n-title-cn="UserPW/OwnerPW 都试；AES-256 读取链路目前 UNVERIFIED（FACTS §6）。" title="UserPW and OwnerPW are both tried; AES-256 read is UNVERIFIED (FACTS 6)." aria-label="UserPW and OwnerPW are both tried; AES-256 read is UNVERIFIED (FACTS 6).">
       <div class="flabel"><span data-i18n="api.open.pw.ctl" data-i18n-cn="PDF 口令">open.pw</span><span class="tag">open.pw</span></div>
       <input data-field="api.open.pw" type="password" value="" aria-label="pw">
-      <div class="hintline" data-i18n="api.open.pw.hint" data-i18n-cn="UserPW/OwnerPW 都试；AES-256 读取链路目前 UNVERIFIED（FACTS §6）。">UserPW and OwnerPW are both tried; AES-256 read is UNVERIFIED (FACTS 6).</div>
     </div>
     <div class="btnrow">
       <button type="button" class="btn" id="pw-cancel" data-i18n="modal.cancel" data-i18n-cn="取消">Cancel</button>
@@ -785,16 +757,17 @@ window.__autoStampMock = (function () {
   function touch() { syncGeo(); draw(); layout(); readouts(); }
   function pset(name, value) { S.p[name] = value; setField(name, value); touch(); }
   // The geometry of the selected instance: the plain instance moves through
-  // scale/pos/rotation, the cross-page strip through scale/rotation plus its
-  // own startOffset channel (SP4: the vertical drag writes startOffset, exactly
-  // like app-overlay.js's moveDrag).
+  // scale/pos/rotation, the cross-page strip through scale/rotation plus its own
+  // startOffset channel - UI4 N4: that channel is a 0..100 percentage (0% = the
+  // strip bottom sits on the page bottom, 100% = its top sits on the page top),
+  // and the vertical drag re-derives it exactly like app-overlay.js's moveDrag.
   function syncGeo() {
     var i = S.instances[S.selId], g = S.geo[S.selId];
     if (!i || !g) return;
     g.w = S.p["apply.scale"] * A4.w;
     g.rot = num(S.p["apply.rotation"], 0);
     if (i.mode === "crosspage") {
-      g.so = clamp(num(S.p["apply.startOffset"], 0), 0, 200);
+      g.so = clamp(num(S.p["apply.startOffset"], 0), 0, 100);
       return;
     }
     var pp = String(S.p["apply.pos"]).split(",");
@@ -923,7 +896,8 @@ window.__autoStampMock = (function () {
   function bindingSide() { return sideFor(S.current - 1); }
   // stripGeom mirrors overlay's rectFor({strip}): the seal is sliced across the
   // whole page set (count = pages), the band hugs the binding edge, and
-  // startOffset is the only axis the drag writes.
+  // startOffset is the only axis the drag writes - UI4 N4 it is a 0..100 percent
+  // with travel = pageH - h and y = (1 - startOffset/100) * travel.
   function stripGeom(i, g) {
     var vb = viewBox();
     var count = Math.max(1, S.pages.length);
@@ -932,7 +906,9 @@ window.__autoStampMock = (function () {
     var h = full;                     // the fixture seal is square (aspect 1)
     var edge = sideFor(i);
     var x = edge === "left" ? 0 : vb.w - w;
-    var y = clamp(g ? g.so : num(S.p["apply.startOffset"], 0), 0, Math.max(0, vb.h - h));
+    var travel = vb.h - h;            // UI4 N4: pageH - whole-strip box height
+    var pct = g ? g.so : num(S.p["apply.startOffset"], 0);
+    var y = clamp((1 - pct / 100) * travel, Math.min(0, travel), Math.max(0, travel));
     var iw = img.seal ? img.seal.width : 1;
     return { x: x, y: y, sw: w, sh: h, edge: edge, index: i, count: count,
       sx: Math.round(iw * i / count), sy: 0, isw: Math.round(iw / count),
@@ -1255,10 +1231,8 @@ window.__autoStampMock = (function () {
     var inst = S.selId >= 0 ? S.instances[S.selId] : null;
     var on = Boolean(inst && inst.mode === "crosspage");
     qa("#instance-panel .cp-group").forEach(function (g) { g.hidden = !on; });
-    // Z5: the cover slider + retry ride only the random draw.
-    var segBtn = document.querySelector("#crosspage-slicemode button[aria-pressed='true']");
-    var rand = on && segBtn && segBtn.dataset.value === "random";
-    qa("#instance-panel .cp-rand").forEach(function (g) { g.hidden = !rand; });
+    // N3: 随机恒生效 - the cover slider and the retry button ride the cp group
+    // itself (the 平均|随机 seg, and with it .cp-rand, is gone).
     return on;
   }
   // The instance's cross-page state is the entry point (the placement mode puts
@@ -1366,7 +1340,7 @@ window.__autoStampMock = (function () {
     S.geo.push({
       x: 130, y: 300, rot: 0,
       w: num(p["api.apply.scale"], S.p["apply.scale"]) * A4.w,
-      so: clamp(num(p["api.apply.startOffset"], S.p["apply.startOffset"]), 0, 200)
+      so: clamp(num(p["api.apply.startOffset"], S.p["apply.startOffset"]), 0, 100)
     });
     S.selId = S.instances.length - 1;
     S.nextId++;
@@ -1377,12 +1351,16 @@ window.__autoStampMock = (function () {
     syncCpGroup(); syncGeo(); buildStage(); draw(); readouts();
     return S.selId;
   }
-  // SP4: the cross-page add mode's placement (addCrossInstanceAt) - the click's
-  // height becomes the startOffset, the binding edge anchors the strip.
+  // SP4 + UI4 N4: the cross-page add mode's placement (addCrossInstanceAt) - the
+  // click height converts into the strip's startOffset percentage,
+  // pct = clamp(round1((1 - pt.y / travel) * 100), 0, 100), travel = pageH - h.
   function addCrossInstanceAt(pt) {
+    var full = num(S.p["apply.scale"], 0.202) * A4.w;   // 条带盒高（aspect 1）
+    var travel = viewBox().h - full;
+    var pct = travel > 0 ? (1 - (pt ? pt.y : 0) / travel) * 100 : 0;
     return addInstance(null, {
       "api.apply.crossPage": true,
-      "api.apply.startOffset": pt ? pt.y : 0
+      "api.apply.startOffset": clamp(Math.round(pct * 10) / 10, 0, 100)
     });
   }
   function duplicateInstance() {
@@ -1495,23 +1473,6 @@ window.__autoStampMock = (function () {
         if (v === "none") demoteSelected();
         else armCrossInstance();
         syncCpGroup(); buildStage(); draw(); readouts();
-      });
-    });
-    // Z5 mirror: the sliceMode seg gates the cover/retry sub-fields (设计产物
-    // only; the mock does not draw the random distribution itself).
-    qa("#crosspage-slicemode button").forEach(function (b) {
-      b.addEventListener("click", function () {
-        if (S.selId < 0 || !S.instances[S.selId]) {
-          toast("crosspage.binding.fixed",
-            "no instance selected: the slice mode stays " + S.p["ui.crosspage.sliceMode"], "warn");
-          return;
-        }
-        var v = b.dataset.value;
-        S.p["ui.crosspage.sliceMode"] = v;
-        qa("#crosspage-slicemode button").forEach(function (x) {
-          x.setAttribute("aria-pressed", String(x === b));
-        });
-        syncCpGroup(); readouts();
       });
     });
     // The export page-word buttons share the apply/export page vocabulary (§2).
@@ -1644,6 +1605,7 @@ window.__autoStampMock = (function () {
         mode: h ? h.dataset.handle : "move",
         g: g, frame: frame, cv: cv, rect: rect,
         x0: e.clientX, y0: e.clientY, gx: g.x, gy: g.y, gw: g.w,
+        baseStart: num(g.so, 0),
         cross: S.instances[idx] && S.instances[idx].mode === "crosspage",
         side: bindingSide()
       };
@@ -1657,10 +1619,13 @@ window.__autoStampMock = (function () {
       var vb = viewBox();
       if (drag.mode === "move") {
         if (drag.cross) {
-          // SP4: the strip box stays anchored on the binding edge; the vertical
-          // drag writes the instance's startOffset channel (§2 apply.startOffset,
-          // max 200pt) and the box repaints through the channel.
-          drag.g.so = clamp(Math.round(drag.gy + dy), 0, 200);
+          // SP4 + UI4 N4: the strip box stays anchored on the binding edge; the
+          // vertical drag rewrites the startOffset percentage -
+          // newPct = basePct - dy / (pageH - strip height) * 100, clamp 0..100,
+          // two decimals; travel ~ 0 keeps the base (app-overlay.js's moveDrag).
+          var travel = vb.h - drag.g.w;
+          if (Math.abs(travel) > 1)
+            drag.g.so = +(clamp(drag.baseStart - dy / travel * 100, 0, 100)).toFixed(2);
           pset("apply.startOffset", drag.g.so);
         } else {
           drag.g.x = clamp(drag.gx + dx, 0, vb.w - drag.g.w);
@@ -1911,14 +1876,15 @@ window.__autoStampMock = (function () {
     if (name === "addMode") return { on: q("#btn-seal-add").getAttribute("aria-pressed") === "true",
       mode: S.addMode, cursor: q("#preview-stage").dataset.add === "on" };
     // SP4 mirror of probe('crosspageAdd') in app-shell-verify.js: the second
-    // placement mode, the cp-group it gates, and the strip's startOffset.
+    // placement mode, the cp-group it gates, and the strip's startOffset field
+    // (UI4 N4: the 0..100 percentage, exactly what the slider reads).
     if (name === "crosspageAdd") {
       var gcp = S.geo[S.selId];
       return { on: q("#btn-crosspage-add").getAttribute("aria-pressed") === "true",
         mode: S.addMode,
         cpFields: qa("#instance-panel .cp-group").some(function (n) { return !n.hidden; }),
         binding: S.p["ui.crosspage.binding"],
-        startOffset: gcp ? Math.round(num(gcp.so, 0)) : null };
+        startOffset: gcp ? num(S.p["apply.startOffset"], 0) : null };
     }
     if (name === "cpGroup") {
       var fields = qa("#instance-panel .cp-group");

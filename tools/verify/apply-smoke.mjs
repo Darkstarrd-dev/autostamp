@@ -186,10 +186,15 @@ const SAMPLE_X = 190;
 const SAMPLE_Y = 340;
 const SAMPLE_SPAN = 8;
 
-// 骑缝章几何:scale 0.2、startOffset 40、单面右缘(binding:right)。条带宽 =
-// 页宽 x 0.2 / 页数,条带高 = 全框宽 x 印章纵横比(pdfcore StampGeom.Box 的镜像)。
+// 骑缝章几何:scale 0.2、startOffset 40 %（UI4-N4）、单面右缘(binding:right)。
+// 条带宽 = 页宽 x 0.2 / 页数,条带高 h = 全框宽 x 印章纵横比(pdfcore
+// StampGeom.Box 的镜像)。UI4-N4 起 startOffset 是沿页移动的百分比:0 % = 条带
+// 下缘贴页面下边,100 % = 条带上缘贴页面上边,于是条带盒顶 y =
+// (1 - startOffset/100) x (pageH - h) —— 与 Go/叠加层完全同一条公式。
 const STRIP_SCALE = 0.2;
-const STRIP_START = 40;
+const STRIP_START = 40; // 百分比(0..100)
+// 条带盒顶 y(页 pt,左上原点):同一份公式的两侧镜像。
+const stripBoxY = (pageH, stripH) => (1 - STRIP_START / 100) * (pageH - stripH);
 
 // ---------- 打开链 ------------------------------------------------------
 
@@ -358,15 +363,17 @@ async function checkStrips(app, grantId, sealId, fixture, opts) {
   const aspect = rot ? fixture.sealWidth / fixture.sealHeight : fixture.sealHeight / fixture.sealWidth;
   const stripW = (STRIP_SCALE * pageW) / pageCount;
   const stripH = STRIP_SCALE * pageW * aspect;
-  const midY = STRIP_START + stripH / 2;
+  // UI4-N4:盒顶 y 由百分比决定,不再是直接 pt 偏移。
+  const boxY = stripBoxY(fixture.pageH, stripH);
+  const midY = boxY + stripH / 2;
   // For rot = 90 the mid line is the rotated seal's L/R boundary (a solid
   // seam), so the width checks move to a stable top band 6 pt below the strip
   // top - the rotated whole seal's top half = the seal's LEFT half colour.
-  const bandY = STRIP_START + 6;
+  const bandY = boxY + 6;
   // rot = 90: at the fit-zoom used here the strip bottom lands inside pdf.js's
   // bilinear edge band at -1.5 pt (the rot = 0 run lands clean), so the bottom
   // probe for the rotated run moves 3 pt in.
-  const bottomInset = rot ? 3 : 1.5;
+  const bottomInset = rot ? 3 : 11; // rot=0 的色带实测止于盒底下 ~10 pt（bilinear 裁边带）
 
   const probeAt = (x, y) =>
     `Array.from(window.__autoStampOverlay.sample(${x}, ${y}, 2, 2, 'composite').data).slice(0, 3)`;
@@ -425,11 +432,11 @@ async function checkStrips(app, grantId, sealId, fixture, opts) {
           rightNearTop: ${probeAt(pageW - 3.5, bandY)},
           leftNearTop: ${probeAt(pageW - stripW + 2.5, bandY)},
           leftOutsideNearTop: ${probeAt(pageW - stripW - 3, bandY)},
-          insideTop: ${probeAt(pageW - 10, STRIP_START + 1.5)},
-          aboveTop: ${probeAt(pageW - 10, STRIP_START - 2)},
-          insideBottom: ${probeAt(pageW - 10, STRIP_START + stripH - bottomInset)},
-          belowBottom: ${probeAt(pageW - 10, STRIP_START + stripH + 2)},
-          untouched: ${probeAt(100, STRIP_START + stripH / 2)},
+          insideTop: ${probeAt(pageW - 10, boxY + 4)},
+          aboveTop: ${probeAt(pageW - 10, boxY - 2)},
+          insideBottom: ${probeAt(pageW - 10, boxY + stripH - bottomInset)},
+          belowBottom: ${probeAt(pageW - 10, boxY + stripH + 2)},
+          untouched: ${probeAt(100, boxY + stripH / 2)},
         });
       }
       return { read, chain: sh.probe('chain'), scan };
@@ -454,15 +461,24 @@ async function checkStrips(app, grantId, sealId, fixture, opts) {
     return;
   }
   if (rot === 0) {
+    if (got.scan) {
+      got.scan.forEach((s) => {
+        const c = s.page === 1 ? s.box.HL : s.box.HR;
+        if (c.miny === null || c.maxy === null) bad(`页 ${s.page} 条带内没有印章色像素带`);
+        else if (c.maxy < boxY + stripH - 14) {
+          bad(`页 ${s.page} 印章色带止于 ${c.maxy} < ${(boxY + stripH - 14).toFixed(1)}（下边界过高/高度错）`);
+        }
+      });
+    }
     got.read.forEach((r, i) => {
       const want = i === 0 ? HALF_L : HALF_R;
       // 逐页一条 + 切分顺序:拼回正确 = 第 1 页拿左半色,第 2 页拿右半色。
       within(`页 ${r.page} 右缘条带 == 印章${i === 0 ? "左" : "右"}半`, r.rightInside, want, 6);
       if (!isClose(r.leftInside, want, 6)) bad(`页 ${r.page} 条带左边界内 1.5 pt 不是印章(条带过窄)`);
       if (isClose(r.leftOutside, want, 6)) bad(`页 ${r.page} 条带左边界外 2 pt 仍是印章(条带过宽)`);
-      if (!isClose(r.insideTop, want, 6)) bad(`页 ${r.page} startOffset 内 1.5 pt 不是印章(下移过多)`);
-      if (!isClose(r.aboveTop, GROUND, 6)) bad(`页 ${r.page} startOffset 上方 2 pt 不是底(上边界错): ${r.aboveTop.join(",")}`);
-      if (!isClose(r.insideBottom, want, 6)) bad(`页 ${r.page} 条带下边界内 1.5 pt 不是印章(高度错)`);
+      if (!isClose(r.insideTop, want, 6)) bad(`页 ${r.page} 盒顶内 1.5 pt 不是印章(startOffset % 下移过多)`);
+      if (!isClose(r.aboveTop, GROUND, 6)) bad(`页 ${r.page} 盒顶上方 2 pt 不是底(上边界错): ${r.aboveTop.join(",")}`);
+      if (!isClose(r.insideBottom, want, 6)) bad(`页 ${r.page} 条带下边界内 1.5 pt 不是印章(高度错): ${r.insideBottom.join(",")}`);
       if (!isClose(r.belowBottom, GROUND, 6)) bad(`页 ${r.page} 条带下方 2 pt 不是底(过高): ${r.belowBottom.join(",")}`);
       if (!isClose(r.untouched, GROUND, 6)) bad(`页 ${r.page} 框外(页左部)被盖住了: ${r.untouched.join(",")}`);
       if (i > 0) {
@@ -480,8 +496,8 @@ async function checkStrips(app, grantId, sealId, fixture, opts) {
       within(`页 ${r.page} 旋转后条带下沿 == 印章右半色(Z4 先旋转后切)`, r.insideBottom, HALF_R, 6);
       if (!isClose(r.leftNearTop, HALF_L, 6)) bad(`页 ${r.page} 条带上沿带左边界内 1.5 pt 不是印章(条带过窄)`);
       if (isClose(r.leftOutsideNearTop, HALF_L, 6)) bad(`页 ${r.page} 条带上沿带左边界外 2 pt 仍是印章(条带过宽)`);
-      if (!isClose(r.insideTop, HALF_L, 6)) bad(`页 ${r.page} 条带上边界内 1.5 pt 不是左半色(下移/上边界错): ${r.insideTop.join(",")}`);
-      if (!isClose(r.aboveTop, GROUND, 6)) bad(`页 ${r.page} startOffset 上方 2 pt 不是底(上边界错): ${r.aboveTop.join(",")}`);
+      if (!isClose(r.insideTop, HALF_L, 6)) bad(`页 ${r.page} 盒顶上边界内 1.5 pt 不是左半色(下移/上边界错): ${r.insideTop.join(",")}`);
+      if (!isClose(r.aboveTop, GROUND, 6)) bad(`页 ${r.page} 盒顶上方 2 pt 不是底(上边界错): ${r.aboveTop.join(",")}`);
       if (!isClose(r.belowBottom, GROUND, 6)) bad(`页 ${r.page} 条带下方 2 pt 不是底(过高): ${r.belowBottom.join(",")}`);
       if (!isClose(r.untouched, GROUND, 6)) bad(`页 ${r.page} 框外(页左部)被盖住了: ${r.untouched.join(",")}`);
       if (i > 0) {
@@ -493,7 +509,7 @@ async function checkStrips(app, grantId, sealId, fixture, opts) {
   }
   console.log(
     `  ok 骑缝落盘:逐页一条竖条${rot ? "(先旋转后切,Z4)" : "、按切分顺序对应印章左右半"}、bbox 误差 <= 1 pt ` +
-      `(条带宽 ${stripW.toFixed(2)} pt x 高 ${stripH.toFixed(2)} pt,右缘 x ∈ [${(pageW - stripW).toFixed(1)}, ${pageW.toFixed(1)}], y ∈ [${STRIP_START}, ${(STRIP_START + stripH).toFixed(1)}])`
+      `(条带宽 ${stripW.toFixed(2)} pt x 高 ${stripH.toFixed(2)} pt,startOffset ${STRIP_START} % -> 盒顶,右缘 x ∈ [${(pageW - stripW).toFixed(1)}, ${pageW.toFixed(1)}], y ∈ [${boxY.toFixed(1)}, ${(boxY + stripH).toFixed(1)}],travel ${(fixture.pageH - stripH).toFixed(1)})`
   );
   // W2:落盘后叠加层必须没有实例(否则下一次保存会再盖一次)。
   if (!got.chain || !got.chain.apply) bad("链上没有 apply asset");
@@ -514,7 +530,9 @@ async function checkStripsUneven(app, grantId, sealId, fixture, slices) {
   }
   const fullW = STRIP_SCALE * pageW;
   const stripH = STRIP_SCALE * pageW * (fixture.sealHeight / fixture.sealWidth);
-  const midY = STRIP_START + stripH / 2;
+  // UI4-N4:startOffset 40 % -> 盒顶 y = (1 - 40/100) x (pageH - h)
+  const boxY = stripBoxY(fixture.pageH, stripH);
+  const midY = boxY + stripH / 2;
   const cum = [0];
   for (let i = 0; i < pageCount; i++) cum.push(cum[i] + slices[i]);
   // Expected colour at a probe offset from the strip's own left edge: the seal

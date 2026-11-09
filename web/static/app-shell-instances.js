@@ -27,24 +27,17 @@
     posInstancePanel();
   }
 
-  // SP4: the cross-page fields ride the floating panel only when the selected
-  // instance *is* cross-page (the mode button places those). The binding seg
-  // and startOffset pair bind the same vocabulary as the retired sidebar
-  // section (ui.crosspage.binding / api.apply.startOffset).
-  // Z5: the sliceMode seg always rides the cross-page group; the cover slider
-  // and the retry button answer to the *random* draw only, so they hide unless
-  // that instance is on 随机.
+  // The SP4 cross-page fields ride the floating panel only when the selected
+  // instance *is* cross-page (the mode button places those). The binding seg,
+  // the startOffset pair, the cover slider and the retry button all bind the
+  // same vocabulary as the retired sidebar section (ui.crosspage.binding /
+  // api.apply.startOffset); N3 (2026-11-09) removed the sliceMode seg and the
+  // `.cp-rand` conditional hiding - the random draw is the only mode, so
+  // cover + retry always ride the cross-page group.
   function syncCpGroup(inst) {
     const on = Boolean(inst && inst.crossPage);
     qa("#instance-panel .cp-group").forEach((g) => {
       g.hidden = !on;
-    });
-    const declared = inst && inst.params && inst.params["ui.crosspage.sliceMode"] !== undefined
-      ? inst.params["ui.crosspage.sliceMode"]
-      : S.readField("ui.crosspage.sliceMode");
-    const rand = on && declared === "random";
-    qa("#instance-panel .cp-rand").forEach((g) => {
-      g.hidden = !rand;
     });
     return on;
   }
@@ -127,20 +120,13 @@
   }
 
   // drawCrossSlices rolls the instance's slice list (new Math.random draw).
-  // Called on placement (随机 mode), on the panel's retry button, and every
-  // time the cover slider or the sliceMode seg moves.
+  // Called on placement, on the panel's retry button, on reset, and every
+  // time the cover slider moves — N3 (2026-11-09) made the random draw the
+  // ONLY cross-page slice mode (the 平均档 + sliceMode field are gone).
   function drawCrossSlices(inst) {
     if (!inst || !inst.crossPage || !state.file) return null;
     const pageCount = (state.file.pageCount || (state.file.pages && state.file.pages.length) || 1);
     const count = crossSlotCount(inst, pageCount);
-    const declared = inst.params && inst.params["ui.crosspage.sliceMode"] !== undefined
-      ? inst.params["ui.crosspage.sliceMode"]
-      : S.readField("ui.crosspage.sliceMode");
-    if (declared !== "random") {
-      if (inst.params) delete inst.params["api.apply.slices"];
-      S.renderInstances();
-      return null;
-    }
     const coverRaw = Number(inst.params && inst.params["ui.crosspage.cover"] !== undefined
       ? inst.params["ui.crosspage.cover"] : S.readField("ui.crosspage.cover"));
     const cover = Math.max(0, Math.min(100, Number.isFinite(coverRaw) ? coverRaw : 75));
@@ -248,8 +234,10 @@
 
   // SP4 (2026-11-05): the cross-page add mode's placement. The click only
   // answers to *height*: the strip sits at the binding edge (edge anchored,
-  // UI_SPEC D2), and the clicked page-point's y becomes the instance's
-  // startOffset (the same channel the vertical drag and the panel write).
+  // UI_SPEC D2), and N4 (2026-11-09) turns the clicked page-point's y into
+  // the percentage startOffset (0% = strip bottom on the page bottom,
+  // 100% = strip top on the page top). The strip box starts at the click,
+  // so pct = clamp((1 − y/travel)×100) with travel = pageH − whole-box h.
   function addCrossInstanceAt(pt) {
     if (!state.file || !pt) return null;
     const seal = state.currentSeal;
@@ -260,15 +248,33 @@
     const params = Object.assign(S.defaultParams(), {
       "api.apply.crossPage": true,
       "api.apply.pages": "all",
-      "api.apply.startOffset": +Number(pt.y).toFixed(1),
+      "api.apply.startOffset": 0, // overwritten below with the click-derived pct
       // Z2: the same 42 mm default scale a plain placement gets.
       "api.apply.scale": S.autoScale(),
     });
     const id = S.addInstance(null, params);
     const inst = S.instanceById(id);
     if (inst) inst.sealId = seal.sealId;
-    // Z5: a placement on 随机 mode rolls the simulated binding distribution
-    // the moment the instance is placed (the retry button re-rolls later).
+    // N4: convert the click height into the percent range the vocabulary
+    // understands. The overlay owns the exact box (scale × pageW × aspect);
+    // rectFor with no strip options answers the *whole-seal* box, whose h
+    // equals the strip h (UI_SPEC §2 travel).
+    if (inst) {
+      const ov = window.__autoStampOverlay;
+      const meta = ov && ov.state && ov.state.meta;
+      let pct = 0;
+      if (meta) {
+        const box = ov.rectFor(inst, meta, {});
+        const travel = meta.height - (box ? box.h : 0);
+        if (box && Math.abs(travel) > 1e-9) {
+          pct = Math.max(0, Math.min(100, +((1 - pt.y / travel) * 100).toFixed(1)));
+        }
+      }
+      inst.params["api.apply.startOffset"] = pct;
+      S.loadParams(inst);
+    }
+    // Z5/N3: a placement rolls the simulated binding distribution the moment
+    // the instance is placed (the retry button re-rolls later).
     if (inst) drawCrossSlices(inst);
     S.renderInstances();
     S.notify("autostamp:seal", { instance: id, sealId: seal.sealId });

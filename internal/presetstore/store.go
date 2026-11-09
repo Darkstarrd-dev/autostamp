@@ -72,7 +72,7 @@ type Params struct {
 	Pages       string  `json:"pages,omitempty"`
 	CrossPage   bool    `json:"crossPage"`
 	Binding     string  `json:"binding,omitempty"`
-	StartOffset float64 `json:"startOffset"`
+	StartOffset float64 `json:"startOffset"` // 0..100: percent along the page (UI_SPEC §8 N4)
 	Despill     bool    `json:"despill"`
 	AlphaTrim   bool    `json:"alphaTrim"`
 	ResampleDPI int     `json:"resampleDpi"`

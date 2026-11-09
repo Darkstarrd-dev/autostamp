@@ -2,6 +2,25 @@
 
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-09 — §5 新增 45（UI4 轮 N1–N4）+ §5.43/§5.7/§5.41/§5.42 挂 N3/N4 注记 + §6 括注 + §11 Z5 行换义
+
+- §5.45（新，UI4 轮四项一批）：**N1** 初始透明度 0.6（Go/前端 default 早已 0.6 → 零代码改动，只
+  复位被测试拖成 1 的会话 settings 值）；**N2** 说明文字 → tooltip（每条静态 `hintline` 删除，
+  说明改挂所在容器 `data-i18n-title` + `-cn`，动态读数保持可见，CSS `.hintline` 保留，
+  i18n 键名/键数不变）；**N3** `SliceMode` **字段整条删除**（Go 三件套 + `#crosspage-slicemode`
+  + `.cp-rand` 显隐类 → cp 组控件恒随骑缝实例、随机恒生效，旧 `sliceMode` 键静默忽略、无迁移）；
+  **N4** `api.apply.startOffset` = **0..100 百分比**（`Box.Y = (1 − pct/100) × (pageH − h)`、
+  预览 == 落盘、纵拖 `Δpct = −dy/(pageH − h) × 100`、放置点击换算同公式）。
+- §5.43（Z5）行尾挂注记：「平均|随机」切档作废、「切回平均」通道不复存在、仅随机恒生效，
+  请求缺 `slices` 时后端等宽切只是兜底。
+- §5.7 / §5.41 / §5.42 骑缝语义处 `startOffset` 括注新语义（0..100 百分比 + 条带盒 `Y` 公式）。
+- §6 `POST /api/pdf/apply` 行：`startOffset` 括注「自 N4 起 = 0..100 百分比，不再是 0..200 pt」。
+- §11「改骑缝不匀切片模拟（Z5）」行换义：先读列补 N3/N4，涉及文件列出删除面（`SliceMode` 三件套、
+  `#crosspage-slicemode`、`sliceMode.*` 四键、i18n 141 → 137、ui-ids 58 → 57、`data-field` −1）与
+  N4 的 Go/前端/verify 面（`stamp.go`/`sanitize`/`apply` 校验、滑杆 `min 0 max 100`、
+  `rectFor`/`moveDrag`/`addCrossInstanceAt`、startOffset 取样按百分比）。
+- 本轮无新字段/新路由；计数口径与 `docs/UI_SPEC.md` 同一提交（137 / 57）。
+
 
 ## 2026-11-09 — §5 新增 44（IP1/IP2 印章参数面板停靠右缘 + 超高滚动）+ §5.30/§5.34 挂作废注记 + §11 一行新增
 

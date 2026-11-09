@@ -187,6 +187,7 @@ func TestApplyRouteRejectsVocabulary(t *testing.T) {
 		{"pages none", map[string]any{"pages": "none"}},
 		{"bad offset", map[string]any{"offset": "left"}},
 		{"rotation out of range", map[string]any{"rotation": 540}},
+		{"startOffset over the percent range (N4)", map[string]any{"startOffset": 100.5}},
 		{"binding none with crossPage", map[string]any{"crossPage": true, "binding": "none"}},
 		{"unknown anchor", map[string]any{"anchor": "middle"}},
 		{"slices on a plain instance", map[string]any{"slices": []float64{0.5, 0.5}}},

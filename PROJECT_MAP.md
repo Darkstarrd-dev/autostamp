@@ -1,42 +1,33 @@
 # PROJECT_MAP.md — AutoStamp 代码地图
 
-> 最后核对：2026-11-09（**IP1/IP2 = 印章参数面板停靠轮**：`style.css` `#instance-panel` 停靠
-> `#preview` 右缘（`right/top/bottom:10px` 全高 + `overflow-y:auto`）+ `#instance-fab` 右上角
-> 停靠；`app-shell-instances.js` `posInstancePanel` 锚点链删除只留 show/hide；`docs/ui/mockup.html`
-> 同形镜像；AGENTS §5.44、`UI_SPEC §8` IP1/IP2。同日前一轮 **Z5 = 骑缝不匀切片模拟轮**：`internal/pdfcore/stamp.go` 新增
-> `StripsFractions`（按累计列切条 + 0 槽跳过）+ `StampGeom.SlotFrac`；`api/apply.go` 实例词表
-> `slices`（长度 = 作用页数、Σ≤1、全 0 / 非骑缝拒 400）；cp 组「平均|随机」切档 + 覆盖率滑杆 +
-> `#crosspage-retry`；`app-shell-instances.js` `randomCrossFractions`/`drawCrossSlices`/
-> `retryCrossSlices`；`app-overlay.js` `stripContext` 的 frac/cum + gap 页跳过；`probe('strips')`
-> 新读数；settings `apply.sliceMode`/`apply.cover`；AGENTS §5.43、`UI_SPEC §8` Z5。同日前一轮
-> **Z1–Z4 = 盖章默认值与骑缝旋转轮**：`internal/pdfcore/rotate.go`
-> `RotatePNG` 骑缝章「先旋转整枚、再切竖条」；`app-overlay.js` `rotatedBitmapCanvas` +
-> `effectiveBitmap` 同源；`style.css` 删 `[data-mode="crosspage"]` sel-box/handle 隐藏规则
-> （骑缝实例单击可选）；`app-shell-kernel.js` `autoScale()` = 42 mm ÷ 页显示宽，新放置/复位
-> 覆写 scale；`#apply-blend` multiply 预置 `selected` + 前端 blend 回退 multiply；
-> AGENTS §5.39–§5.42、`UI_SPEC §8` Z1–Z4。上一轮 **HD19 = 空态简化**：`#empty-state` 只剩一枚居中的大方圆角按钮
-> `#empty-pick`（156 px）+ 一行粘贴/拖拽提示；路径框 `#empty-path`、「多文件」/「过滤」切档
-> `#empty-pick-multi`/`#empty-pick-filter` 与 pathGrantId chip 删除，`openByPath(path)` 退化为
-> §7 驱动通道；AGENTS §5.38、`UI_SPEC §8` HD19。上一轮 **SP5 = 右侧边栏退场**：`<aside id="right-sidebar">`、
-> `form#panel`、`#panel-actions`（含 `#save-open`）删除，导出设置段 `#panel-export` 迁入
-> `#save-modal`，`#app-main` grid 改单列 full-bleed；AGENTS §5.37、`UI_SPEC §8` SP5。更早一轮
-> **HD13–HD18 细节调整 + P0–P7 全绿**：印章预览卡 = `#preview`
-> 左下角 overlay（不再占布局）、下拉自动同步当前打开的印章（无路径印章 = `__current__`
-> 标记项）、顶栏控件同高 34px、后端终端 `#btn-console`/`#log-console` + `GET /api/logs`
->（`internal/console/ring.go` `LogRing` + `WithRing` 扇出）+ `config.UI.ConsoleVisible`；
-> **装载只设当前印章、实例可全删、boot 无预置实例（HD17）**；**参数面板默认收起 =
-> `#instance-fab` 齿轮 ↔ `#instance-collapse`（HD18）**；AGENTS §5.31–§5.34 + §5.35（壳拆分）；
-> **V7 = Ctrl+滚轮恒为整页缩放（AGENTS §5.14，取代 V3 实例缩放通道）**；
-> i18n **132**（HD19 删 12 个失去控件面的键：`empty.msg`、`empty.path.placeholder`、
-> `api.fs.pick.filePath.ctl`/`.hint`、`api.fs.pick.multi.ctl`/`.hint`、`api.fs.pick.filter.ctl`/`.hint`、
-> `fs.pick.multi.on`、`fs.pick.filter.pdf`、`fs.pick.filter.all`、`api.fs.pick.pathGrantId.hint`；
-> 历史计数 267 → 151 → 144 见 changelog）、ui-ids **56**（HD19 删 `empty-path`/`empty-pick-multi`/
-> `empty-pick-filter`；SP5 删 `right-sidebar`/`panel`/`panel-actions`/`save-open`；历史 96 → 63 → 59
-> 见 changelog）。出货件 =
-> `build.ps1 -Task stripped,package` 的 `dist\autostamp-<rev>-win64.zip`；历轮增量
->（PD1/PD2、build1/buildm、HD1–HD12、V4–V6、P6/P7 接线）见 `docs/changelog/PROJECT_MAP.md`，
-> 正文只留当前态事实。`app-crosspage.js` 这个计划名从未创建，真实形态在 `app-overlay.js` +
-> `app-shell-*.js` 模块组（7 文件，见下表「壳模块拆分」行）。
+> 最后核对：2026-11-09（**N1–N4 = UI4 轮**：N3 **骑缝切片只有随机** —— `ui.crosspage.sliceMode`
+> 字段整条删除（`internal/config/{types,defaults,patch,sanitize}.go` 的 `SliceMode` 三件套 +
+> `#crosspage-slicemode` 控件 + `.cp-rand` 显隐类），cp 组控件恒随骑缝实例显示、随机取值恒生效；
+> N4 **`api.apply.startOffset` = 0..100 百分比**（0% = 条带下缘贴页面下边、100% = 条带上缘贴页面
+> 上边）—— `internal/pdfcore/stamp.go` 的 `Box.Y = (1 − startOffset/100) × (pageH − h)`、
+> `api/apply.go` 校验与 Go 测试同步、`app-overlay.js` 的 `rectFor`/`moveDrag` 同源换算；N2 **说明
+> 文字 → tooltip** —— 每条静态 `hintline` 从界面删除，说明文本改挂所在容器 `data-i18n-title` +
+> `data-i18n-title-cn`（`applyLang` 既有通道，JS 不动）；N1 **初始透明度 0.6** —— default 早已
+> 0.6，本轮只复位被测试拖成 1 的会话 settings 值。计数：i18n **137**（141 − 4：
+> `ui.crosspage.sliceMode.ctl`/`.hint`、`sliceMode.even`、`sliceMode.random`）、ui-ids **57**
+> （删 `crosspage-slicemode`）、`data-field` 面 −1（`ui.crosspage.sliceMode`），字段/状态/路由
+> 不变；AGENTS §5.45、`UI_SPEC §8` N1–N4。同日前一轮 **IP1/IP2 = 面板停靠右缘轮**（`style.css`
+> `#instance-panel` 停靠 `#preview` 右缘全高 + `overflow-y:auto`、`posInstancePanel` 锚点链删除
+> 只留 show/hide；AGENTS §5.44）。更早一轮 **Z5 = 骑缝不匀切片模拟轮**（`stamp.go`
+> `StripsFractions` 累计列切条 + `StampGeom.SlotFrac`、`apply.go` 实例词表 `slices`、
+> `randomCrossFractions`/`drawCrossSlices`/`retryCrossSlices`、`stripContext` 的 frac/cum、
+> settings `apply.cover`；其「平均|随机」切档已由本轮 N3 作废）。再早 **Z1–Z4**（`rotate.go`
+> `RotatePNG` 先旋转整枚再切竖条、`autoScale()` = 42 mm ÷ 页显示宽、blend 默认 multiply、骑缝实例
+> 单击可选）；**HD19 = 空态简化**（`#empty-state` 只剩 `#empty-pick` 大按钮 + 一行提示，
+> `openByPath(path)` 退化为 §7 驱动通道）；**SP5 = 右侧边栏退场**（导出设置段迁入 `#save-modal`、
+> `#app-main` 单列 full-bleed）；**HD13–HD18 + P0–P7 全绿**（预览卡 overlay、下拉当前选项同步、
+> 顶栏控件同高 34px、后端终端 `#btn-console`/`#log-console` + `GET /api/logs`、装载只设当前印章、
+> 实例可全删、面板默认收起齿轮、壳拆 7 模块）；**V7 = Ctrl+滚轮恒为整页缩放**（AGENTS §5.14）。
+> 历史计数 i18n 266 → 267 → 151 → 144 → 132 → 141 → **137**、ui-ids 96 → 63 → 59 → 56 → 58 →
+> **57**；出货件 = `build.ps1 -Task stripped,package` 的 `dist\autostamp-<rev>-win64.zip`；
+> 历轮增量（PD1/PD2、build1/buildm、HD1–HD12、V4–V6、P6/P7 接线）与已删键的完整清单只在
+> `docs/changelog/PROJECT_MAP.md` 留叙述，正文只留当前态事实。`app-crosspage.js` 这个计划名从未
+> 创建，真实形态在 `app-overlay.js` + `app-shell-*.js` 模块组（7 文件，见下表「壳模块拆分」行）。
 >
 > 新增/删除包必须同步本文件（AGENTS §10.1）。阶段状态见 `docs/IMPLEMENTATION_PLAN.md §10`。
 
@@ -89,14 +80,14 @@
 |(续)|`sealimg.go`|印章图通道：`PrepareSeal`(去白底 `despillWhite` despill → alpha 包围盒裁剪 `alphaBounds`/`cropNRGBA` → `scaleDPI` 重采样 + `maxSide` 上限；词表 `despill/alphaTrim/resampleDpi/targetDpi/maxSide`，扩展名按实际内容写)、`SealMeta`(src*/out* 尺寸与 DPI、`AlphaBBox`、`OpaqueRatio` 按**源图**计)、`SealBox`。|P2（骑缝条带切分未做，见 P3）|
 |(续)|`split.go`|自动切分：词表 `SplitAuto/SplitRowsCols/SplitCustom/SplitUnsplit` + `SplitSpec{Mode,Rows,Cols,CustomCuts,Veto}`；`PlanForSplit`/`CutPlanForPage`（display 空间,**不按 /Rotate 交换轴**，FACTS §2.3）、`PageIsSpread`(横排且 `w/h>AutoSpreadRatio=0.7`)、`SplitOnePage`（剔掉 pdfcpu 附带的原页）、`MergeCreateFile` 合并回一个 PDF、`sortByPageTail`（按名内页号升序 = reading order）|P3|
 |(续)|`rotate.go`|**Z4（2026-11-09）** `RotatePNG(pngBytes, deg)`：骑缝章「先旋转整枚、再切竖条」的第一半 —— 屏幕顺时针、画布扩到旋转 bbox（精确 90° = 宽高互换，公式与前端 `rotatedBitmapCanvas` 一致）、最近邻采样、`deg == 0` 恒等|P4（Z4 修订）|
-|(续)|`stamp.go`|落盘几何与词表：`StampGeom{Scale,Anchor,OffX/OffY,PosX/PosY,CrossPage,Binding,StartOffset,Slot,SlotCount}` + `Box(Page)`（== `app-overlay.rectFor`，条带框高取**整枚印章旋转后**的比，Z4）、`ParseAnchor`/`ParseBinding`/`ParsePair`、`SealAspect`、`Strips(png,count)`（骑缝条带切片，stdlib 逐列裁切 —— 输入已是 `RotatePNG` 的旋转位图，每列是竖条）、`StripsFractions(png, fractions)`（**Z5**：按各页占比的累计列切条，0 槽返回 nil 不盖章）、`StampInstance`、`ClampScale`|P3+P4（Z4/Z5 修订）|
+|(续)|`stamp.go`|落盘几何与词表：`StampGeom{Scale,Anchor,OffX/OffY,PosX/PosY,CrossPage,Binding,StartOffset,Slot,SlotCount}` + `Box(Page)`（== `app-overlay.rectFor`，条带框高取**整枚印章旋转后**的比，Z4；**N4 起 `StartOffset` = 0..100 百分比 → `Box` 的 `Y` = `(1 − pct/100) × (pageH − h)`**）、`ParseAnchor`/`ParseBinding`/`ParsePair`、`SealAspect`、`Strips(png,count)`（骑缝条带切片，stdlib 逐列裁切 —— 输入已是 `RotatePNG` 的旋转位图，每列是竖条）、`StripsFractions(png, fractions)`（**Z5**：按各页占比的累计列切条，0 槽返回 nil 不盖章）、`StampInstance`、`ClampScale`|P3+P4（Z4/Z5 + N4 修订）|
 |(续)|`apply.go`|**落盘主路径** `Stamp(ctx, r, doc, instances)`：按外观分组 → 每组一次 pdfcpu pass → `newStamp` 把契约框翻译成 `model.Watermark{Pos:BottomLeft, Dx/Dy(y 翻转), ScaleAbs}`（FACTS §2.6）→ `BlendApply` 注入本 pass 新 GS 的 `/BM` → 断言页自身的 GS 未被污染|P4|
 |(续)|`blend.go`|`/BM` 注入层：`Blend` 16 名 ↔ PDF `/BM`、`BlendApply`、`ExtGStateKeysOf`/`StampGraphicStatesOf`（只注入本 pass 新建、`Artifact/Watermark` 引用的状态；共享对象不重写；已有别的 `/BM` 报错）、内容流 token 扫描器（`>>BDC` 无空格实测）|P4|
 |(续)|`pages.go`|pages 词表：`ParsePages`（`all`/`none`/`1,3`/`2-4` → 页号列表，越界拒绝），`/api/pdf/{apply,split,export}` 共用|P4|
 |(续)|`pxdims.go` + `validate.go`|`pxDims`（位图字节 → 尺寸，只解头部）、`Validate(ctx, path)` = pdfcpu `ValidateFile` + 显式限流（`DefaultLimits`）|P4|
 |(续)|`raster.go`|**P5 writer（stdlib）**：`WriteRaster(w, []RasterPage, {Dpi})` —— JPEG 输入 `/DCTDecode` **原始字节直传**（不重编码），PNG 解码后 `/FlateDecode`（zlib raw scanlines，行前置 filter 0）+ 有 alpha 时 `/SMask` 灰度平面；`/MediaBox` 用 `ptString(px,dpi)` = `px*72/dpi` 两位小数；内容流 `q W 0 0 H 0 0 cm /Im0 Do Q`；xref/`/Size`/`startxref`/`%%EOF` 精确；无 `/Rotate`（前端位图已是显示方向）；`TrimPages` 用 `api.Trim`（`ExtractPagesFile` 只产每页单页文件，产不出子集资产）|P5|
 |(续)|`raster_test.go`|字节结构（xref 逐项指向 `N 0 obj`、`/Length`、`/MediaBox` `153.60/115.20`、DCT 流 == 输入字节）、Flate 路径（解压 `h*(1+w*3)`、SMask `h*(1+w)`、无 SMask 反例）、FACTS §4 量级（±40%，注释写明不能钉 ±5%）、`TestRasterWriterPassesPdfcpuValidate`|P5|
-|(续)|`stamp_test.go` + `apply_test.go`|`Box` 几何镜像（九宫格锚点 / `pos` 通道 / 条带 `startOffset` + 装订边交替 / 非法值拒绝）、`TestStampStripBoxUsesWholeSealAspect`（写进内容流的 `cm` 数字必须来自整枚印章的比）、`TestStampWritesBMAndOpacity`、`TestStampKeepsAppearanceSeparateOnOnePage`、`TestStampDoesNotTouchPageOwnStates`、`TestStampRejectsBadRequests`|P4|
+|(续)|`stamp_test.go` + `apply_test.go`|`Box` 几何镜像（九宫格锚点 / `pos` 通道 / 条带 `startOffset` + 装订边交替 / 非法值拒绝；**N4：`startOffset` 断言按 0..100 百分比，期望 `Y = (1 − pct/100) × (pageH − h)`；`sliceMode` 的 even|random 校验测试随 N3 删除**）、`TestStampStripBoxUsesWholeSealAspect`（写进内容流的 `cm` 数字必须来自整枚印章的比）、`TestStampWritesBMAndOpacity`、`TestStampKeepsAppearanceSeparateOnOnePage`、`TestStampDoesNotTouchPageOwnStates`、`TestStampRejectsBadRequests`|P4（Z5 + N4 修订）|
 |(续)|`read_test.go` / `sealimg_test.go` / `split_test.go`|`TestPrepareSeal*`（去背/裁剪/重采样/maxSide/拒绝/JPEG）、`TestSplitA4ToHalves`、`TestSplitQuarterGrid`、`TestSplitCustomFractions`、`TestSplitAutoCutsRotatedSpreadOnly`、`TestSplitAutoVetoKeepsPages`、`TestSplitRejectsUnknownMode`、`TestSortByPageTailOrdersNumericTails`、`TestCutPlanForPageKeepsDisplayAxes`|P1-P3|
 |(续)|`rotate_test.go`|**Z4**：`TestRotatePNGClockwise90GrowsCanvas`/`Counter90MirrorDirection`/`180FlipsHalves`/`ZeroIsIdentity`、`TestRotatedStripsAreVerticalColumnsOfRotatedSeal`（旋转 90 后 `Strips` 的切片 = 竖列，两页同一条竖带：上半=印章左半、下半=右半）|P4（Z4）|
 
@@ -128,10 +119,11 @@
 |（续）|**SP1–SP4 侧栏收尾**（AGENTS §5.36；`UI_SPEC §8` SP1–SP4）|`index.html`：删 `#panel-seal`/`#panel-instances`/`#panel-split`/`#panel-batch`/`#panel-crosspage`/`#asset-hooks`，顶栏 `#btn-crosspage-add`（`data-field=ui.seal.crosspageAddMode`），面板 cp 组；`app-pager.js` 重写 = 纯缩略图条（`.chip > canvas.pg-thumb`，无编号/无 All，栏高定死）；`app-shell-seals.js` `setCrosspageAdd`（与 `setAddMode` 互斥）、`app-shell-instances.js` `addCrossInstanceAt` + `syncCpGroup`、`app-overlay.js` 骑缝实例（strip 选中/纵拖 = startOffset/四角 + 旋转手柄）+ 空 stage 放置钩子、`app-shell-chrome.js` binding seg 逐实例语义（`none` 降级）+ Ctrl+Enter/Ctrl+Z 落盘键盘入口；`app-shell-docops.js` `runSplit(opts)` 词表驱动 + `renderVetoChips` 删、`vetoPage` 驱动保留；probe 新增 `crosspageAdd`/`strips`、`addMode` 不变；`style.css` z 序 `#seal-preview`=5 低于面板 8|
 |（续）|**SP5 右侧边栏退场**（AGENTS §5.37；`UI_SPEC §8` SP5）|`index.html`：删 `<aside id="right-sidebar">`（连带 `form#panel`、`#panel-actions`、`#save-open`），导出设置段 `#panel-export`（sec-title + `api.export.mode/dpi/customDpi/quality/pages` 五个 `.field` + `#estimate`/`#estimate-total`/`#estimate-per-page`）搬进 `#save-modal`（`#save-source` 之后、`#save-pick` 之前），**id 与 `data-field` 不变**；`style.css`：`#app-main` = `grid-template-columns: minmax(0, 1fr)` + `grid-template-areas: "topbar" "preview"`（单列 full-bleed；`#right-sidebar`/`#panel*` 规则删除），新增 `.modal .section` + `.modal .sec-title` 外壳，`#save-modal` = `top: 8vh` + `max-height: 84vh` + `overflow-y: auto`（导出段在 modal 内滚动）；`app-shell-kernel.js`：`setState("export")` 的开 `details` 分支删除（12 态状态机不变）；`app-shell-chrome.js`：`#save-open` 绑定行删除 → `#btn-save` + Ctrl+S 是保存对话框唯一入口。**已删 id（不再复活）**：`right-sidebar`、`panel`、`panel-actions`、`save-open`；**存活**：`panel-export`、`export-mode`、`export-dpi`、`estimate`、`estimate-total`、`estimate-per-page`（宿主 = `#save-modal`）|
 |（续）|**Z1–Z4 盖章默认值与骑缝旋转**（AGENTS §5.39–§5.42；`UI_SPEC §8` Z1–Z4；2026-11-09）|`app-shell-kernel.js`：`autoScale()`（42 mm ÷ 页显示宽，§7 门面登记）+ `SEAL_DEFAULT_MM`/`MM_TO_PT`/`A4_SHORT_PT`；`app-shell-seals.js`/`app-shell-instances.js` 新放置与复位都覆写 `api.apply.scale` = `autoScale()`；`app-overlay.js`：blend 回退 `multiply`（Z1）、`rotatedBitmapCanvas`（`rotCache` 按 sealId×deg 缓存旋转 canvas）+ `effectiveBitmap`（骑缝实例的 hitTest/绘制统一走旋转位图），`rectFor` 骑缝纵横比 = 旋转 bbox，`drawSeal` 竖条路径不再 `ctx.rotate`（Z4）；`style.css`：删除 `[data-mode="crosspage"]` 的 sel-box/handle 隐藏规则（Z3，选中即见绿框 + 手柄）；`index.html`/`mockup.html`：`#apply-blend` multiply 选项 `selected`（Z1）；verify：`overlay-smoke` strip Z3 单击/手柄 + Z4 旋转渐变三取样、`apply-smoke` strip 旋转竖条上下沿、`shell-smoke` Z2 缩放断言 + Z3 手柄/单击|
-|（续）|**Z5 骑缝不匀切片模拟**（AGENTS §5.43；`UI_SPEC §8` Z5；2026-11-09）|`index.html`（cp 组 `#crosspage-slicemode` 切档 + `ui.crosspage.cover` 滑杆/数值对 + `#crosspage-retry`；`.cp-rand` 类 = 仅随机可见）与 `docs/ui/mockup.html` 同形镜像；`app-shell-instances.js`：`randomCrossFractions(count, cover, rng)`（纯取值：首页 25~50%、末页 20~30%、中间页按覆盖率四舍五入 + 一条平滑趋势、Σ=1）+ `drawCrossSlices`（放置/参数变化时写实例 `api.apply.slices`）+ `retryCrossSlices`（重掷选中实例）；`app-shell-chrome.js` 切档/滑杆/重试接线；`app-overlay.js`：`stripContext` 返回 `frac/cum`、`frac<=0` 的 gap 页跳过绘制（probe 条目保留、无 rect 无像素）、`drawSeal` 源列起点 = `cum × 图宽`；`app-shell-verify.js` `probe('strips')` 带 `frac/cum`；Go 侧 = `pdfcore.StripsFractions` + `api/apply.go` 词表 + config `apply.sliceMode`/`apply.cover`（见对应行）|
+|（续）|**Z5 骑缝不匀切片模拟**（AGENTS §5.43；`UI_SPEC §8` Z5；2026-11-09；**「平均\|随机」切档已由 N3 作废，仅随机恒生效**）|`index.html`（`ui.crosspage.cover` 滑杆/数值对 + `#crosspage-retry`；`#crosspage-slicemode` 切档与 `.cp-rand` 显隐类已由 N3 删除 → cover/重试恒随 cp 组）与 `docs/ui/mockup.html` 同形镜像；`app-shell-instances.js`：`randomCrossFractions(count, cover, rng)`（纯取值：首页 25~50%、末页 20~30%、中间页按覆盖率四舍五入 + 一条平滑趋势、Σ=1）+ `drawCrossSlices`（放置/参数变化时写实例 `api.apply.slices`）+ `retryCrossSlices`（重掷选中实例）；`app-shell-chrome.js` 切档/滑杆/重试接线（切档绑定块已由 N3 删除）；`app-overlay.js`：`stripContext` 返回 `frac/cum`、`frac<=0` 的 gap 页跳过绘制（probe 条目保留、无 rect 无像素）、`drawSeal` 源列起点 = `cum × 图宽`；`app-shell-verify.js` `probe('strips')` 带 `frac/cum`；Go 侧 = `pdfcore.StripsFractions` + `api/apply.go` 词表 + config `apply.cover`（`apply.sliceMode` 已由 N3 删除，见对应行）|
+|（续）|**N1–N4 UI4 轮**（AGENTS §5.45；`UI_SPEC §8` N1–N4；2026-11-09）|Go 面：`internal/config/{types,defaults,patch,sanitize}.go` 删 `SliceMode` 三件套（旧 settings.json 的 `sliceMode` 键静默忽略、无迁移）、`internal/pdfcore/stamp.go` 的 `Box.Y` 改百分比公式、`internal/api/apply.go` 的 `startOffset` 校验 0..100（消息「0..100 %」）+ `apply_test.go`/`stamp_test.go` 断言同步。前端面：`web/static/index.html` + `docs/ui/mockup.html`（删 `#crosspage-slicemode` 整个 `.field`、删全部静态 `hintline` → 改挂容器 `data-i18n-title` + `-cn`、删 `.cp-rand` 类、`#apply-startoffset` 滑杆 `min 0 max 100 step 1` + ctl「起始位置（%）」+ hint 新文本）；`app-shell-kernel.js`（PERSIST 删 `ui.crosspage.sliceMode` 映射、apply 组字段清单删该项）、`app-shell-instances.js`（`syncCpGroup` 删 cp-rand 显隐与 declared 读取、`addCrossInstanceAt` 的点击 y → 百分比）、`app-shell-chrome.js`（删 `bindSegment("crosspage-slicemode")`、cover change 处理器恒重掷）、`app-overlay.js`（`rectFor` strip 分支 `y = (1 − start/100) × (meta.height − h)`、`moveDrag` 纵拖写 `newPct`）。verify 面：`tools/verify/{shell-smoke,overlay-smoke,apply-smoke}.mjs` 的 startOffset 断言按百分比、Z5 链删「even→random 切档」步骤。计数：i18n 141 → 137、ui-ids 58 → 57、`data-field` −1|
 |（续）|**IP1/IP2 面板停靠右缘 + 超高滚动**（AGENTS §5.44；`UI_SPEC §8` IP1/IP2；2026-11-09）|`style.css`：`#instance-panel` = 绝对定位 `#preview` 右缘（`right:10px; top:10px; bottom:10px; width:236px` + `overflow-y:auto` + `overscroll-behavior:contain`，z 8 不变），`#instance-fab` 同角右上停靠；`app-shell-instances.js`：`posInstancePanel` 的贴框锚点链删除（HD12 锚点半边作废），只留 show/hide 语义（出现条件 = 选中实例 + 文档，与实例位置无关）；`docs/ui/mockup.html` 同形镜像（`top:76px bottom:10px` 全高滚动）；`shell-smoke`：IP1 停靠几何（三边 gap=10、宽 236）+ IP2 短视口（430 px）强制溢出的滚动断言|
 |（续）|**HD19 空态简化**（AGENTS §5.38；`UI_SPEC §8` HD19）|`index.html`：`#empty-state` 只剩 `#empty-pick`（156 px 大方圆角 button + 上传 SVG + `empty.pick.btn` = Open file / 打开文件）与一行 `.hint`（`empty.hint`）——删路径框 `#empty-path`、「多文件」切档 `#empty-pick-multi`、「过滤」切档 `#empty-pick-filter`、pathGrantId chip 与两条选项提示行；`app-shell-docops.js`：`pickAndOpen()` 固定调 `api.pick({filter:"pdf", multi:true})`、`openByPath(path)` 改由参数给路径（空/空白 → 错误 toast）；`app-shell-chrome.js`：删 `#empty-path` 的 `keydown` Enter 接线（保留 `#empty-pick` 的 click）；`style.css`：`#empty-state` flex 列居中 + `#empty-pick` 156×156/`border-radius: 16px` + `.hint` `max-width: 560px`，删 `.msg`/`.btnrow`/`.pathrow`；`docs/ui/mockup.html` 同形镜像；`tools/verify/preview-smoke.mjs` / `overlay-smoke.mjs` / `shell-smoke.mjs` 的打开通道 = `S.openByPath(path)`（§7 驱动）。**已删 id（不再复活）**：`empty-path`、`empty-pick-multi`、`empty-pick-filter`；**存活**：`empty-pick`、`empty-state`、`drop-hint`|
-|`web/static/app-i18n.js`|en/cn 文案表（由 `tools/verify/gen-i18n.mjs` 从 `docs/UI_SPEC.md §4` 生成，**141 键**（SP1 → 151、SP5 删 7 个死键 → 144、HD19 删 12 个失去控件面的键 → 132、Z5 加 9 键（cp 切档/滑杆/重试 + `sliceMode.*`）→ 141：`empty.msg`、`empty.path.placeholder`、`api.fs.pick.filePath.ctl`/`.hint`、`api.fs.pick.multi.ctl`/`.hint`、`api.fs.pick.filter.ctl`/`.hint`、`fs.pick.multi.on`、`fs.pick.filter.pdf`、`fs.pick.filter.all`、`api.fs.pick.pathGrantId.hint`；`api.fs.pick.pathGrantId.ctl` 保留 = 保存弹窗 chip 的 `t()` 标题），禁止手改；HD16 增 `app.console.btn`、V7 增 `view.zoom.hint`；`empty.hint` 文本改为「拖进来/粘贴打开 PDF、图片装载为印章」（HD19）；`ui.lang`/`ui.theme` 的 §2 行现挂 `lang.en`/`theme.light`（SP5）|
+|`web/static/app-i18n.js`|en/cn 文案表（由 `tools/verify/gen-i18n.mjs` 从 `docs/UI_SPEC.md §4` 生成，**137 键**（SP1 → 151、SP5 删 7 个死键 → 144、HD19 删 12 个失去控件面的键 → 132、Z5 加 9 键（cp 切档/滑杆/重试 + `sliceMode.*`）→ 141、**N3 删 4 键（`ui.crosspage.sliceMode.ctl`/`.hint`、`sliceMode.even`、`sliceMode.random`）→ 137**；HD19 删的键：`empty.msg`、`empty.path.placeholder`、`api.fs.pick.filePath.ctl`/`.hint`、`api.fs.pick.multi.ctl`/`.hint`、`api.fs.pick.filter.ctl`/`.hint`、`fs.pick.multi.on`、`fs.pick.filter.pdf`、`fs.pick.filter.all`、`api.fs.pick.pathGrantId.hint`；`api.fs.pick.pathGrantId.ctl` 保留 = 保存弹窗 chip 的 `t()` 标题），禁止手改；HD16 增 `app.console.btn`、V7 增 `view.zoom.hint`；`empty.hint` 文本改为「拖进来/粘贴打开 PDF、图片装载为印章」（HD19）；`api.apply.startOffset.ctl`/`.hint` 文本按 N4 换（「起始位置（%）」+ 百分比语义）；`ui.lang`/`ui.theme` 的 §2 行现挂 `lang.en`/`theme.light`（SP5）；N2 起静态说明走 `[data-i18n-title]` 通道（键表不变）|
 |`web/static/style.css`|壳样式（**版式单列 full-bleed**（SP5，2026-11-06）= `#app-main` 一栏 `minmax(0, 1fr)`，`grid-template-areas: "topbar" "preview"`；`#right-sidebar`/`#panel*` 与 HD3 时代的 two-col 规则全部删除，仓库内没有 380 px 面板）+ 图标按钮 tooltip / 控件表现代码 + 保存对话框外壳（`.modal .section`、`.modal .sec-title`；`#save-modal` = `top: 8vh` + `max-height: 84vh` + `overflow-y: auto`，导出设置段在 modal 内滚动）+ P1：分页条缩略图（`#page-pager canvas.pg-thumb`）、拖放高亮（`#preview[data-drag]` + `#drop-hint` 悬浮胶囊）；polish：导出段不再有 `opacity:.55` 淡化（误导状态 + 低对比，changelog 2026-11-03）；**左列出血**（HD7，2026-11-04）：`#empty-state` 无 `margin`/`border-radius`、`#preview-stage` `padding: 0`、`.page-frame` 无圆角；`.file-chip` 规则随顶栏文本一起去掉（HD5）；**HD13/HD15/HD16（2026-11-05）**：`#seal-preview` 绝对定位 overlay（左 10px、底 10px，分页条可见时 77px）、`#log-console` 底部 overlay（180px、默认 hidden）、顶栏控件组 `height: 34px`（`.btn.icon`/`.seg.sm`/`#seal-recent-select`）；**HD19（2026-11-06）空态**：`#empty-state` = flex 列居中（`flex-direction: column` + `align-items/justify-content: center` + `gap: 18px` + 文本居中，`html[data-state="empty"]` 下 `display: flex`）、`#empty-pick` 156×156 + `border-radius: 16px`（`.ic` 44 px）、`#empty-state .hint` `max-width: 560px`；`.msg`/`.btnrow`/`.pathrow` 三条规则删除|
 |`web/static/favicon.svg`|图标（`<link rel="icon">`，否则 Chromium 自动 404 `/favicon.ico`，FACTS §1.5）|
 |`web/static/vendor/pdfjs/`|pdf.js 6.4.299 资产（P1 已进）：`build/`（只有 ESM，FACTS §1.1）、`cmaps/`、`standard_fonts/`、`wasm/`、`image_decoders/`、`iccs/`、`web/pdf_viewer.css`（文本层 CSS）；205 文件 / 5,486,850 B，`SHA256.txt` + `web/embed_test.go:TestVendorChecksums` 断言；见该目录 `README.md`|

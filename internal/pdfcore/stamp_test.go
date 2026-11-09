@@ -79,10 +79,10 @@ func TestStampBoxStripsRightAndAlternate(t *testing.T) {
 	const scale, aspect, count = 0.4, 1.0, 4
 	fullW := scale * a4.Width
 	w := fullW / count
-	mk := func(slot, page int, binding BindingSide, start float64) Rect {
+	mk := func(slot, page int, binding BindingSide, pct float64) Rect {
 		g := StampGeom{
 			Scale: scale, Aspect: aspect, CrossPage: true, Binding: binding,
-			StartOffset: start, Slot: slot, SlotCount: count, PageNumber: page,
+			StartOffset: pct, Slot: slot, SlotCount: count, PageNumber: page,
 		}
 		r, err := g.Box(a4)
 		if err != nil {
@@ -99,9 +99,19 @@ func TestStampBoxStripsRightAndAlternate(t *testing.T) {
 		if math.Abs(r.X-(a4.Width-w)) > 1e-9 {
 			t.Errorf("slot %d x = %g, want the right edge at %g", slot, r.X, a4.Width-w)
 		}
-		if r.Y != 37 {
-			t.Errorf("startOffset: y = %g, want 37", r.Y)
+		if wantY := (1 - 0.37) * (a4.Height - fullW); math.Abs(r.Y-wantY) > 1e-9 {
+			t.Errorf("startOffset 37 (pct): y = %g, want (1-37%%/100)x(pageH-h) = %g", r.Y, wantY)
 		}
+	}
+
+	// N4 pins: 0% keeps the strip box's bottom edge on the page bottom, 100%
+	// keeps its top edge on the page top (the box height is the whole seal's,
+	// so the travel is pageH - h).
+	if got := mk(0, 1, BindingRight, 0).Y; math.Abs(got-(a4.Height-fullW)) > 1e-9 {
+		t.Errorf("startOffset 0: y = %g, want the bottom pin at %g", got, a4.Height-fullW)
+	}
+	if got := mk(0, 1, BindingRight, 100).Y; got != 0 {
+		t.Errorf("startOffset 100: y = %g, want the top pin at 0", got)
 	}
 
 	// Alternate: odd pages right, even pages left.

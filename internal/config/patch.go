@@ -60,7 +60,6 @@ type PatchApply struct {
 	CrossPage   *bool    `json:"crossPage,omitempty"`
 	Binding     *string  `json:"binding,omitempty"`
 	StartOffset *float64 `json:"startOffset,omitempty"`
-	SliceMode   *string  `json:"sliceMode,omitempty"`
 	Cover       *int     `json:"cover,omitempty"`
 }
 
@@ -140,7 +139,6 @@ func Merge(s *Settings, p *Patch) {
 		}
 		setStr(&a.Binding, p.Apply.Binding)
 		setFlt(&a.StartOffset, p.Apply.StartOffset)
-		setStr(&a.SliceMode, p.Apply.SliceMode)
 		setInt(&a.Cover, p.Apply.Cover)
 	}
 	if p.Split != nil {
