@@ -8,7 +8,8 @@
 //   * 1280x720 and 1440x900 must not produce horizontal overflow
 //   * every data-i18n key must resolve to non-empty en+cn text
 //   * slider↔number pairing and segmented controls must actually write the field
-//   * the empty state keeps one load entry (#empty-pick) and opens on Enter (HD6),
+//   * the empty state keeps one load entry (HD19: the centered big square-rounded
+//     #empty-pick button + the paste/drag hint; the path box is dead),
 //     with the left column bleeding to its edges (HD7)
 //
 // Usage: node tools/verify/ui-smoke.mjs [--keep-profile]
@@ -119,34 +120,43 @@ async function main() {
     }
   }
 
-  // 3b. the layout is fixed two-col: the sidebar column stays 380px at both
-  // contract viewports and nothing reflows sideways (no density control).
+  // 3b. SP5 (2026-11-06): the right sidebar is dead — #preview bleeds to both
+  // window edges, so its width equals the app-main width at both contract
+  // viewports (no density control may come back either).
   for (const [w, h] of [[1280, 720], [1440, 900]]) {
     await viewport(w, h);
     const fixed = await evaluate(`
       (function () {
         var m = window.__autoStampMock;
-        var sb = m.q("#right-sidebar").getBoundingClientRect();
+        var main = m.q("#app-main");
         return {
-          sidebarW: Math.round(sb.width),
-          densityAttr: m.q("#app-main").hasAttribute("data-density"),
+          sidebar: Boolean(document.querySelector("#right-sidebar")),
+          previewW: Math.round(m.q("#preview").getBoundingClientRect().width),
+          mainW: main.clientWidth,
+          densityAttr: main.hasAttribute("data-density"),
           densityCtl: Boolean(m.q("#density-seg")),
           overflow: m.probe("overflow"),
         };
       })()`);
-    cmp(`${w}x${h} fixed two-col layout`, [fixed.sidebarW === 380, fixed.overflow], [true, false]);
+    cmp(`${w}x${h} SP5 single-col layout`, [fixed.sidebar, fixed.overflow], [false, false]);
+    truthy(`${w}x${h}: #preview fills #app-main`, Math.abs(fixed.previewW - fixed.mainW) <= 1);
+    console.log(`  ${w}x${h}: #preview ${fixed.previewW}px, #app-main client ${fixed.mainW}px`);
+    if (fixed.sidebar) bad(`${w}x${h}: #right-sidebar is back — the layout is single-col (SP5)`);
+    if (fixed.overflow) bad(`${w}x${h}: horizontal overflow in the SP5 single-col layout`);
     if (fixed.densityAttr || fixed.densityCtl) bad(`${w}x${h}: the density control/density attribute is still live`);
   }
 
-  // 3c. the empty state is the load contract (HD6: one entry + Enter in the path
-  // box) and the left column bleeds (HD7: no margin/rounding on the empty stage
-  // or the page frames); the removed ids stay dead (HD5/HD6).
+  // 3c. the empty state is the load contract (HD19: one centered large
+  // rounded-square button + the paste/drag hint; the path box is gone) and the
+  // left column bleeds (HD7: no margin/rounding on the empty stage or the page
+  // frames); the removed ids stay dead (HD5/HD6/HD19).
   const load = await evaluate(`
     (function () {
       var m = window.__autoStampMock;
       var cs = function (sel) { return getComputedStyle(m.q(sel)); };
       var out = {};
-      out.deadIds = ["top-file", "empty-open", "empty-upload", "file-input"].filter(function (id) { return document.getElementById(id); });
+      out.deadIds = ["top-file", "empty-open", "empty-upload", "file-input",
+        "empty-path", "empty-pick-multi", "empty-pick-filter"].filter(function (id) { return document.getElementById(id); });
       var bar = document.querySelector("#topbar");
       var stray = [];
       for (var n = bar.firstChild; n; n = n.nextSibling) {
@@ -166,28 +176,29 @@ async function main() {
         frameRadius: cs(".page-frame").borderTopLeftRadius
       };
       m.setState("empty");
-      var box = m.q("#empty-path");
-      box.value = "verify-typed.pdf";
-      var ev = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
-      box.dispatchEvent(ev);
-      out.prevented = ev.defaultPrevented;
-      out.typedState = m.probe("state");
+      // HD19: the empty state hosts exactly one centered large square-rounded
+      // button (#empty-pick) + the paste/drag hint, and nothing else.
+      var btn = m.q("#empty-pick");
+      var kids = Array.prototype.map.call(m.q("#empty-state").children, function (el) {
+        return el.tagName + (el.id ? "#" + el.id : "." + String(el.className).split(" ")[0]);
+      });
+      var bcs = cs("#empty-pick");
+      out.shape = { kids: kids.join("|"), w: bcs.width, h: bcs.height, radius: bcs.borderTopLeftRadius };
+      btn.click(); // the mock's pickAndOpen is the simulated native picker
+      out.pickedState = m.probe("state");
       m.setState("empty");
-      box.value = "";
-      box.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
-      out.blankState = m.probe("state");
-      m.setState("empty");
-      out.pickEn = m.q("#empty-pick").textContent.trim();
+      out.pickEn = m.q("#empty-pick .elabel").textContent.trim();
       m.applyLang("cn");
-      out.pickCn = m.q("#empty-pick").textContent.trim();
+      out.pickCn = m.q("#empty-pick .elabel").textContent.trim();
       m.applyLang("en");
       return out;
     })()`);
-  if (load.deadIds.length) bad("ids deleted by HD5/HD6 are back in the mock: " + load.deadIds.join(" "));
+  if (load.deadIds.length) bad("ids deleted by HD5/HD6/HD19 are back in the mock: " + load.deadIds.join(" "));
   if (load.barStray.length) bad("the mock topbar carries stray text (HD5): " + load.barStray.join(" | "));
   cmp("the only empty-state load entry is #empty-pick (Open file/打开文件)", [load.pickEn, load.pickCn], ["Open file", "打开文件"]);
-  cmp("HD6: Enter opens the typed path, an empty box never opens",
-    [load.prevented, load.typedState, load.blankState], [true, "opened", "empty"]);
+  cmp("HD19: one 156 px square-rounded button + hint opens the mock picker on click",
+    [load.shape.kids, load.shape.w, load.shape.h, load.shape.radius, load.pickedState],
+    ["BUTTON#empty-pick|DIV.hint", "156px", "156px", "16px", "opened"]);
   cmp("HD7: empty stage bleeds into the column, dashed border kept",
     [load.bleed.emptyMargin, load.bleed.emptyRadius, load.bleed.emptyBorder, load.bleed.stagePadding, load.bleed.frameRadius],
     ["0px", "0px", "dashed", "0px", "0px"]);
@@ -245,8 +256,8 @@ async function main() {
       out.h = [m.q("#btn-open"), m.q("#seal-recent-select"), m.q("#btn-console"), m.q("#btn-shortcuts")].map(function (e) { return Math.round(e.getBoundingClientRect().height); });
       return out;
     })()`);
-  cmp("HD8: header carries open → seal upload → recent seals → add mode → save → backend log → shortcuts", seals.barSeq,
-    "btn-open,btn-seal-upload,seal-recent-select,btn-seal-add,btn-save,btn-console,btn-shortcuts");
+  cmp("HD8: header carries open → seal upload → recent seals → add mode → cross-page add mode → save → backend log → shortcuts", seals.barSeq,
+    "btn-open,btn-seal-upload,seal-recent-select,btn-seal-add,btn-crosspage-add,btn-save,btn-console,btn-shortcuts");
   if (seals.dead.length) bad("HD11/HD12 deleted ids are back in the mock: " + seals.dead.join(" "));
   cmp("HD11: no pos/anchor/offset/pages input inside the sidebar panel",
     [seals.geoInputs, seals.addModeBefore.on, seals.addModeAfter.on, seals.addModeAfter.cursor, seals.addModeOff.on],
@@ -337,7 +348,7 @@ async function main() {
       var enLabel = m.qa('[data-i18n="api.apply.scale.ctl"]')[0].textContent;
       return { total: total, cnCount: cnCount, enCount: enCount, cnText: scaleLabel, enText: enLabel };
     })()`);
-  truthy("panel labels exist for every field group", labels.total >= 30);
+  truthy("panel labels exist for every field group (18 after Z5)", labels.total >= 17 && labels.total <= 18);
   cmp("cn mode renders cjk labels, en mode does not", [labels.cnCount === labels.total, labels.enCount === 0], [true, true]);
   truthy("scale label differs between languages", labels.cnText !== labels.enText && labels.cnText.length > 0 && labels.enText.length > 0);
 
@@ -370,49 +381,25 @@ async function main() {
   const seg = await evaluate(`
     (function () {
       var m = window.__autoStampMock;
-      m.setState("crosspage");
+      m.setState("crosspage");               // SP4: the placed strip instance
+      var placed = m.probe("crosspageAdd");
       var before = m.probe("strip");
       m.q('#crosspage-binding button[data-value="alternate"]').click();
       var pressed = m.q('#crosspage-binding button[data-value="alternate"]').getAttribute("aria-pressed");
       var after = m.probe("strip");
       return {
         model: m.S.p["ui.crosspage.binding"], pressed: pressed, probe: after,
-        sideBefore: before.side, visible: getComputedStyle(m.q("#panel-crosspage .body")).display,
+        placedMode: placed.mode, placedOn: placed.on, placedCp: placed.cpFields,
+        placedOffset: placed.startOffset, sideBefore: before.side,
+        cpVisible: getComputedStyle(m.q("#crosspage-binding")).display !== "none",
       };
     })()`);
-  cmp("binding segmented writes model + aria", { model: seg.model, pressed: seg.pressed }, { model: "alternate", pressed: "true" });
-  cmp("crosspage strips (10 pages, side right)", { strips: seg.probe.strips, side: seg.probe.side }, { strips: 10, side: "right" });
-  truthy("crosspage body visible in crosspage state", seg.visible !== "none");
-
-  // 5c. D2 vocabulary: right / alternate imply a cross-page stamp, none clears it
-  const bind = await evaluate(`
-    (function () {
-      var m = window.__autoStampMock;
-      m.setState("crosspage");
-      var out = {};
-      m.q('#crosspage-binding button[data-value="none"]').click();
-      out.none = {
-        model: m.S.p["ui.crosspage.binding"], cp: m.S.p["apply.crossPage"],
-        strips: m.probe("strip").strips, side: m.probe("strip").side,
-        cb: m.q('[data-field="api.apply.crossPage"]').checked,
-      };
-      m.q('#crosspage-binding button[data-value="right"]').click();
-      out.right = {
-        cp: m.S.p["apply.crossPage"], strips: m.probe("strip").strips,
-        cb: m.q('[data-field="api.apply.crossPage"]').checked,
-      };
-      m.q('#crosspage-binding button[data-value="none"]').click();
-      var cb = m.q('[data-field="api.apply.crossPage"]');
-      cb.checked = true;
-      cb.dispatchEvent(new Event("change", { bubbles: true }));
-      out.reopen = { binding: m.S.p["ui.crosspage.binding"], cp: m.S.p["apply.crossPage"] };
-      return out;
-    })()`);
-  cmp("binding=none clears apply.crossPage and every strip preview", bind.none,
-    { model: "none", cp: false, strips: 0, side: "none", cb: false });
-  cmp("binding=right restores the stamp and one strip per page", bind.right,
-    { cp: true, strips: 10, cb: true });
-  cmp("checking crossPage repairs the none binding edge", bind.reopen, { binding: "right", cp: true });
+  cmp("SP4 placement: mode button + placed strip at click height",
+    { on: seg.placedOn, cpFields: seg.placedCp, offset: seg.placedOffset, mode: seg.placedMode },
+    { on: true, cpFields: true, offset: 60, mode: "crosspage" });
+  cmp("binding segmented writes model + aria (selected strip)", { model: seg.model, pressed: seg.pressed }, { model: "alternate", pressed: "true" });
+  cmp("crosspage strips (5-page demo doc, one strip per page)", { strips: seg.probe.strips, side: seg.sideBefore }, { strips: 5, side: "right" });
+  truthy("cp group visible on the floating panel (SP4)", seg.cpVisible);
 
   // 5b. state machine drives surfaces (UI_SPEC §1)
   const vis = await evaluate(`
@@ -420,19 +407,19 @@ async function main() {
       var m = window.__autoStampMock;
       var out = {};
       var disp = function (sel) { var e = m.q(sel); return e ? getComputedStyle(e).display : "missing"; };
-      m.q('#split-mode button[data-value="off"]').click(); // plain pages: normal instances exist
       m.setState("stamp-selected");
+      m.drive("addInstance", {}); // plain instances exist from the add drivers
       out.selBoxCount = document.querySelectorAll("#preview-stage .instance .sel-box").length;
       out.selBoxShown = disp("#preview-stage .instance .sel-box") !== "none";
       m.setState("opened");
-      out.selBoxHiddenOpened = disp("#preview-stage .instance .sel-box") === "none";
+      out.selBoxHidden = m.probe("instances") === 0 &&
+        document.querySelectorAll("#preview-stage .instance .sel-box").length === 0;
       m.setState("empty");
       out.emptyShown = disp("#empty-state") !== "none" && disp("#preview-stage") === "none";
-      m.setState("crosspage");
-      out.crossBody = disp("#panel-crosspage .body") !== "none";
       m.setState("opened");
-      out.crossBodyHidden = disp("#panel-crosspage .body") === "none";
+      out.crossHidden = !m.probe("cpGroup").visible;
       m.setState("crosspage");
+      out.crossGroup = m.probe("cpGroup").visible;
       out.crossStrips = m.probe("strip").strips;
       m.setState("save-confirm");
       out.saveModalShown = disp("#save-modal") !== "none";
@@ -448,8 +435,11 @@ async function main() {
   const geo = await evaluate(`
     (function () {
       var m = window.__autoStampMock;
-      m.q('#split-mode button[data-value="off"]').click();  // D3: manual off -> plain pages
-      m.setState("stamp-selected");
+      m.drive("runSplit", { splitMode: "unsplit" });      // D3: plain pages via the drive API
+      m.setState("stamp-selected");                        // openFile resets instances, then place
+      var base = m.probe("instances");
+      m.drive("addInstance", { name: "A" });
+      m.drive("addInstance", { name: "B" });
       var host = m.q("#preview-stage");
       m.setParams({ "api.apply.scale": 0.5, "api.apply.pos": "10,10", "api.apply.anchor": "center" });
       var r = m.q("#preview-stage canvas").getBoundingClientRect();
@@ -461,12 +451,12 @@ async function main() {
         wide: wide, rot: m.S.p["apply.rotation"], scale: m.S.p["apply.scale"],
         splitAttr: host.dataset.split,
         selBoxes: m.qa("#preview-stage .instance .sel-box").length,
-        instances: m.probe("instances"),
+        instances: m.probe("instances") - base,
         pages: m.S.pages.length, splitOn: m.S.splitOn,
       };
     })()`);
   cmp("split off -> plain pages, selected instances in DOM",
-    { splitAttr: geo.splitAttr, splitOn: geo.splitOn, pages: geo.pages, instances: geo.instances, boxes: geo.selBoxes >= 1 },
+    { splitAttr: geo.splitAttr, splitOn: geo.splitOn, pages: geo.pages, instances: geo.instances, boxes: geo.selBoxes >= geo.instances },
     { splitAttr: "off", splitOn: false, pages: 5, instances: 2, boxes: true });
   truthy("scale clamp keeps the handle inside the page", geo.wide.left >= 0 && geo.wide.left + geo.wide.w <= geo.wide.cw + 1);
   cmp("rotation field", geo.rot, 90);
@@ -482,7 +472,7 @@ async function main() {
       return { pages: pages, strips: m.probe("strip"), state: m.probe("state") };
     })()`);
   cmp("2-up split geometry", { splitOn: split.pages.splitOn, pages: split.pages.pages, mode: split.pages.mode }, { splitOn: true, pages: 10, mode: "v2" });
-  cmp("crosspage strips", { strips: split.strips.strips, side: split.strips.side }, { strips: 10, side: "right" });
+  cmp("crosspage strips (split 10-page doc, one strip per page)", { strips: split.strips.strips, side: split.strips.side }, { strips: 10, side: "right" });
 
   // 8. size estimate follows the export params
   const est = await evaluate(`
@@ -507,11 +497,11 @@ async function main() {
       var m = window.__autoStampMock;
       m.setState("opened");
       var before = m.probe("instances");
-      m.q("#instance-add").click();
-      m.q("#instance-duplicate").click();
-      return { before: before, after: m.probe("instances") };
+      m.drive("addInstance", { name: "A" });
+      m.drive("duplicateInstance");
+      return { delta: m.probe("instances") - before };
     })()`);
-  cmp("instance add + duplicate", inst, { before: 2, after: 4 });
+  cmp("instance add + duplicate", inst, { delta: 2 });
 
   const errStates = await evaluate(`
     (function () {
@@ -537,6 +527,8 @@ async function main() {
     (function () {
       var m = window.__autoStampMock;
       m.setState("stamp-selected");
+      m.drive("addInstance", { name: "K" }); // keyboard targets placed instances
+      m.drive("addInstance", { name: "L" }); // Del keeps the selection (HD17 zero-OK)
       var out = { rows: m.qa("#shortcuts-table tr").length };
       var press = function (key, opt) {
         window.dispatchEvent(new KeyboardEvent("keydown", Object.assign({ key: key, bubbles: true, cancelable: true }, opt || {})));
@@ -565,7 +557,7 @@ async function main() {
       m.setState("opened");
       return out;
     })()`);
-  cmp("Del removes the selected instance", { before: keys.before, after: keys.delInstances }, { before: 4, after: 3 });
+  cmp("Del removes the selected instance", { delta: keys.delInstances - keys.before }, { delta: -1 });
   cmp("arrows nudge 1pt / Shift 10pt", keys.nudge, { a: 1, b: 10 });
   cmp("+ bumps scale by 0.01", keys.scaleStep, 0.01);
   cmp("Ctrl+S opens the save dialog", keys.saveModal, "save");

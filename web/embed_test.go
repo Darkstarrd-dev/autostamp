@@ -17,7 +17,12 @@ import (
 func TestEmbeddedShellFiles(t *testing.T) {
 	site := Static()
 	for _, name := range []string{
-		"index.html", "style.css", "app-i18n.js", "app-api.js", "app-shell.js",
+		"index.html", "style.css", "app-i18n.js", "app-api.js",
+		// The shell module group (split from app-shell.js 2026-11-05): the
+		// boot order in index.html is kernel -> ... -> verify.
+		"app-shell-kernel.js", "app-shell-instances.js", "app-shell-seals.js",
+		"app-shell-export.js", "app-shell-docops.js", "app-shell-chrome.js",
+		"app-shell-verify.js",
 		"favicon.svg",
 		// The pdf.js entry points: if these disappear the preview is dead,
 		// and a 404 in the browser is harder to trace than this failure.
@@ -139,7 +144,7 @@ func TestStaticServesAssetsWithTruthfulTypes(t *testing.T) {
 	for _, tc := range []struct {
 		path, want string
 	}{
-		{"/app-shell.js", "text/javascript"},
+		{"/app-shell-kernel.js", "text/javascript"},
 		{"/vendor/pdfjs/build/pdf.min.mjs", "text/javascript"},
 		{"/vendor/pdfjs/build/pdf.worker.min.mjs", "text/javascript"},
 		{"/vendor/pdfjs/image_decoders/pdf.image_decoders.min.mjs", "text/javascript"},

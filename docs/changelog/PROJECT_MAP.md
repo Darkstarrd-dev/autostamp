@@ -3,6 +3,67 @@
 > `PROJECT_MAP.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-11-09 — Z1–Z4：新增 `rotate.go`/`rotate_test.go` 行、`stamp.go` 行换义（Z4）、新增「（续）Z1–Z4」壳行
+
+- 头「最后核对」= 2026-11-09 Z1–Z4；HD19 降级为「上一轮」。
+- `internal/pdfcore`：新增 `rotate.go` 行（`RotatePNG` 先旋转整枚、bbox、最近邻、deg 0
+  恒等）；`stamp.go` 行换义（`Box` 条带框比 = **旋转后** bbox、`Strips` 输入 = 旋转位图、
+  每列竖条）；新增 `rotate_test.go` 行（5 个测试 + `TestRotatedStripsAreVerticalColumnsOfRotatedSeal`）。
+- `web/static`：新增「（续）Z1–Z4」行（`autoScale()`/创建复位覆写/`rotatedBitmapCanvas`/
+  `effectiveBitmap`/blend 回退 multiply/crosspage sel-box 隐藏规则删除/`#apply-blend`
+  `selected`/verify 断言）。
+
+## 2026-11-06 — HD19 空态简化：新增「（续）HD19」行、`index.html`/`app-shell`/`style.css`/`app-i18n` 行换义、计数 132 / 56
+
+- 头「最后核对」= 2026-11-06 HD19；计数改 i18n **132** / ui-ids **56**（历史链 267/96 → 63 → 59
+  仍留在本文历史段）。
+- `web/static/index.html` 行：启动页装载入口 = **只有 `#empty-pick` 一枚大按钮 + 一行 `.hint`**；
+  `#empty-path`、`#empty-pick-multi`、`#empty-pick-filter`、pathGrantId chip 已删。
+- `web/static/app-shell-*.js` 行：P1 打开流程里 HD19 起 `pickAndOpen()` 固定
+  `api.pick({filter:"pdf", multi:true})`，`openByPath(path)` = §7 驱动通道（不再有
+  `#empty-path` 的 `keydown` Enter）。
+- 新增「（续）HD19 空态简化」行：`index.html` + `app-shell-docops.js` +
+  `app-shell-chrome.js` + `style.css` + `docs/ui/mockup.html` + `tools/verify/*` 打开通道清单，
+  外加「已删 id（不再复活）/ 存活 id」对照。
+- `style.css` 行加 HD19 空态样式（flex 列居中 + 156 px 大方圆角 + `.hint` 560 px；删
+  `.msg`/`.btnrow`/`.pathrow`）；`app-i18n.js` 行 = 132 键 + `empty.hint` 换文本；
+  `ui-contract` 行 = 56 ids / 132 键；`ui-smoke` 行 + `shell-smoke` 行加 HD19 守卫；
+  `preview-smoke` 行打开通道 = `S.openByPath(path)`。
+
+## 2026-11-06 — SP5 右侧边栏退场：新增 SP5 壳行、`style.css` 行改单列 full-bleed、i18n 151 → 144
+
+- 头「最后核对」= 2026-11-06 SP5；计数改 i18n **144** / ui-ids **59**（历史 267/96 → 本文历史段）。
+- `web/static/index.html` 行：写明右侧边栏已删（`right-sidebar`/`panel`/`panel-actions`/
+  `save-open` 不存在）、导出设置段 `#panel-export` 在 `#save-modal` 内、保存入口 =
+  `#btn-save` + Ctrl+S；顺手去掉已消失的 `#asset-hooks` 引用。
+- 新增「（续）SP5 右侧边栏退场」行：四个文件的改动 + 「已删 id / 存活 id」清单
+  （`panel-export`/`export-mode`/`export-dpi`/`estimate*` 存活，宿主 = 保存 modal）。
+- `app-i18n.js` 行 = 144 键；`style.css` 行 = 单列 full-bleed + `.modal .section`/
+  `.modal .sec-title` 外壳 + `#save-modal` `max-height: 84vh` 内滚动；`ui-contract` 行 =
+  59 ids / 144 键 + §2 `i18nkey` 必须存在于 §4；`shell-smoke` 行 = SP5 gone-guard。
+
+## 2026-11-05 — SP1–SP4 侧栏收尾：`app-batch.js` 行删除（含 app-api preset 通道）、SP 壳行新增、i18n 267 → 151
+
+- `web/static/app-batch.js` 与其在 `app-api.js` 的 preset/rawBytes/fsPickDir 帮助器删除；
+  批处理/预设 UI、`#panel-seal/instances/split/batch/crosspage`、`#asset-hooks` 退出地图。
+- 新增「SP1–SP4 侧栏收尾」壳行：`app-pager.js` 纯缩略图条重写、`app-shell-seals/instances`
+  骑缝放置通道、`app-overlay` 骑缝实例手柄/纵拖、`app-shell-docops` `runSplit(opts)`、
+  probe `crosspageAdd`/`strips`。
+- `app-i18n.js` 行计数 267 → 151（`gen-i18n` 同步）。
+
+## 2026-11-05 — V7 滚轮：overlay 行删 `consumeWheel`、preview 行缩放接线、i18n 267、smoke 行更新
+
+- `app-overlay.js` 行：`hitTest/selectAt/beginDrag/moveDrag/endDrag`（`consumeWheel` 删除）；
+  `app-preview.js` 行：Ctrl+滚轮整页缩放接线在 `app-shell-chrome.js`、`probe()` 增 `zoom` 字样。
+- `app-i18n.js` 行 266 → 267（V7 `view.zoom.hint`）；`overlay-smoke` 行标注 V7 断言语义。
+
+## 2026-11-05 — 壳模块拆分：`app-shell.js` → `app-shell-*.js` 7 文件（AGENTS §5.35）
+
+- 头注记「真实形态」句改为模块组；`app-shell.js` 主行换名为 `app-shell-*.js`（7 文件）行 +
+  新「壳模块拆分」续行（门面 `S.` 通道、加载顺序、契约零变化、`tmp/split-shell.mjs` 留档）。
+- P4/P5/PD/HD8–HD18 续行的文件归属改写为具体模块（docops/export/seals/instances/chrome/verify）。
+- 拆分本身不改任何契约读数（96 ids / 63 fields / 266 键 / 14 路由），verify/tools 零改动。
+
 ## 2026-11-05 — HD17/HD18：`app-shell.js` 装载/实例/面板语义修订（`loadSeals` 只 prepare、快照式 `addInstance`、全删、`panelCollapsed` + fab）
 
 - 头「最后核对」并入 HD17–HD18（ui-ids 96、i18n 换键）；`app-seal.js` 行尾注记 upload/revert

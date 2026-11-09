@@ -10,7 +10,7 @@
 // Usage: node tools/verify/ui-contract.mjs
 // Exit: 0 = pass, 1 = failures (each printed with a CODE tag).
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -132,7 +132,10 @@ const dynKeys = (() => {
     for (const q of m[1].matchAll(/"([a-z][A-Za-z0-9_.]*)"/g)) out.add(q[1]);
   }
   for (const m of mock.matchAll(/toast\("([a-z][A-Za-z0-9_.]*)"/g)) out.add(m[1]);
-  for (const m of mock.matchAll(/, *"([a-z][A-Za-z0-9_.]*)", *"[^"]*"]/g)) out.add(m[1]);
+  // action arrays: ["Label", fn, "i18nkey", "中文"] — the captured key is always
+  // followed by the display copy, which contains a space (the bindPair id lists
+  // end in `…, "fs.pick.filePath"]` and must not match here).
+  for (const m of mock.matchAll(/, *"([a-z][A-Za-z0-9_.]*)", *"[^"]* [^"]*"]/g)) out.add(m[1]);
   for (const m of mock.matchAll(/"([a-z][A-Za-z0-9_.]*\.(?:btn|hint|on|ok|note|count|last|saved|ext))"/g)) out.add(m[1]);
   for (const junk of ["se", "export", "set", "key", "text", "k", "k."]) out.delete(junk);
   return [...out];
@@ -180,8 +183,20 @@ const shellI18nKeys = [...new Set([...shellMarkup.matchAll(/data-i18n(?:-title|-
 
 // HD8-HD12: toast()/hint strings live in the shell JS (t("seal.addMode.noseal"),
 // t("app.sealAddMode.hint")); they are part of the same vocabulary as markup.
-const shellJS = read("web/static/app-shell.js");
-const shellDynamicKeys = [...new Set([...shellJS.matchAll(/t\("([a-z][A-Za-z0-9_.]*)"/g)].map((m) => m[1]))];
+// The shell is a module group (app-shell-*.js); every file contributes to the
+// same dynamic i18n vocabulary.
+const shellJS = readdirSync(join(root, "web", "static"))
+  .filter((f) => f.endsWith(".js") && f !== "app-i18n.js")
+  .sort()
+  .map((f) => read(join("web", "static", f)))
+  .join("\n");
+const shellDynamicKeys = [...new Set([
+  ...[...shellJS.matchAll(/t\("([a-z][A-Za-z0-9_.]*)"/g)].map((m) => m[1]),
+  // The SHORTCUTS table references keys as array members (["Ctrl+D / Del",
+  // "instances.duplicate.btn", …]) and the modal renders t(key) at runtime.
+  ...(shellJS.match(/const SHORTCUTS = \[[\s\S]*?\];/g) || []).flatMap((block) =>
+    [...block.matchAll(/"([a-z][A-Za-z0-9_.]*)"/g)].map((m) => m[1])),
+])];
 const usedKeys = new Set([...mockI18nKeys, ...mockPlaceholders, ...dynKeys, ...shellI18nKeys, ...shellDynamicKeys]);
 for (const i of i18n) {
   if (!i.en || !i.cn) bad("E-I18N-EMPTY", `UI_SPEC §4 key "${i.key}" has empty en/cn`);
@@ -189,11 +204,18 @@ for (const i of i18n) {
 }
 
 // HD6: the empty state keeps exactly one load entry, and the two deleted buttons'
-// keys must stay out of the vocabulary.
+// keys must stay out of the vocabulary. SP5 (2026-11-06) retired the sidebar's
+// save button and the topbar language/theme labels, so those five keys must stay
+// out too. HD19 (2026-11-06) then reduced the empty state to the one big square
+// button + hint: the path box and the multi/filter option row lost their keys,
+// so those twelve keys must stay out as well.
 const pickBtn = i18n.find((i) => i.key === "empty.pick.btn");
 if (!pickBtn || pickBtn.en !== "Open file" || pickBtn.cn !== "打开文件")
   bad("E-I18N-PICK", `empty.pick.btn must be "Open file"/"打开文件", got ${JSON.stringify(pickBtn)}`);
-for (const k of ["empty.open.btn", "empty.upload.btn"])
+for (const k of ["empty.open.btn", "empty.upload.btn", "save.open.btn", "ui.lang.ctl", "ui.lang.hint", "ui.theme.ctl", "ui.theme.hint",
+  "empty.msg", "empty.path.placeholder", "api.fs.pick.filePath.ctl", "api.fs.pick.filePath.hint",
+  "api.fs.pick.multi.ctl", "api.fs.pick.multi.hint", "api.fs.pick.filter.ctl", "api.fs.pick.filter.hint",
+  "fs.pick.multi.on", "fs.pick.filter.pdf", "fs.pick.filter.all", "api.fs.pick.pathGrantId.hint"])
   if (i18nSet.has(k)) bad("E-I18N-GONE", `dropped key "${k}" is back in UI_SPEC §4`);
 // top.file.hint survives as the save/confirm path hint, bound on both elements.
 const hintRows = [...shellMarkup.matchAll(/id="(save-source|confirm-path)"[^>]*data-i18n="([^"]+)"/g)];
@@ -228,10 +250,15 @@ for (const s of mockStates) {
 for (const id of ids) if (!mockIds.includes(id)) bad("E-ID-MISS", `contract id "#${id}" not found in mock`);
 const dup = ids.filter((id) => (mock.match(new RegExp(`id="${id}"`, "g")) || []).length > 1);
 if (dup.length) bad("E-ID-DUP", `duplicate ids in mock: ${dup.join(", ")}`);
-// HD5/HD6 deleted these ids: neither the design artifact nor the shell may revive
-// them (the §6 block above already proves they are not contract ids).
+// HD5/HD6 deleted these ids; SP5 (2026-11-06) deleted the whole right sidebar
+// (#right-sidebar/#panel/#panel-actions/#save-open); HD19 deleted the empty
+// state's path box and option chips (#empty-path/#empty-pick-multi/#empty-pick-
+// filter): neither the design artifact nor the shell may revive them (the §6
+// block above proves they are not contract ids — the exact-quoted probe below
+// keeps #panel-export, a surviving id, alive).
 for (const [where, html] of [["mock", mock], ["web/static/index.html", shellMarkup]]) {
-  for (const id of ["top-file", "empty-upload", "empty-open", "file-input"]) {
+  for (const id of ["top-file", "empty-upload", "empty-open", "file-input", "right-sidebar", "panel", "panel-actions", "save-open",
+    "empty-path", "empty-pick-multi", "empty-pick-filter"]) {
     if (html.includes(`id="${id}"`)) bad("E-ID-GONE", `deleted id "#${id}" is still in ${where}`);
   }
 }

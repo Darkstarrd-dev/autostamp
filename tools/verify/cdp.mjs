@@ -128,6 +128,14 @@ export async function openChrome(opts) {
       const e = m.params.entry;
       if (e.level === "error") errors.push("log.error: " + e.text + " " + (e.url || ""));
     }
+    // uncaught script errors (e.g. a module that fails to parse) surface here,
+    // not consoleAPICalled: without this the shell group could silently miss a
+    // whole file and the checks below would still "pass" on stale hooks.
+    if (m.method === "Runtime.exceptionThrown") {
+      const d = m.params.exceptionDetails;
+      const desc = (d.exception && (d.exception.description || d.exception.value)) || d.text || "";
+      errors.push("uncaught: " + desc + " @ " + (d.url || "?") + ":" + (d.lineNumber ?? "?"));
+    }
     if (m.method === "Network.loadingFailed") failures.push(m.params.errorText + " " + (m.params.url || ""));
     if (m.method === "Network.responseReceived") {
       const r = m.params.response;

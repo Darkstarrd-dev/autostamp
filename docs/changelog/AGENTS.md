@@ -3,6 +3,110 @@
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-11-09 — §5 新增 44（IP1/IP2 印章参数面板停靠右缘 + 超高滚动）+ §5.30/§5.34 挂作废注记 + §11 一行新增
+
+- §5.44（IP1/IP2）：`#instance-panel` 从 HD12 悬浮锚点（贴选中实例框 + 翻转 + clamp + 跟随）
+  改停靠 `#preview` 右缘（`right/top/bottom:10px`，宽 236、z 8 不变）全高 +
+  `overflow-y:auto`（`overscroll-behavior:contain`）；`#instance-fab` 同角（右上）停靠；
+  `posInstancePanel` 锚点链删除、只留 show/hide（§7 名字不变）；面板出现条件 = 选中实例 +
+  文档（旧「实例框未绘制就不显示」box 语义作废）。
+- §5.30（HD12）挂 IP1 作废注记（悬浮锚点半边）；§5.34（HD18）挂锚位注记（fab/面板同角停靠）。
+- §11：新增「改实例参数面板停靠/滚动（IP1/IP2）」行。
+
+## 2026-11-09 — §5 新增 43（Z5 骑缝不匀切片模拟）+ §6 apply 词表 `slices` + §11 一行新增
+
+- §5.43（Z5）：cp 组「平均|随机」切档 + 覆盖率滑杆 + 重新随机按钮；随机取值写实例参数
+  `api.apply.slices`（首页 25~50%、末页 20~30%、中间页 = round(覆盖率 × 中间页数)、
+  沿页序一条平滑趋势、Σ=1、0 = 该页盖不到）；预览 `stripContext` 与落盘
+  `pdfcore.StripsFractions` 同一份分布按累计列切条。修订 §5.16/§5.42 的切片语义半边。
+- §6 `POST /api/pdf/apply`：实例字段表加 `slices`（只随骑缝实例发送；Σ≤1；0 槽 = 盖不到）。
+- settings 新字段对 `apply.sliceMode`（even|random，默认 even）/ `apply.cover`
+  （0..100，默认 75）—— Go `config` 三件套（types/defaults/patch/sanitize）+
+  `internal/api/apply.go` 词表校验（长度 = 作用页数、合计 ≤1、全 0 拒、非骑缝拒）。
+- §11：新增「改骑缝不匀切片模拟（Z5）」行。
+
+## 2026-11-09 — §5 新增 39–42（Z1–Z4：盖章默认 multiply / 42 mm 自动缩放 / 骑缝单击可选 / 骑缝先旋转后切）+ §11 两行新增
+
+- §5.39（Z1）：默认混合模式 = multiply 全链对齐 —— `#apply-blend` 与 mockup 预置
+  `selected`；`app-overlay.drawSeal` 的 `BLEND_GCO` 查不到回退由 normal 改 multiply。
+- §5.40（Z2）：新放置/复位实例 scale = 42 mm 章宽 ÷ 页显示宽（kernel `autoScale()`；
+  竖版宽 = 短边、横版按 42 mm 目标除以长边；A4 短边 595.28 回退；clamp 0.05..5）；
+  settings `apply.scale` 默认仍 0.202、`probe('defaults')` 镜像不变。
+- §5.41（Z3）：`style.css` 删 `[data-mode="crosspage"] .sel-box`/`.handle` 隐藏规则；
+  骑缝实例单击即选中（绿框 + 四角 + 旋转手柄），按下即拖（纵拖 = startOffset，SP4 不变）；
+  `hitTest` 骑缝跳过旋转反变换帧。
+- §5.42（Z4）：crossPage 实例 `rotation` ≠ 0 时先 `pdfcore.RotatePNG`（新文件）烘旋转
+  （屏幕顺时针、画布 = 旋转 bbox、最近邻、deg 0 恒等），再 `Strips` 按旋转位图切 N 条
+  竖列进页槽；`StampGeom.Aspect` 取旋转后比；预览 `rotatedBitmapCanvas`（`rotCache`
+  sealId×deg）+ `effectiveBitmap` 同源，实例不再 `ctx.rotate`。修订 §5.7/§5.17 的
+  条带语义半边。
+- §11：新增「改盖章默认值（Z1/Z2）」与「改骑缝条带旋转 / 可选中性（Z3/Z4）」两行。
+- §8 验收 10/12 语义扩展：`overlay-smoke` strip 加 Z3 单击/手柄 + Z4 旋转渐变三取样；
+  `apply-smoke` strip 加同 seal 旋转 90 竖条（每页上沿 = 印章左半色、下沿 = 右半色、
+  条带高 = 旋转 bbox）；`shell-smoke` 加 Z2 缩放断言与 Z3 手柄/单击断言；
+  `internal/pdfcore/rotate_test.go` 常驻（Go 测试新增 5 个）。
+
+## 2026-11-06 — §5.38 新增（HD19 空态只剩一枚大按钮）+ §5.23/§5.25 挂作废注记 + §11 两行换义 + §8 验收 7/9 换通道
+
+- §5.38：`#empty-state` 只剩**一枚居中的大方圆角按钮** `#empty-pick`（156×156、
+  `border-radius: 16px`）+ 一行 `.hint`；删路径框 `#empty-path`、「多文件」切档
+  `#empty-pick-multi`、「过滤」切档 `#empty-pick-filter`、pathGrantId chip 与 CSS
+  `.msg`/`.btnrow`/`.pathrow`；`pickAndOpen()` 固定 `api.pick({filter:"pdf", multi:true})`；
+  **`openByPath(path)` 退化为 §7 驱动通道**（同 SP1 切分词表语义）；ui-ids 59 → 56、
+  §4 144 → 132；`app-shell-chrome.js` 的 `#empty-path` keydown 接线删除。
+- §5.25（HD6）末尾追加「2026-11-06 起 HD19 再修订」括注（入口 ② 的路径框已删）；
+  §5.23 的「焦点在输入框（路径框语义）」改写为口令框 / 保存目标路径框并标注旧路径框已删。
+- §8 验收 7：`shell-smoke` 增 HD19 空态形态守卫（`#empty-state` = 一枚 `#empty-pick` +
+  一行 hint，三件删掉的控件不在 DOM）；验收 9：`preview-smoke` 打开通道 =
+  `S.openByPath(path)`（§7 驱动）。
+- §11：「改粘贴/拖拽装载」行装载入口 = `#empty-pick` 一枚大按钮（无路径框）；
+  「改 UI 契约 / 参数词表 / 顶栏形态」行启动页入口 = `#empty-pick`、`openByPath(path)` =
+  §7 驱动通道、决策表范围 = HD1–HD19 + SP1–SP5。
+
+## 2026-11-06 — §5.37 新增（SP5 右侧边栏退场）+ §5.36 挂 SP5 标记 + §11 导出/UI 契约两行换宿主
+
+- §5.37：右侧边栏**整块删除**（`<aside id="right-sidebar">`、`form#panel`、`#panel-actions`
+  含 `#save-open`）；导出设置段（`#panel-export` + 五个 `.field` + `#estimate`）迁入
+  `#save-modal`（`#save-source` 之后、`#save-pick` 之前），id/`data-field` 不变；`#app-main`
+  grid 改单列 full-bleed；`setState("export")` 不再开 `details`（12 态不变）；保存对话框唯一
+  入口 = `#btn-save` + Ctrl+S；ui-ids 63 → 59、§4 151 → 144、§2 `ui.lang`/`ui.theme` 的
+  `i18nkey` 改挂 `lang.en`/`theme.light`。
+- §5.36 末尾追加「2026-11-06 起 SP5 再修订」括注（段落正文不重写）。
+- §5.24（HD3）的「版式固定 two-col」标为当时形态 → SP5 单列；§5.33 的「侧栏『新增实例』按钮」
+  标为已随 SP1/SP5 退场（通道 = 加章模式 + 骑缝放置）。
+- §11：「改导出 DPI/质量」行的宿主列 = `index.html` 的 `#save-modal` 导出设置段 +
+  `app-shell-export/chrome` + `tools/verify/export-smoke.mjs`；「改 UI 契约」行写明导出段在
+  保存 modal 内、版式单列 full-bleed、决策表范围 HD1–HD18 + SP1–SP5。
+
+## 2026-11-05 — §5.36 新增（SP1–SP4 侧栏收尾）+ §8 验收 15 换「预设后端 Go 测试」+ §11 三行换义
+
+- §5.36：右侧边栏只剩导出段 + 动作段；`#panel-seal/instances/split/batch/crosspage` 与
+  `#asset-hooks` 删除、`app-batch.js` + preset 帮助器整块删除（后端路由/Go 测试保留）、
+  切分与去背与预设词表退回 §7 驱动、落盘链键盘化（Ctrl+Enter/Ctrl+Z）、SP2 分页条、
+  SP3 z 序、SP4 顶栏骑缝章放置 + 面板 cp 组（binding `none` = 逐实例降级）。
+- §8 验收 15：`batch-smoke.mjs` 随批处理 UI 删除；预设四路由由
+  `presetstore/store_test.go` + `api/seal_preset_test.go` 常驻钉住。
+- §11：「改预设库」改后端-only、「改批处理」拆成「改切分/落盘/批处理后端词表」+
+  新增「改骑缝章放置/面板组（SP4）」行。
+
+## 2026-11-05 — §5.14 修订（V7 取代 V3）+ §5.30 缩放通道 + §8.10 断言句 + §11 新「改滚轮/视口手势」行
+
+- §5.14：Ctrl+滚轮**恒为**整页视图缩放（seal/page 比例不变），V3 实例通道删除；
+  实例缩放 = 四角手柄 + `+/−` + 滑杆。§5.30 的「滚轮可超出 200%」半边移除。
+- §8.10：`overlay-smoke` 滚轮断言改为「视图 zoom 变、`apply.scale` 不变」。
+- §11：新增「改滚轮/视口手势」行（chrome `zoomBy` / preview `bindPan` / overlay 无通道）；
+  「改叠加层/印章通道」行去掉滚轮字样。
+
+## 2026-11-05 — 新增 §5.35（壳模块拆分）+ §3 目录行 + §11 六行改写到 `app-shell-*` 模块
+
+- §3：`web/static/` 列表拆出 `app-shell-{kernel,instances,seals,export,docops,chrome,verify}.js` 行。
+- §5.19/§5.23：光栅幂等与装载 gate 的文件归属改到 `app-shell-export.js` / `app-shell-docops.js`
+  + `app-shell-chrome.js`。
+- §5.35：拆分规则（加载顺序、`window.__autoStampShell` 唯一跨模块通道、`S.` 前缀、门面成员
+  零变化、生成器留档不重跑）；非 UI 语义 → 不占 `UI_SPEC §8` 决策表。
+- §11：改切分/叠加层/HD8–HD12/落盘/预估/导出/装载/HD13–HD16/HD17–HD18/UI 契约/i18n 各行文件
+  归属全部落到具体模块；新增「改壳模块」行。
+
 ## 2026-11-05 — 新增 §5.33/§5.34（HD17 装载不放置 + 实例全删；HD18 面板收起齿轮按钮）+ §5.23 修订 + §8.7 断言扩 + §11 新行
 
 - §5.33：装载通道（上传/下拉/粘贴/拖拽）只设当前印章；实例创建唯一通道 = 加章模式点击 /

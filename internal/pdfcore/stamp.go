@@ -150,9 +150,11 @@ type StampGeom struct {
 
 	// Slot indexes this stamp into the page list: Slot is the position within
 	// Pages (0-based) and PageNumber the 1-based page, which alternate binding
-	// needs (odd right, even left).
+	// needs (odd right, even left). SlotFrac is that slot's share of the
+	// whole-seal width (Z5 uneven slices; 0 = the even 1/SlotCount split).
 	Slot       int
 	SlotCount  int
+	SlotFrac   float64
 	PageNumber int
 }
 
@@ -189,6 +191,9 @@ func (g StampGeom) Box(pg Page) (Rect, error) {
 			return Rect{}, fmt.Errorf("条带序号 %d 超出 %d 页", g.Slot, g.SlotCount)
 		}
 		w := fullW / float64(g.SlotCount)
+		if g.SlotFrac > 0 {
+			w = fullW * g.SlotFrac // Z5: uneven slices widen/shrink the slot
+		}
 		h := fullW * aspect
 		// D2: single-sided keeps every half on the right; duplex alternates by
 		// physical page number (1-based, so the first half of a sheet is right).
@@ -306,7 +311,10 @@ func normalizeAngle(a float64) float64 {
 // Strips returns the vertical slices of a cross-page seal bitmap, one per slot,
 // encoded as PNG. Slice i is the columns [w*i/count, w*(i+1)/count) of the
 // image, full height - the mirror of app-overlay.js drawSeal, which paints the
-// i-th column of the bitmap into the i-th page slot.
+// i-th column of the bitmap into the i-th page slot. Under Z4 (2026-11-09) the
+// caller feeds Strips the *rotated* whole bitmap (RotatePNG): rotation is
+// baked before slicing, so each page's slice is a vertical column of the
+// turned seal, upright in its slot.
 //
 // The slices keep the image's own pixel grid, so the reassembled seal is
 // byte-identical to the original across the binding gutter (the P3 acceptance
@@ -338,6 +346,54 @@ func Strips(pngBytes []byte, count int) ([][]byte, error) {
 		}
 		var buf bytes.Buffer
 		if err := png.Encode(&buf, src.SubImage(image.Rect(x0, b.Min.Y, x1, b.Min.Y+h))); err != nil {
+			return nil, fmt.Errorf("条带 %d 编码失败: %w", i, err)
+		}
+		out[i] = buf.Bytes()
+	}
+	return out, nil
+}
+
+// StripsFractions slices the seal by *explicit per-slot fractions* (Z5,
+// 2026-11-09: 随机骑缝章 simulates real binding misalignment). fracs[i] is
+// page slot i's share of the whole-seal width; the slice columns follow the
+// cumulative sum, so consecutive covered slots keep the seal's own content
+// continuity (slot i shows the columns [cum(i-1), cum(i)) of the bitmap).
+// A fraction of 0 means the page gets **no strip at all** — the entry is nil,
+// the caller must skip placing that page. Fractions are validated against
+// 0..1 here; the cumulative pixel bounds round at each step so the reassembled
+// columns still tile the bitmap exactly once (the last bound is pinned to the
+// image edge). Strips (even) keeps the integer division so existing even-split
+// seams stay byte-identical; addInstance routes the uneven case here.
+func StripsFractions(pngBytes []byte, fracs []float64) ([][]byte, error) {
+	if len(fracs) < 1 {
+		return nil, fmt.Errorf("切片数必须 >= 1，收到 %d", len(fracs))
+	}
+	img, err := png.Decode(bytes.NewReader(pngBytes))
+	if err != nil {
+		return nil, fmt.Errorf("印章 PNG 解码失败: %w", err)
+	}
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	xs := make([]int, len(fracs)+1)
+	cum := 0.0
+	for i, f := range fracs {
+		if f < 0 || f > 1 {
+			return nil, fmt.Errorf("切片比例 %g 不在 0..1 之内", f)
+		}
+		cum += f
+		xs[i+1] = int(math.Round(float64(w) * math.Min(cum, 1)))
+	}
+	out := make([][]byte, len(fracs))
+	src, ok := img.(subImager)
+	if !ok {
+		return nil, fmt.Errorf("印章位图类型 %T 不支持按列切分", img)
+	}
+	for i := range fracs {
+		if xs[i+1] <= xs[i] {
+			continue // zero-width slot: the page gets no strip (nil entry)
+		}
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, src.SubImage(image.Rect(xs[i], b.Min.Y, xs[i+1], b.Min.Y+h))); err != nil {
 			return nil, fmt.Errorf("条带 %d 编码失败: %w", i, err)
 		}
 		out[i] = buf.Bytes()

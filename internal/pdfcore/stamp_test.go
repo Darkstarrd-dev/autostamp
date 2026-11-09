@@ -312,6 +312,91 @@ func TestStripsRejectsBadInput(t *testing.T) {
 	}
 }
 
+// Z5 (2026-11-09): uneven slices. The cumulative columns must stay
+// continuous across covered slots (content continuity), and a fraction of 0
+// answers a nil entry — the page gets no strip at all.
+func TestStripsFractionsUnevenColumnsStayContinuous(t *testing.T) {
+	const w, h = 100, 40
+	src := gradientSeal(t, w, h)
+	parts, err := StripsFractions(src, []float64{0.3, 0, 0.4, 0.3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parts) != 4 {
+		t.Fatalf("got %d strips, want 4", len(parts))
+	}
+	if parts[1] != nil {
+		t.Errorf("gap slot must answer a nil entry, got %d bytes", len(parts[1]))
+	}
+	wantW := []int{30, 0, 40, 30}
+	for i, p := range parts {
+		if wantW[i] == 0 {
+			continue
+		}
+		if b := mustDecode(t, p).Bounds(); b.Dx() != wantW[i] || b.Dy() != h {
+			t.Errorf("strip %d = %v, want width %d height %d", i, b.Dx(), wantW[i], h)
+		}
+	}
+
+	// Re-assemble the covered columns at their cumulative positions: every
+	// pixel of the original seal appears exactly once, in order.
+	full := mustDecode(t, src)
+	rebuilt := image.NewNRGBA(image.Rect(0, 0, w, h))
+	cums := []float64{0, 0.3, 0.3, 0.7}
+	for i, p := range parts {
+		if p == nil {
+			continue
+		}
+		img := mustDecode(t, p)
+		x0 := int(cums[i] * float64(w)) // exact here: w = 100
+		b := img.Bounds()
+		for y := 0; y < h; y++ {
+			for x := 0; x < b.Dx(); x++ {
+				rebuilt.SetNRGBA(x0+x, y, img.NRGBAAt(b.Min.X+x, b.Min.Y+y))
+			}
+		}
+	}
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			if full.NRGBAAt(x, y) != rebuilt.NRGBAAt(x, y) {
+				t.Fatalf("uneven seam mismatch at (%d,%d): %v vs %v", x, y, full.NRGBAAt(x, y), rebuilt.NRGBAAt(x, y))
+			}
+		}
+	}
+}
+
+func TestStripsFractionsRejects(t *testing.T) {
+	if _, err := StripsFractions(gradientSeal(t, 10, 10), nil); err == nil {
+		t.Error("empty slice list should fail")
+	}
+	if _, err := StripsFractions([]byte("not a png"), []float64{0.5, 0.5}); err == nil {
+		t.Error("garbage should fail")
+	}
+	if _, err := StripsFractions(gradientSeal(t, 10, 10), []float64{1.2, -0.2}); err == nil {
+		t.Error("out-of-range fractions should fail")
+	}
+}
+
+// The strip box answers to its own fraction: width = frac x (scale x pageW),
+// still pinned to the binding edge (right, D2).
+func TestBoxHonoursUnevenSlotFrac(t *testing.T) {
+	g := StampGeom{
+		Scale: 0.2, Aspect: 1, CrossPage: true, Binding: BindingRight,
+		StartOffset: 40, SlotCount: 4, Slot: 1, SlotFrac: 0.3, PageNumber: 2,
+	}
+	box, err := g.Box(a4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantW := 0.3 * 0.2 * a4.Width
+	if math.Abs(box.W-wantW) > 0.01 {
+		t.Errorf("uneven strip width = %g, want %g", box.W, wantW)
+	}
+	if wantX := a4.Width - wantW; math.Abs(box.X-wantX) > 0.01 {
+		t.Errorf("uneven strip pinned to right edge: x = %g, want %g", box.X, wantX)
+	}
+}
+
 func mustDecode(t *testing.T, b []byte) *image.NRGBA {
 	t.Helper()
 	img, err := png.Decode(bytes.NewReader(b))

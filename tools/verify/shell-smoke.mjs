@@ -13,9 +13,10 @@
 //     is represented by a data-field control (plus the reverse check)
 //   * the typed path box opens a document on Enter (HD6: no Open button beside it)
 //   * every data-i18n key resolves to non-empty en + cn text
-//   * the layout is fixed two-col (no density control anywhere), the topbar is
-//     icon-only with no text at all (HD5), and dropped ids never come back
-//     (deep-link states #crosspage and ?lang=cn stay checked)
+//   * the layout is single-col (SP5, 2026-11-06: no density control anywhere and
+//     no 380 px panel), the topbar is icon-only with no text at all (HD5), and
+//     dropped ids never come back (deep-link states #crosspage and ?lang=cn stay
+//     checked)
 //   * the icon tooltips (data-i18n-title) carry en + cn twins
 //   * 1280x720 and 1440x900 stay free of horizontal overflow
 //   * settings round-trip: the shell's PATCH is visible in GET /api/settings,
@@ -235,20 +236,22 @@ async function main() {
   if (cross !== "save-modal") bad("setModal failed: " + cross);
   await evaluate("window.__autoStampShell.setModal(null)");
 
-  // ---------- fixed two-col layout + i18n + theme ----------
-  // D-L1 is gone: the panel width is a constant, not one of three density modes.
+  // ---------- SP5 single-col layout + i18n + theme ----------
+  // The right sidebar is dead: #preview bleeds to both window edges, so its rect
+  // width equals #app-main's client width; the density attribute stays retired.
   const widths = await json(`(function(){
-    var sb = document.querySelector("#right-sidebar");
     var main = document.querySelector("#app-main");
     return JSON.stringify({
-      panel: Math.round(sb.getBoundingClientRect().width),
-      hidden: getComputedStyle(sb).display === "none",
+      sidebar: Boolean(document.querySelector("#right-sidebar")),
+      preview: Math.round(document.querySelector("#preview").getBoundingClientRect().width),
+      main: main.clientWidth,
       densityAttr: main.hasAttribute("data-density"),
     });
   })()`);
-  if (widths.panel < 200 || widths.panel > 480) bad("panel width out of range: " + JSON.stringify(widths));
-  if (widths.hidden) bad("the panel is hidden: the layout is fixed two-col");
+  if (widths.sidebar) bad("the right sidebar is back: the layout is single-col (SP5): " + JSON.stringify(widths));
+  if (Math.abs(widths.preview - widths.main) > 1) bad("the preview column does not fill the window: " + JSON.stringify(widths));
   if (widths.densityAttr) bad("#app-main still carries a data-density attribute");
+  console.log("  SP5 layout:", JSON.stringify(widths));
 
   // HD7 (2026-11-04): the left column bleeds - the empty card has no inset and
   // the stage has no padding, so pages sit flush against the container.
@@ -314,7 +317,7 @@ async function main() {
         var e = cat[k];
         var want;
         if (e) want = e.${lang};
-        else if (${lang} === "cn") want = el.getAttribute('data-i18n-cn');
+        else if ("${lang}" === "cn") want = el.getAttribute('data-i18n-cn');
         else return;
         if (want === null || want === undefined) return;
         if (el.textContent.trim() !== String(want).trim()) out.push(k + " => " + el.textContent.trim());
@@ -387,7 +390,10 @@ async function main() {
   const clamped = await getJSON(url + "/api/settings");
   cmp("out-of-range customDpi clamped to 600", clamped.data.settings.export.customDpi, 600);
 
-  // crosspage: binding=none must clear apply.crossPage (D2 invariant)
+  // SP1/SP4 (2026-11-05): the binding segment lives inside the floating panel
+  // and answers to the *selected* instance (the sidebar section is gone). With
+  // no instance selected the click only warns; the global default stays put —
+  // D2's "none" is a per-instance demotion now, not a global clear.
   const cp = await json(`(function(){
     var s = window.__autoStampShell;
     s.setParams({"api.apply.crossPage": true});
@@ -395,9 +401,10 @@ async function main() {
     var f = s.fields();
     return JSON.stringify({ cross: f["api.apply.crossPage"], binding: f["ui.crosspage.binding"], state: s.probe("state") });
   })()`);
-  cmp("binding=none clears apply.crossPage (D2)", cp, { cross: false, binding: "none", state: "opened" });
+  cmp("binding seg with no instance selected leaves the default alone", cp, { binding: "none", state: "opened" });
+  if ("cross" in cp) bad("no control backs apply.crossPage any more: " + JSON.stringify(cp));
   const fixedToast = await json("window.__autoStampShell.probe('toast')");
-  if (fixedToast.level !== "warn") bad("binding=none must warn, got " + JSON.stringify(fixedToast));
+  if (!fixedToast.open || fixedToast.level !== "warn") bad("binding seg with no selection must warn, got " + JSON.stringify(fixedToast));
 
   // instance list (decision I1) - HD17 (2026-11-05): boot seeds nothing, and
   // deletion goes all the way to zero (the old last-instance guard is gone).
@@ -496,6 +503,26 @@ async function main() {
   });
   if (keys.rows < 7) bad(`shortcuts table rows = ${keys.rows}, want >= 7 (UI_SPEC §5)`);
 
+  // SP5 (2026-11-06): the save dialog is the last home of the export vocabulary -
+  // #panel-export + #export-mode + #estimate-* now live inside #save-modal, while
+  // the sidebar's own #panel-actions / #save-open opener must stay dead.
+  const saveVocab = await json(`(function(){
+    var s = window.__autoStampShell;
+    s.setModal("save-modal");
+    var out = {
+      exportSection: Boolean(document.querySelector("#save-modal #panel-export")),
+      exportMode: Boolean(document.querySelector("#save-modal #export-mode")),
+      estimateTotal: Boolean(document.querySelector("#save-modal #estimate-total")),
+      panelActions: Boolean(document.querySelector("#panel-actions")),
+      saveOpen: Boolean(document.querySelector("#save-open")),
+    };
+    s.setModal(null);
+    return JSON.stringify(out);
+  })()`);
+  cmp("save dialog hosts the export vocabulary (SP5)", saveVocab, {
+    exportSection: true, exportMode: true, estimateTotal: true, panelActions: false, saveOpen: false,
+  });
+
   // deep link: #crosspage re-runs the state machine (UI_SPEC §7)
   await evaluate("window.__autoStampShell.setModal(null); window.__autoStampShell.setState('opened'); location.hash = 'crosspage';");
   await new Promise((r) => setTimeout(r, 250));
@@ -510,7 +537,16 @@ async function main() {
   cmp("document.title = AutoStamp <version>", await pageErr("window.__autoStampShell.probe('docTitle')"), "AutoStamp " + health.data.version);
   // the dropped ids must stay gone (UI_SPEC §6/§7 id contract; HD5 drops the
   // chip, HD6 drops the extra load entries and the hidden file input)
-  const dropped = ["app-version", "density-seg", "btn-upload", "btn-export", "recent-open", "recent-menu", "recent-clear", "empty-recent", "app-logo", "app-title", "top-file", "empty-upload", "empty-open", "file-input"];
+  const dropped = ["app-version", "density-seg", "btn-upload", "btn-export", "recent-open", "recent-menu", "recent-clear", "empty-recent", "app-logo", "app-title", "top-file", "empty-upload", "empty-open", "file-input",
+    // SP1 (2026-11-05): sidebar sections + assetId readout + strip panel must stay gone.
+    "asset-hooks", "panel-seal", "panel-instances", "panel-split", "panel-batch", "panel-crosspage", "strip-previews", "instance-add", "instance-duplicate", "instance-delete", "batch-start", "split-apply", "split-veto", "apply-write", "apply-undo",
+    // SP5 (2026-11-06): the right sidebar died with its form #panel, the action
+    // block #panel-actions and the #save-open opener (#save-modal is the opener).
+    "right-sidebar", "panel", "panel-actions", "save-open",
+    // HD19 (2026-11-06): the empty state is one centered #empty-pick button +
+    // the paste/drag hint. The path box, the multi/filter chips and the
+    // grant readout inside the empty state are gone for good.
+    "empty-path", "empty-pick-multi", "empty-pick-filter"];
   const revived = await pageErr(`(function(){
     var have = {};
     window.__autoStampShell.ids().forEach(function(id){ have[id] = true; });
@@ -544,6 +580,7 @@ async function main() {
       right: Math.round(tb.right),
       open: r("#btn-open"), save: r("#btn-save"), shortcuts: r("#btn-shortcuts"),
       upload: r("#btn-seal-upload"), recent: r("#seal-recent-select"), addmode: r("#btn-seal-add"),
+      xpage: r("#btn-crosspage-add"),
       console: r("#btn-console"),
       lang: r("#lang-seg"), theme: r("#theme-seg")
     });
@@ -551,8 +588,9 @@ async function main() {
   if (bar.open.x >= 30) bad(`#btn-open is not at the left edge: ${JSON.stringify(bar.open)}`);
   if (bar.save.x > bar.right / 2) bad(`#btn-save is not in the left half of the topbar: ${JSON.stringify([bar.save.x, bar.right])}`);
   // HD8 (UI_SPEC 8): the left cluster is one continuous icon row:
-  // open -> upload seal -> recent seals -> add-seal mode -> save.
-  for (const [a, b] of [["open", "upload"], ["upload", "recent"], ["recent", "addmode"], ["addmode", "save"]]) {
+  // open -> upload seal -> recent seals -> add-seal mode -> cross-page mode
+  // (SP4) -> save.
+  for (const [a, b] of [["open", "upload"], ["upload", "recent"], ["recent", "addmode"], ["addmode", "xpage"], ["xpage", "save"]]) {
     if (!(bar[b].x > bar[a].right)) bad(`#${a} -> #${b} are not consecutive: ${JSON.stringify([bar[a].right, bar[b].x])}`);
     if (bar[b].x - bar[a].right >= 24) bad(`#${a} -> #${b} gap too large (${bar[b].x - bar[a].right})`);
   }
@@ -561,14 +599,14 @@ async function main() {
   if (!(bar.console.x > bar.theme.right)) bad(`#btn-console is not right of the theme switch: ${JSON.stringify([bar.theme.right, bar.console.x])}`);
   if (!(bar.shortcuts.x > bar.console.right)) bad(`#btn-shortcuts is not right of the backend-log toggle: ${JSON.stringify([bar.console.right, bar.shortcuts.x])}`);
   if (bar.right - bar.shortcuts.right >= 24) bad(`#btn-shortcuts is not the rightmost control (topbar right ${bar.right}, button right ${bar.shortcuts.right})`);
-  for (const k of ["open", "upload", "addmode", "save", "console", "shortcuts"]) {
+  for (const k of ["open", "upload", "addmode", "xpage", "save", "console", "shortcuts"]) {
     if (bar[k].icons !== 1) bad(`#btn-${k} must hold exactly one inline svg icon: ${JSON.stringify(bar[k])}`);
     if (bar[k].text !== 0) bad(`#btn-${k} must be icon-only, found ${bar[k].text} text chars`);
     if (bar[k].w < 24 || bar[k].h < 24) bad(`icon button too small: ${k} ${JSON.stringify(bar[k])}`);
   }
   // HD15 (2026-11-05): every topbar control shares one height (icon buttons,
   // the recent-seal select, the language/theme segments) == 34px.
-  const hs = [bar.open, bar.upload, bar.recent, bar.addmode, bar.save, bar.lang, bar.theme, bar.console, bar.shortcuts].map((o) => o.h);
+  const hs = [bar.open, bar.upload, bar.recent, bar.addmode, bar.xpage, bar.save, bar.lang, bar.theme, bar.console, bar.shortcuts].map((o) => o.h);
   if (hs.some((h) => h !== hs[0])) bad(`topbar controls are not one height: ${JSON.stringify(hs)}`);
   if (hs[0] !== 34) bad(`topbar control height = ${hs[0]}, want 34`);
   truthy(`the language switch shows two text choices (中/EN): ${JSON.stringify([bar.lang.text, bar.lang.icons])}`, bar.lang.text > 0 && bar.lang.icons === 0);
@@ -691,7 +729,7 @@ async function main() {
   truthy("mixed PDF+image drop refused (PD2 mix)", gate.mixed && gate.mixed.load.kind === "reject" && gate.mixed.load.reason === "mix" && gate.mixed.prevented === true);
   truthy("mixed refusal toast names the mix", /不能混|never mixed/.test(gate.mixedToast.text || "") && gate.mixedToast.level === "warn");
   truthy("multi-PDF drop refused (PD2 multi)", gate.multi && gate.multi.load.kind === "reject" && gate.multi.load.reason === "multi");
-  truthy("multi-PDF refusal toast points at the batch panel", /批处理|batch/.test(gate.multiToast.text || ""));
+  truthy("multi-PDF refusal toast names the one-at-a-time rule", /一次只打开|one PDF/i.test(gate.multiToast.text || ""));
   truthy("foreign file drop refused (PD2 other)", gate.other && gate.other.load.kind === "reject" && gate.other.load.reason === "other");
   truthy("foreign refusal toast names the allowlist", /只支持|only PDF/.test(gate.otherToast.text || ""));
   truthy("single PDF drop opened the document (PD2)", gate.pdfOpened === true && gate.pdfDrop.during === true && gate.pdfDrop.after === "off" && gate.pageCount >= 1);
@@ -708,19 +746,16 @@ async function main() {
   truthy("file drops are always prevented from default navigation (PD2)", gate.pdfDrop.prevented === true);
   truthy("drop-hint affordance ships in the shell (PD2)", gate.dropHint === true);
 
-  // ---------- HD6: the typed path box is a load channel on its own ----------
-  // The empty state has no Open button any more, so Enter on #empty-path must go
+  // ---------- HD19: openByPath(path) is the §7 drive open channel ----------
+  // The path box is gone from the empty state (HD6's typed-path UI half died
+  // with HD19): the drive channel takes the path as an argument and must go
   // through /api/fs/pick (filePath) -> grant -> open, and the title must follow.
   const typedPath = join(sandbox, "typed-open.pdf");
   writeFileSync(typedPath, Buffer.from(pdfB64, "base64"));
   const typed = await json(`(async function () {
     var s = window.__autoStampShell;
-    var box = document.querySelector("#empty-path");
-    box.value = ${JSON.stringify(typedPath)};
-    var ev = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
-    box.dispatchEvent(ev);
     var out = { before: s.probe("chain").current };
-    out.prevented = ev.defaultPrevented;
+    s.openByPath(${JSON.stringify(typedPath)});
     out.opened = await new Promise(function (res) {
       var t0 = Date.now();
       var iv = setInterval(function () {
@@ -734,9 +769,37 @@ async function main() {
     out.toastText = (s.probe("toast") || {}).text || "";
     return JSON.stringify(out);
   })()`);
-  truthy(`Enter in #empty-path opened the typed file with no button (HD6): toast=${JSON.stringify(typed.toastText)} title=${JSON.stringify(typed.docTitle)}`,
-    typed.prevented === true && typed.opened === true && typed.pageCount >= 1
+  truthy(`openByPath(path) opened the typed file with no box/button (HD19): toast=${JSON.stringify(typed.toastText)} title=${JSON.stringify(typed.docTitle)}`,
+    typed.opened === true && typed.pageCount >= 1
       && /^AutoStamp .*typed-open\.pdf$/.test(typed.docTitle || ""));
+
+  // HD19 shape guard: the empty state is ONE centered large rounded-square
+  // button (#empty-pick, 156x156 / radius 16) plus the paste/drag hint — and
+  // nothing else (the path box / option chips never come back).
+  const emptyShape = await json(`(function(){
+    window.__autoStampShell.applyLang("en"); // deterministic labels (settings may be cn)
+    var es = document.querySelector("#empty-state");
+    var kids = Array.prototype.map.call(es.children, function (el) {
+      return el.tagName + (el.id ? "#" + el.id : "." + String(el.className).split(" ")[0]);
+    });
+    var cs = getComputedStyle(document.querySelector("#empty-pick"));
+    var eb = document.querySelector("#empty-state").getBoundingClientRect();
+    var pb = document.querySelector("#empty-pick").getBoundingClientRect();
+    return JSON.stringify({
+      kids: kids,
+      label: document.querySelector("#empty-pick").textContent.trim(),
+      centered: Math.abs((pb.left + pb.right) / 2 - (eb.left + eb.right) / 2) <= 2 &&
+                Math.abs((pb.top + pb.bottom) / 2 - (eb.top + eb.bottom) / 2) <= 45,
+      w: cs.width, h: cs.height, radius: cs.borderTopLeftRadius,
+      box: Boolean(document.querySelector("#empty-path")),
+      multi: Boolean(document.querySelector("#empty-pick-multi")),
+      filter: Boolean(document.querySelector("#empty-pick-filter"))
+    });
+  })()`);
+  cmp("HD19 empty state = one big square-rounded centered button + hint (no box/chips)",
+    [emptyShape.kids.join("|"), emptyShape.label, emptyShape.w, emptyShape.h, emptyShape.radius, emptyShape.centered,
+      [emptyShape.box, emptyShape.multi, emptyShape.filter].join(",")],
+    ["BUTTON#empty-pick|DIV.hint", "Open file", "156px", "156px", "16px", true, "false,false,false"]);
 
   // ---------- HD8-HD12: recent seals + add-seal mode + floating panel ----------
   // Same /api round-trips the header controls wire: the recent-seal record is
@@ -821,19 +884,31 @@ async function main() {
       out.countAfterClick = s.state.instances.length;
       out.newInstSealed = Boolean(sel && sel.sealId);
       out.newInstPages = sel ? String(sel.params["api.apply.pages"]) : null;
+      out.placedScale = sel ? sel.params["api.apply.scale"] : null;
+      out.autoScaleRef = s.autoScale();
+      out.pageW = (function () {
+        var pg = (s.state.file && s.state.file.pages || [])[0] || {};
+        var w = Number(pg.width) || 0, h = Number(pg.height) || 0;
+        if (Math.abs(Number(pg.rotation) || 0) % 180 === 90) { var t = w; w = h; h = t; }
+        return w;
+      })();
       out.page = String(window.__autoStampPreview.probe("page"));
-      // 5) HD18 + HD12: the panel is collapsed by default (gear fab), the fab
-      // opens it, and the panel still pins beside the selected instance box.
+      // 5) HD18 + HD12/IP1: the panel is collapsed by default (gear fab), the
+      // fab opens it, and the panel is DOCKED at the right edge of #preview
+      // (IP1, 2026-11-09: no more instance-box anchoring — the dock rect is
+      // fixed by CSS; read it from the preview column).
       out.panel0 = s.probe("instancePanel");
       document.querySelector("#instance-fab").click();
       out.panel = s.probe("instancePanel");
       (function () {
-        var ov = window.__autoStampOverlay;
-        var box = ov.state.rects.get(out.idAfterClick);
-        var cvr = ov.probe("canvasRect");
-        if (!box || !cvr) { out.boxOk = false; return; }
-        out.boxOk = true;
-        out.boxRight = cvr.left + (box.x + box.w) * ov.state.scale;
+        var pr = document.querySelector("#preview").getBoundingClientRect();
+        var q = document.querySelector("#instance-panel").getBoundingClientRect();
+        out.dock = {
+          rightGap: Math.round(pr.right - q.right),
+          topGap: Math.round(q.top - pr.top),
+          bottomGap: Math.round(pr.bottom - q.bottom),
+          w: Math.round(q.width),
+        };
       })();
       // 6) HD12: reset restores the snapshot defaults, remove drops the row
       var inst = s.state.instances.filter(function (i) { return i.id === out.idAfterClick; })[0];
@@ -842,21 +917,156 @@ async function main() {
       document.querySelector("#instance-reset").click();
       out.resetScale = inst.params["api.apply.scale"];
       out.defaultScale = (s.probe("defaults") || {})["api.apply.scale"];
+      out.autoScaleNow = s.autoScale();
       document.querySelector("#instance-remove").click();
       out.countAfterRemove = s.state.instances.length;
       out.selAfterRemove = s.state.selected;
-      // the panel answers to the *current* selection's box state (a selection
-      // whose seal is not painted has no box -> no panel; stale rows do)
-      (function () {
-        var ov = window.__autoStampOverlay;
-        out.panelForSel = ov.state.rects.has(s.state.selected) ? true : Boolean(ov.state.rects.get(s.state.selected));
-      })();
       out.panelAfterRemove = s.probe("instancePanel");
       // HD18: the gear fab re-opens the panel, the minimize button collapses it
       document.querySelector("#instance-fab").click();
       out.panelReopened = s.probe("instancePanel");
       document.querySelector("#instance-collapse").click();
       out.panelRecollapsed = s.probe("instancePanel");
+      // 7) SP4 (2026-11-05): cross-page placement mode. Mutual exclusion with
+      // the add-seal toggle; a page click drops a strip instance whose
+      // startOffset rides the click height; the panel's cp group shows only for
+      // that selection; binding none demotes it back to a page stamp.
+      var xbtn = document.querySelector("#btn-crosspage-add");
+      s.setAddMode(true);
+      xbtn.click();
+      out.excl = { add: s.probe("addMode"), xOn: xbtn.getAttribute("aria-pressed") === "true" };
+      var cbefore = s.state.instances.length;
+      var cr2 = document.querySelector("canvas.page-canvas").getBoundingClientRect();
+      document.querySelector("#preview-stage").dispatchEvent(new PointerEvent("pointerdown", {
+        bubbles: true, cancelable: true, button: 0, isPrimary: true,
+        clientX: cr2.left + 30, clientY: cr2.top + 160,
+      }));
+      var xsel = s.selectedInstance();
+      out.xPlaced = {
+        kept: s.state.instances.length === cbefore + 1,
+        cross: xsel ? xsel.crossPage === true : false,
+        pages: xsel ? String(xsel.params["api.apply.pages"]) : null,
+        start: xsel && xsel.params ? xsel.params["api.apply.startOffset"] : null,
+        scale: xsel && xsel.params ? xsel.params["api.apply.scale"] : null,
+      };
+      (function () {
+        var ov = window.__autoStampOverlay;
+        var cvr = ov.probe("canvasRect");
+        if (!cvr || xsel === null) { out.xStartOk = false; return; }
+        var want = (cr2.top + 160 - cvr.top) / ov.state.scale;
+        out.xStartOk = Math.abs(out.xPlaced.start - want) <= 10;
+      })();
+      // Z3 (2026-11-09, user fix): the placed strip answers the same
+      // affordance as any normal stamp - selection box + five handles - and a
+      // bare press+release click (no move, no hold) selects it again. The old
+      // CSS hid the strip's sel-box, so nothing appeared until you pressed and
+      // held.
+      out.xAffordance = (function () {
+        var el = document.querySelector('#stamp-layer .instance[data-mode="crosspage"]');
+        if (!el) return { selected: false, boxRects: 0, handles: 0 };
+        var sb = el.querySelector(".sel-box");
+        return {
+          selected: el.getAttribute("data-selected") === "true",
+          boxRects: sb ? sb.getClientRects().length : 0,
+          handles: el.querySelectorAll(".handle[data-handle]").length,
+        };
+      })();
+      out.xClick = (function () {
+        var sel0 = s.selectedInstance();
+        if (!sel0) return { selected: false, boxVisible: false };
+        s.selectInstance(null);
+        var ov = window.__autoStampOverlay;
+        var cvr = ov.probe("canvasRect");
+        var boxR = ov.state.rects.get(sel0.id);
+        if (!cvr || !boxR) return { selected: false, boxVisible: false };
+        // single click on the strip box centre (page-space -> client via the
+        // canvas rect + view scale), then the doc-level pointerup closes a
+        // zero-move drag.
+        var cx = cvr.left + (boxR.x + boxR.w / 2) * ov.state.scale;
+        var cy = cvr.top + (boxR.y + boxR.h / 2) * ov.state.scale;
+        var cv = document.querySelector("canvas.page-canvas");
+        cv.dispatchEvent(new PointerEvent("pointerdown", {
+          bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 11,
+          clientX: cx, clientY: cy,
+        }));
+        document.dispatchEvent(new PointerEvent("pointerup", {
+          bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 11,
+          clientX: cx, clientY: cy,
+        }));
+        var sel = s.selectedInstance();
+        var sb2 = document.querySelector('#stamp-layer .instance[data-mode="crosspage"] .sel-box');
+        return {
+          selected: Boolean(sel && sel.crossPage === true && sel.id === sel0.id),
+          boxVisible: Boolean(sb2 && sb2.getClientRects().length > 0),
+          state: s.probe("state"),
+        };
+      })();
+      document.querySelector("#instance-fab").click(); // expand the panel to read the cp group
+      out.cpProbe = s.probe("crosspageAdd");
+      (function () {
+        var pr = s.probe("strips");
+        out.stripCount = pr.count;
+        out.stripEdge = pr.strips[0] ? pr.strips[0].edge : null;
+        out.stripIndex = pr.strips[0] ? pr.strips[0].index : null;
+      })();
+      // Z5 (2026-11-09): 平均|随机 slice simulation. The deterministic core
+      // checks pin the user's mechanism (cover rounds the covered middle;
+      // first 25..50 / last 20..30; Σ=1; a smooth trend — adjacent shares may
+      // never zig-zag), then the live seg/retry/cover chain runs on the placed
+      // strip instance and finally even mode brings back the classic split.
+      out.z5 = (function () {
+        var o = {};
+        function lcg(seed) {
+          var x = seed;
+          return function () { x = (x * 1103515245 + 12345) % 2147483648; return x / 2147483648; };
+        }
+        var f = s.randomCrossFractions(12, 60, lcg(20261109));
+        var mid = f.slice(1, 11);
+        var covList = mid.filter(function (v) { return v > 0; });
+        var maxAdj = 0;
+        for (var zi = 1; zi < covList.length; zi += 1) maxAdj = Math.max(maxAdj, Math.abs(covList[zi] - covList[zi - 1]));
+        o.det = {
+          len: f.length,
+          sum: +f.reduce(function (a, v) { return a + v; }, 0).toFixed(6),
+          covered: covList.length, // round(60% x 10 middle pages) = 6
+          first: f[0], last: f[11],
+          smoothAdj: maxAdj,
+        };
+        var f2 = s.randomCrossFractions(2, 60, lcg(7));
+        o.det2 = Math.abs(f2[0] + f2[1] - 1) < 1e-3 && f2[0] >= 0.25 && f2[0] <= 0.5;
+        var f1 = s.randomCrossFractions(1, 60, lcg(7));
+        o.det1 = f1.length === 1 && f1[0] === 1;
+        // live chain on the placed instance:
+        var n = s.state.file.pageCount || 1;
+        var seg = document.querySelector("#crosspage-slicemode");
+        seg.querySelector("button[data-value='random']").click();
+        o.modeAfter = seg.querySelector("button[aria-pressed='true']").dataset.value;
+        var sl = (xsel.params || {})["api.apply.slices"] || null;
+        o.rolled = Array.isArray(sl) && sl.length === n;
+        o.randFieldVisible = !document.querySelector("#instance-panel .cp-rand").hidden;
+        var before = sl ? sl.join(",") : "";
+        document.querySelector("#crosspage-retry").click();
+        var after = (xsel.params || {})["api.apply.slices"] || [];
+        // a 1-page doc always re-rolls to the same single slot; only assert the
+        // values actually change where a change is physically possible.
+        o.retryOk = n >= 3 ? after.join(",") !== before : true;
+        s.setParams({ "ui.crosspage.cover": 60 });
+        var cov = ((xsel.params || {})["api.apply.slices"] || []).slice(1, n - 1)
+          .filter(function (v) { return v > 0; }).length;
+        var mm = Math.max(0, n - 2);
+        o.coverOk = mm === 0 || cov === Math.round(0.6 * mm);
+        seg.querySelector("button[data-value='even']").click();
+        o.evenCleared = (xsel.params || {})["api.apply.slices"] === undefined;
+        o.evenFieldHidden = document.querySelector("#instance-panel .cp-rand").hidden;
+        o.prUneven = s.probe("strips");
+        return o;
+      })();
+      document.querySelector("#crosspage-binding button[data-value='none']").click();
+      out.demoted = { crossPage: xsel.crossPage, pages: String(xsel.params["api.apply.pages"]) };
+      out.cpFieldsAfterDemote = s.probe("crosspageAdd").cpFields;
+      document.querySelector("#crosspage-binding button[data-value='right']").click();
+      out.respan = { cross: xsel.crossPage, pages: String(xsel.params["api.apply.pages"]) };
+      s.setCrosspageAdd(false); // never leak the mode into later checks
       // HD17: deletion goes to zero - no guard toast, state back to opened
       while (s.state.selected !== null) s.deleteSelected();
       out.zero = { count: s.state.instances.length, selNull: s.probe("selected") === null,
@@ -894,12 +1104,18 @@ async function main() {
       hd.newInstSealed === true && hd.idAfterClick !== null);
   truthy(`HD11: the clicked instance belongs to the page on screen only (pages=${JSON.stringify(hd.newInstPages)})`,
     String(hd.newInstPages) === String(hd.page));
-  truthy(`HD12: the floating panel is visible for the selected instance and pinned beside its box: panel=${JSON.stringify(hd.panel)} box=${hd.boxRight}`,
-    hd.panel && hd.panel.visible && hd.boxOk === true && hd.panel.left >= hd.boxRight - 1 &&
-      hd.panel.left <= hd.boxRight + 80);
-  truthy(`HD12: reset restores the default parameters, remove drops the row (selection moves): ${JSON.stringify({ resetScale: hd.resetScale, defaultScale: hd.defaultScale, counts: [hd.countBefore, hd.countAfterClick, hd.countAfterRemove], panel: hd.panelAfterRemove, forSel: hd.panelForSel })}`,
-    hd.resetScale === hd.defaultScale && hd.countAfterRemove === hd.countAfterClick - 1 &&
-      hd.selAfterRemove !== hd.idAfterClick && hd.panelAfterRemove.visible === hd.panelForSel);
+  truthy(`Z2: placement scale = 42 mm / page width (display width=${hd.pageW} pt): placed=${hd.placedScale} auto=${hd.autoScaleRef}`,
+    hd.placedScale != null && Math.abs(hd.placedScale - hd.autoScaleRef) < 1e-9 &&
+      Math.abs(hd.placedScale * hd.pageW - (42 * 72) / 25.4) < 0.05);
+  truthy(`IP1: the parameter panel is docked at the right edge of #preview (fixed rect, not anchored beside the instance box): ${JSON.stringify(hd.dock)}`,
+    hd.panel && hd.panel.visible === true && hd.dock && hd.dock.w === 236 &&
+      hd.dock.rightGap >= 8 && hd.dock.rightGap <= 12 &&
+      hd.dock.topGap >= 8 && hd.dock.topGap <= 12 &&
+      hd.dock.bottomGap >= 8 && hd.dock.bottomGap <= 12);
+  truthy(`HD12+Z2: reset restores the defaults + page-derived scale, remove drops the row (selection moves; the panel follows the selection, not the painted box): ${JSON.stringify({ resetScale: hd.resetScale, defaultScale: hd.defaultScale, autoScaleNow: hd.autoScaleNow, counts: [hd.countBefore, hd.countAfterClick, hd.countAfterRemove], panel: hd.panelAfterRemove })}`,
+    hd.resetScale === hd.autoScaleNow && hd.countAfterRemove === hd.countAfterClick - 1 &&
+      hd.selAfterRemove !== hd.idAfterClick &&
+      hd.panelAfterRemove.visible === (hd.countAfterRemove > 0 && hd.selAfterRemove !== null));
   truthy(`HD17: opening a seal through the dropdown never changes the instance list (${JSON.stringify([hd.countAtStart, hd.countAfterOpen])})`,
     hd.countAfterOpen === hd.countAtStart);
   truthy(`HD18: the panel starts collapsed (gear fab) and the fab opens it for the pinning check`,
@@ -907,6 +1123,71 @@ async function main() {
   truthy(`HD18: gear fab re-opens, minimize collapses again: ${JSON.stringify({ r: hd.panelReopened, c: hd.panelRecollapsed })}`,
     hd.panelReopened.visible === true && hd.panelRecollapsed.visible === false &&
       hd.panelRecollapsed.collapsed === true && hd.panelRecollapsed.fabVisible === true);
+
+  // IP2 (2026-11-09): the docked panel scrolls when its contents exceed the
+  // preview height. Force that condition with a short viewport, scroll the
+  // docked panel to its clamped maximum, then restore the normal viewport —
+  // and leave the panel collapsed again for the later checks.
+  await chrome.setViewport(1440, 430);
+  const ipscroll = await json(`(function () {
+    // No instance survives from the earlier checks (HD17 deleted to zero), and
+    // the panel only exists for a selection - place one, drive the scroll on
+    // the docked panel, then remove it again so later checks see the same
+    // empty-instance state as before.
+    var s = window.__autoStampShell;
+    var placed = false;
+    if (!s.state.selected) { s.addInstanceAt({ x: 300, y: 400 }); placed = true; }
+    var panel = document.querySelector("#instance-panel");
+    if (panel.hidden) document.querySelector("#instance-fab").click();
+    var cs = getComputedStyle(panel);
+    var scrollable = panel.scrollHeight > panel.clientHeight;
+    panel.scrollTop = 99999;
+    var maxScroll = panel.scrollTop;
+    panel.scrollTop = 0;
+    document.querySelector("#instance-collapse").click();
+    if (placed) s.deleteSelected();
+    return { overflow: cs.overflowY, scrollable: scrollable, maxScroll: maxScroll,
+      collapsed: window.__autoStampShell.probe("instancePanel").collapsed };
+  })()`);
+  await chrome.setViewport(1440, 900);
+  truthy(`IP2: the docked panel scrolls when its content exceeds the preview height: ${JSON.stringify(ipscroll)}`,
+    ipscroll && ipscroll.overflow === "auto" && ipscroll.scrollable === true &&
+      ipscroll.maxScroll > 0 && ipscroll.collapsed === true);
+  truthy("SP4: the cross-page toggle is mutually exclusive with the add-seal mode",
+    hd.excl && hd.excl.add === false && hd.excl.xOn === true);
+  truthy(`SP4: the page click drops a cross-page strip instance at the click height (start=${hd.xPlaced && hd.xPlaced.start}, scale=${hd.xPlaced && hd.xPlaced.scale})`,
+    hd.xPlaced && hd.xPlaced.kept && hd.xPlaced.cross === true &&
+      hd.xPlaced.pages === "all" && hd.xStartOk === true &&
+      Math.abs(hd.xPlaced.scale - hd.autoScaleRef) < 1e-9);
+  truthy(`Z3: the cross-page strip keeps its selection box + five handles: ${JSON.stringify(hd.xAffordance)}`,
+    hd.xAffordance && hd.xAffordance.selected === true && hd.xAffordance.boxRects > 0 &&
+      hd.xAffordance.handles === 5);
+  truthy(`Z3: a bare click on the strip re-selects it and shows the box (no press-and-hold): ${JSON.stringify(hd.xClick)}`,
+    hd.xClick && hd.xClick.selected === true && hd.xClick.boxVisible === true && hd.xClick.state === "stamp-selected");
+  truthy(`SP4: the panel cp group shows for the cross-page selection and echoes the vocabulary: ${JSON.stringify(hd.cpProbe)}`,
+    hd.cpProbe && hd.cpProbe.on === true && hd.cpProbe.cpFields === 3 &&
+      hd.cpProbe.binding === "right" && Math.abs(hd.cpProbe.startOffset - hd.xPlaced.start) <= 1);
+  truthy(`SP4: one right-edge strip on the current page (count=${hd.stripCount} edge=${hd.stripEdge} index=${hd.stripIndex})`,
+    hd.stripCount >= 1 && hd.stripEdge === "right" && hd.stripIndex === 0);
+  truthy(`Z5: the deterministic draw honours cover + first/last ranges + Σ=1 + smooth trend: ${JSON.stringify(hd.z5 && hd.z5.det)}`,
+    hd.z5 && hd.z5.det.len === 12 && hd.z5.det.covered === 6 &&
+      hd.z5.det.first >= 0.25 && hd.z5.det.first <= 0.5 &&
+      hd.z5.det.last >= 0.2 && hd.z5.det.last <= 0.3 &&
+      Math.abs(hd.z5.det.sum - 1) <= 1e-3 && hd.z5.det.smoothAdj <= 0.35);
+  truthy(`Z5: N=2 spans both pages (Σ=1, first in range) and N=1 takes the whole seal`,
+    hd.z5 && hd.z5.det2 === true && hd.z5.det1 === true);
+  truthy(`Z5: the live 随机/重试/覆盖率/平均 chain on the placed strip: ${JSON.stringify(hd.z5 && {
+    mode: hd.z5.modeAfter, rolled: hd.z5.rolled, rand: hd.z5.randFieldVisible,
+    retry: hd.z5.retryOk, cover: hd.z5.coverOk, even: hd.z5.evenCleared, hide: hd.z5.evenFieldHidden,
+  })}`,
+    hd.z5 && hd.z5.modeAfter === "random" && hd.z5.rolled === true &&
+      hd.z5.randFieldVisible === true && hd.z5.retryOk === true &&
+      hd.z5.coverOk === true && hd.z5.evenCleared === true && hd.z5.evenFieldHidden === true);
+  truthy(`SP4: binding=none demotes the selected instance to a current-page stamp: ${JSON.stringify(hd.demoted)}`,
+    hd.demoted && hd.demoted.crossPage === false && String(hd.demoted.pages) === String(hd.page) &&
+      hd.cpFieldsAfterDemote === 0);
+  truthy(`SP4: binding=right spans the same instance across pages again: ${JSON.stringify(hd.respan)}`,
+    hd.respan && hd.respan.cross === true && hd.respan.pages === "all");
   truthy(`HD17: instances delete down to zero without a guard, panel + fab hide: ${JSON.stringify(hd.zero)}`,
     hd.zero && hd.zero.count === 0 && hd.zero.selNull === true && hd.zero.state === "opened" &&
       hd.zero.bothHidden === true);

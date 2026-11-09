@@ -39,6 +39,11 @@ type StampInstance struct {
 	Opacity float64 // 0..1
 	Blend   Blend
 	Pages   []int
+
+	// Slices is the optional per-slot share of the whole-seal width (Z5):
+	// len == len(Pages), values 0..1; a 0 entry means the slot's page gets no
+	// strip at all. Empty = the even 1/len(Pages) split (the classic behaviour).
+	Slices []float64
 }
 
 // Stamp puts every instance on the document and returns the new bytes. Nothing
@@ -191,7 +196,9 @@ func groupByAppearance(instances []StampInstance) []stampPass {
 func addInstance(m map[int][]*model.Watermark, doc *Doc, in StampInstance) error {
 	if !in.Geom.CrossPage {
 		for _, p := range in.Pages {
-			w, err := newStamp(in, doc.Pages[p-1], in.Geom, in.PNG)
+			// A plain seal keeps its rotation live: pdfcpu rotates the bitmap
+			// about the box (no raster bake - the vector stays untouched).
+			w, err := newStamp(in, doc.Pages[p-1], in.Geom, in.PNG, normalizeAngle(in.Rot))
 			if err != nil {
 				return err
 			}
@@ -206,7 +213,42 @@ func addInstance(m map[int][]*model.Watermark, doc *Doc, in StampInstance) error
 	if in.Geom.SlotCount > 0 && in.Geom.SlotCount != count {
 		return fmt.Errorf("骑缝实例的 slotCount %d 与作用页数 %d 不一致", in.Geom.SlotCount, count)
 	}
-	strips, err := Strips(in.PNG, count)
+	// Z4 (2026-11-09, 用户指令): the strip order is **rotate the whole seal,
+	// then slice** - the rotation is baked into the bitmap before Strips, and
+	// every page gets a vertical column of the *rotated* seal. Slicing first
+	// and rotating each column in place (the old behaviour) tore the mark in
+	// halves and left the strips rotated against the binding gutter.
+	// The mirror on the preview side is app-overlay.js effectiveBitmap.
+	base := in.PNG
+	if rot := normalizeAngle(in.Rot); rot != 0 {
+		rotated, err := RotatePNG(in.PNG, rot)
+		if err != nil {
+			return fmt.Errorf("骑缝旋转整章: %w", err)
+		}
+		base = rotated
+	}
+	// Z5 (2026-11-09, 用户指令): the panel's 平均|随机 switch produces explicit
+	// per-slot fractions (api.apply.slices); a fraction of 0 means the page was
+	// picked as a gap (real bindings leave some pages unsealable). Without a
+	// slice list the classic even split runs unchanged — Strips' integer
+	// division is the byte-exact mirror of the preview's index/count columns,
+	// which is what the P3 seam assertion pins down.
+	even := len(in.Slices) == 0
+	var strips [][]byte
+	var err error
+	fracs := make([]float64, count)
+	for i := range fracs {
+		fracs[i] = 1 / float64(count)
+	}
+	if even {
+		strips, err = Strips(base, count)
+	} else {
+		if len(in.Slices) != count {
+			return fmt.Errorf("骑缝实例的切片数 %d 与作用页数 %d 不一致", len(in.Slices), count)
+		}
+		copy(fracs, in.Slices)
+		strips, err = StripsFractions(base, fracs)
+	}
 	if err != nil {
 		return fmt.Errorf("骑缝条带: %w", err)
 	}
@@ -215,19 +257,39 @@ func addInstance(m map[int][]*model.Watermark, doc *Doc, in StampInstance) error
 	// fullWidth x (whole-seal aspect). Deriving the aspect from the slice bytes
 	// would make every strip count x too tall (measured 2026-11-02: a wide seal
 	// on a 2-page spread drew its half-seal box, and the read-back pixel check
-	// found the strip bottom exactly one strip-height off).
-	pw0, ph0 := pxDims(in.PNG)
+	// found the strip bottom exactly one strip-height off). With Z4 the aspect
+	// comes from the *rotated* whole bitmap - the bbox dims RotatePNG grows the
+	// canvas to, the same formula the preview canvas computes with.
+	pw0, ph0 := pxDims(base)
 	if pw0 < 1 || ph0 < 1 {
 		return fmt.Errorf("印章 %s 的位图尺寸非法", in.SealID)
 	}
 	wholeAspect := SealAspect(pw0, ph0)
+	allGap := true
+	for _, s := range strips {
+		if s != nil {
+			allGap = false
+			break
+		}
+	}
+	if allGap {
+		return fmt.Errorf("骑缝实例的切片全为 0，没有任何页面可盖章")
+	}
 	for slot, p := range in.Pages {
+		if strips[slot] == nil {
+			continue // Z5 gap page: the binding left this page unsealable
+		}
 		g := in.Geom
 		g.Aspect = wholeAspect
 		g.Slot = slot
 		g.SlotCount = count
+		if !even {
+			g.SlotFrac = fracs[slot] // Z5; even path keeps the classic division in Box
+		}
 		g.PageNumber = p
-		w, err := newStamp(in, doc.Pages[p-1], g, strips[slot])
+		// Rotation is already baked into the strip bitmap: the strip pass
+		// places it upright (0 degrees).
+		w, err := newStamp(in, doc.Pages[p-1], g, strips[slot], 0)
 		if err != nil {
 			return err
 		}
@@ -244,9 +306,10 @@ func addInstance(m map[int][]*model.Watermark, doc *Doc, in StampInstance) error
 // ContentBytesForPageRotation wrap the whole page content, the stamp included),
 // those numbers are *display* space coordinates - what the panel, the ruler and
 // the overlay all speak - translated only by the y-flip over the display
-// height, never by a rotation. The seal's own rotation is passed through
-// as-is for the same reason.
-func newStamp(in StampInstance, pg Page, g StampGeom, png []byte) (*model.Watermark, error) {
+// height, never by a rotation. The seal's own rotation (rot) is passed through
+// as-is for the same reason; a cross-page strip passes 0 (its rotation is
+// baked into the strip bitmap by RotatePNG, Z4).
+func newStamp(in StampInstance, pg Page, g StampGeom, png []byte, rot float64) (*model.Watermark, error) {
 	if pg.Width <= 0 || pg.Height <= 0 {
 		return nil, fmt.Errorf("页 %d 尺寸未知，无法放印章 %s", pg.Number, in.SealID)
 	}
@@ -282,7 +345,7 @@ func newStamp(in StampInstance, pg Page, g StampGeom, png []byte) (*model.Waterm
 		Scale:    box.W / float64(pw),
 		ScaleAbs: true,
 		InpUnit:  types.POINTS,
-		Rotation: in.Rot,
+		Rotation: rot,
 		Opacity:  in.Opacity,
 	}, nil
 }

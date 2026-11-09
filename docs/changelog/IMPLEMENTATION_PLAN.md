@@ -3,6 +3,53 @@
 > `docs/IMPLEMENTATION_PLAN.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-11-06 — §10.1 登记「空态只剩一枚大按钮（HD19）」+ 头「最后核对」并入 HD19
+
+- 头并入 HD19 轮：ui-ids 59 → 56、i18n 144 → 132、`#empty-state` 只剩 `#empty-pick` 大按钮 +
+  一行 hint、`openByPath(path)` 退回 §7 驱动通道（AGENTS §5.38、`UI_SPEC §8` HD19，
+  **作废 HD6 的路径框半边**）；SP5 降级为「上一轮」。
+- §10.1 新行：来源 = 用户 2026-11-06 对话指令；状态 = 已实现（本提交）；验收 = `ui-contract`
+  （i18n=132 / ids=56）+ `ui-smoke` OK（mock 点 `#empty-pick` 开样本）+ `shell-smoke` HD19
+  空态形状守卫 + `preview-smoke`/`overlay-smoke` 打开链走 `S.openByPath(path)`。
+- P1 实测段（§P1）「真 exe + 真 UI 打开」的句子改为 `S.openByPath(path)` 的 §7 驱动通道（HD19）。
+- §10.1 的「HD5/HD6/HD7」行挂注记：路径框半边已被 HD19 作废（`#empty-path` 删除、
+  该流程由 `S.openByPath(typedPath)` 驱动）。
+
+## 2026-11-06 — §10.1 登记「右侧边栏退场 SP5」+ 头「最后核对」并入 SP5
+
+- 头并入 SP5 轮：ui-ids 63 → 59、i18n 151 → 144、导出设置段迁 `#save-modal`、grid 单列
+  full-bleed（AGENTS §5.37、`UI_SPEC §8` SP5）。
+- §10.1 新行（人工验收模式）：来源 = 用户 2026-11-06 对话指令；状态 = **已登记**（门槛
+  `build.ps1 -Task vet,test,verify` 在本轮文档切流之后跑）；实测列 = `ui-contract` OK
+  （i18n=144 / ui-ids=59 / fields=63 / states=12）+ `ui-smoke`/`shell-smoke` 全绿；覆盖面 =
+  §2 `i18nkey` 换键、§3 导出五行宿主列、§4 七键删除 + `gen-i18n.mjs` 重跑、前端
+  `index.html`/`style.css`/`app-shell-kernel`/`app-shell-chrome` + mockup 镜像。
+
+## 2026-11-05 — §10.1 登记「侧栏收尾 SP1–SP4」（删四面板 + 分页条瘦身 + z 序 + 骑缝章放置模式）
+
+- 头「最后核对」并入 SP1–SP4（ui-ids 96 → 63、i18n 267 → 151、`app-batch.js`/
+  `batch-smoke` 删除）。§10.1 新行：用户 2026-11-05 对话指令五项（四面板 + assetId
+  容器删除；分页条纯缩略图 z 轴自适应 + 2px 间距 + 无 All；预览卡层级；顶栏骑缝章
+  放置模式 + 面板 cp 组最小化；侧栏骑缝章段删除）与实测门槛数字。
+
+## 2026-11-05 — §10.1 登记「滚轮恒为整页缩放（V7）」（取代 V3 的实例缩放通道）
+
+- 头「最后核对」并入 V7（i18n = 267）。§10.1 新行：用户修正指令（滚轮针对全局、
+  seal/page 比例不变）→ `consumeWheel` 删除、chrome 滚轮恒 `zoomBy`；`overlay-smoke`
+  drag 段断言换义（V3 旧断言删除）；§4 增 `view.zoom.hint`（266 → 267）。门槛
+  `build.ps1 -Task verify` = **失败 0 / 跳过 0**（116 s，新 exe 全链）：`overlay-smoke` ok
+  （新 wheel 断言「滚轮过印章：视图 zoom 变、`apply.scale` 严格不变」在内）、
+  `preview/apply/export/batch/pixel-matrix/webview` 回归全绿、`shell-smoke`
+  ids=108 fields=63 states=12；`ui-contract` = 96 ids / 267 键 / 14 路由三方一致；
+  `ui-smoke` OK（i18nKeys=209、0 error）。
+
+## 2026-11-05 — §10.1 登记「壳模块拆分」（app-shell.js → app-shell-*.js 7 文件）
+
+- 头「最后核对」换成本轮摘要（HD13–HD18 + 拆分；i18n=266、ui-ids=96）。
+- §10.1 新行：拆分方式/文件清单/门面通道/契约零变化/首轮两处生成器遗留 bug（`ov.probe(`
+  误改名、chrome 裸引用 `refreshSettings`）与修复、门槛全绿实测（verify 失败 0 / 跳过 0）。
+- P2/P3/P5 段内旧 `app-shell.js` 文件名改到对应模块（docops/export）。
+
 ## 2026-11-05 — §10.1 登记 HD17–HD18（装载不放置 + 实例全删 + 面板默认收起齿轮）
 
 - §10.1 表新增一行「装载不放置 + 实例全删 + 面板收起（HD17/HD18）」：契约面 §4/§6/§7/§7.1、

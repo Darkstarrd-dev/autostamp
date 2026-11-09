@@ -258,7 +258,7 @@ function instanceParams(o) {
     "api.apply.anchor": o.anchor || "tl",
     "api.apply.offset": o.offset || "150,300",
     "api.apply.pos": o.offset || "150,300",
-    "api.apply.rotation": 0,
+    "api.apply.rotation": o.rotation || 0,
     "api.apply.pages": "all",
     "api.apply.crossPage": Boolean(o.crossPage),
     "api.apply.startOffset": o.startOffset || 0,
@@ -348,13 +348,25 @@ async function checkMatrix(app, grantId, sealId) {
 
 // ---------- 段 2:骑缝章落盘 --------------------------------------------
 
-async function checkStrips(app, grantId, sealId, fixture) {
+async function checkStrips(app, grantId, sealId, fixture, opts) {
+  const rot = (opts && opts.rotation) || 0;
   const pageW = fixture.pageW;
   const pageCount = fixture.pageCount;
-  const aspect = fixture.sealHeight / fixture.sealWidth;
+  // Z4 (2026-11-09): for a rotated cross-page seal the strip box aspect comes
+  // from the ROTATED bbox (RotatePNG grows the canvas; for an exact 90 that is
+  // simply width/height swapped). rot = 0 keeps the unrotated aspect.
+  const aspect = rot ? fixture.sealWidth / fixture.sealHeight : fixture.sealHeight / fixture.sealWidth;
   const stripW = (STRIP_SCALE * pageW) / pageCount;
   const stripH = STRIP_SCALE * pageW * aspect;
   const midY = STRIP_START + stripH / 2;
+  // For rot = 90 the mid line is the rotated seal's L/R boundary (a solid
+  // seam), so the width checks move to a stable top band 6 pt below the strip
+  // top - the rotated whole seal's top half = the seal's LEFT half colour.
+  const bandY = STRIP_START + 6;
+  // rot = 90: at the fit-zoom used here the strip bottom lands inside pdf.js's
+  // bilinear edge band at -1.5 pt (the rot = 0 run lands clean), so the bottom
+  // probe for the rotated run moves 3 pt in.
+  const bottomInset = rot ? 3 : 1.5;
 
   const probeAt = (x, y) =>
     `Array.from(window.__autoStampOverlay.sample(${x}, ${y}, 2, 2, 'composite').data).slice(0, 3)`;
@@ -366,7 +378,7 @@ async function checkStrips(app, grantId, sealId, fixture) {
       await sh.adopt(info);
       sh.state.instances.forEach((i) => { i.sealId = null; });
       sh.addInstance('cross', ${JSON.stringify(
-        instanceParams({ blend: "normal", opacity: 1, scale: STRIP_SCALE, offset: "0,0", crossPage: true, startOffset: STRIP_START, binding: "right" })
+        instanceParams({ blend: "normal", opacity: 1, scale: STRIP_SCALE, offset: "0,0", rotation: rot, crossPage: true, startOffset: STRIP_START, binding: "right" })
       )});
       sh.setSealForSelected(${JSON.stringify(sealId)});
       await new Promise((r) => setTimeout(r, 120));
@@ -410,9 +422,12 @@ async function checkStrips(app, grantId, sealId, fixture) {
           rightInside: ${probeAt(pageW - 3.5, midY)},
           leftInside: ${probeAt(pageW - stripW + 2.5, midY)},
           leftOutside: ${probeAt(pageW - stripW - 3, midY)},
+          rightNearTop: ${probeAt(pageW - 3.5, bandY)},
+          leftNearTop: ${probeAt(pageW - stripW + 2.5, bandY)},
+          leftOutsideNearTop: ${probeAt(pageW - stripW - 3, bandY)},
           insideTop: ${probeAt(pageW - 10, STRIP_START + 1.5)},
           aboveTop: ${probeAt(pageW - 10, STRIP_START - 2)},
-          insideBottom: ${probeAt(pageW - 10, STRIP_START + stripH - 1.5)},
+          insideBottom: ${probeAt(pageW - 10, STRIP_START + stripH - bottomInset)},
           belowBottom: ${probeAt(pageW - 10, STRIP_START + stripH + 2)},
           untouched: ${probeAt(100, STRIP_START + stripH / 2)},
         });
@@ -438,29 +453,131 @@ async function checkStrips(app, grantId, sealId, fixture) {
     bad("骑缝回读页数不对: " + JSON.stringify(got.read).slice(0, 240));
     return;
   }
-  got.read.forEach((r, i) => {
-    const want = i === 0 ? HALF_L : HALF_R;
-    // 逐页一条 + 切分顺序:拼回正确 = 第 1 页拿左半色,第 2 页拿右半色。
-    within(`页 ${r.page} 右缘条带 == 印章${i === 0 ? "左" : "右"}半`, r.rightInside, want, 6);
-    if (!isClose(r.leftInside, want, 6)) bad(`页 ${r.page} 条带左边界内 1.5 pt 不是印章(条带过窄)`);
-    if (isClose(r.leftOutside, want, 6)) bad(`页 ${r.page} 条带左边界外 2 pt 仍是印章(条带过宽)`);
-    if (!isClose(r.insideTop, want, 6)) bad(`页 ${r.page} startOffset 内 1.5 pt 不是印章(下移过多)`);
-    if (!isClose(r.aboveTop, GROUND, 6)) bad(`页 ${r.page} startOffset 上方 2 pt 不是底(上边界错): ${r.aboveTop.join(",")}`);
-    if (!isClose(r.insideBottom, want, 6)) bad(`页 ${r.page} 条带下边界内 1.5 pt 不是印章(高度错)`);
-    if (!isClose(r.belowBottom, GROUND, 6)) bad(`页 ${r.page} 条带下方 2 pt 不是底(过高): ${r.belowBottom.join(",")}`);
-    if (!isClose(r.untouched, GROUND, 6)) bad(`页 ${r.page} 框外(页左部)被盖住了: ${r.untouched.join(",")}`);
-    if (i > 0) {
-      // 两页的条带必须取印章的不同部分:同色 = 同一块切片(顺序错/重复)。
-      if (isClose(r.rightInside, got.read[0].rightInside, 8)) bad(`页 ${r.page} 条带色与页 1 相同(切分顺序或重复贴章)`);
-    }
-  });
+  if (rot === 0) {
+    got.read.forEach((r, i) => {
+      const want = i === 0 ? HALF_L : HALF_R;
+      // 逐页一条 + 切分顺序:拼回正确 = 第 1 页拿左半色,第 2 页拿右半色。
+      within(`页 ${r.page} 右缘条带 == 印章${i === 0 ? "左" : "右"}半`, r.rightInside, want, 6);
+      if (!isClose(r.leftInside, want, 6)) bad(`页 ${r.page} 条带左边界内 1.5 pt 不是印章(条带过窄)`);
+      if (isClose(r.leftOutside, want, 6)) bad(`页 ${r.page} 条带左边界外 2 pt 仍是印章(条带过宽)`);
+      if (!isClose(r.insideTop, want, 6)) bad(`页 ${r.page} startOffset 内 1.5 pt 不是印章(下移过多)`);
+      if (!isClose(r.aboveTop, GROUND, 6)) bad(`页 ${r.page} startOffset 上方 2 pt 不是底(上边界错): ${r.aboveTop.join(",")}`);
+      if (!isClose(r.insideBottom, want, 6)) bad(`页 ${r.page} 条带下边界内 1.5 pt 不是印章(高度错)`);
+      if (!isClose(r.belowBottom, GROUND, 6)) bad(`页 ${r.page} 条带下方 2 pt 不是底(过高): ${r.belowBottom.join(",")}`);
+      if (!isClose(r.untouched, GROUND, 6)) bad(`页 ${r.page} 框外(页左部)被盖住了: ${r.untouched.join(",")}`);
+      if (i > 0) {
+        // 两页的条带必须取印章的不同部分:同色 = 同一块切片(顺序错/重复)。
+        if (isClose(r.rightInside, got.read[0].rightInside, 8)) bad(`页 ${r.page} 条带色与页 1 相同(切分顺序或重复贴章)`);
+      }
+    });
+  } else {
+    // Z4 先旋转后切:旋转 90 的整枚印章按页切竖条。旋转结果的上半 = 印章左半色、
+    // 下半 = 印章右半色,每页同一条竖带;条带高 = 旋转 bbox 的高(90 时 = 原宽)。
+    // 旧「先切后转」的错误落盘在这里会表现为:页 1 全左半色、页 2 全右半色,且
+    // 单页上下等宽 —— insideBottom/页间差异断言二者必拦其一。
+    got.read.forEach((r, i) => {
+      within(`页 ${r.page} 旋转后条带上沿 == 印章左半色(Z4 先旋转后切)`, r.rightNearTop, HALF_L, 6);
+      within(`页 ${r.page} 旋转后条带下沿 == 印章右半色(Z4 先旋转后切)`, r.insideBottom, HALF_R, 6);
+      if (!isClose(r.leftNearTop, HALF_L, 6)) bad(`页 ${r.page} 条带上沿带左边界内 1.5 pt 不是印章(条带过窄)`);
+      if (isClose(r.leftOutsideNearTop, HALF_L, 6)) bad(`页 ${r.page} 条带上沿带左边界外 2 pt 仍是印章(条带过宽)`);
+      if (!isClose(r.insideTop, HALF_L, 6)) bad(`页 ${r.page} 条带上边界内 1.5 pt 不是左半色(下移/上边界错): ${r.insideTop.join(",")}`);
+      if (!isClose(r.aboveTop, GROUND, 6)) bad(`页 ${r.page} startOffset 上方 2 pt 不是底(上边界错): ${r.aboveTop.join(",")}`);
+      if (!isClose(r.belowBottom, GROUND, 6)) bad(`页 ${r.page} 条带下方 2 pt 不是底(过高): ${r.belowBottom.join(",")}`);
+      if (!isClose(r.untouched, GROUND, 6)) bad(`页 ${r.page} 框外(页左部)被盖住了: ${r.untouched.join(",")}`);
+      if (i > 0) {
+        // 每页都是旋转整枚印章的同一条竖带:上下两沿必须同色;若页 1 只有左半、
+        // 页 2 只有右半(旧错误)则在近上沿带处页间不同色。
+        if (!isClose(r.rightNearTop, got.read[0].rightNearTop, 8)) bad(`页 ${r.page} 条带上沿与页 1 不同色(先切后转的旧错误)`);
+      }
+    });
+  }
   console.log(
-    `  ok 骑缝落盘:逐页一条、按切分顺序对应印章左右半、bbox 误差 <= 1 pt ` +
+    `  ok 骑缝落盘:逐页一条竖条${rot ? "(先旋转后切,Z4)" : "、按切分顺序对应印章左右半"}、bbox 误差 <= 1 pt ` +
       `(条带宽 ${stripW.toFixed(2)} pt x 高 ${stripH.toFixed(2)} pt,右缘 x ∈ [${(pageW - stripW).toFixed(1)}, ${pageW.toFixed(1)}], y ∈ [${STRIP_START}, ${(STRIP_START + stripH).toFixed(1)}])`
   );
   // W2:落盘后叠加层必须没有实例(否则下一次保存会再盖一次)。
   if (!got.chain || !got.chain.apply) bad("链上没有 apply asset");
   if (got.chain && got.chain.instances.length !== 0) bad(`落盘后实例未清空(W2): ${JSON.stringify(got.chain.instances)}`);
+}
+
+// Z5 (2026-11-09): uneven slices on the disk — the front-end's fractions ride
+// the apply request and pdfcore.StripsFractions must cut per-page widths at
+// cumulative columns. The splitSeal fixture paints the seal's left half
+// HALF_L and right half HALF_R, so every probe point's colour follows from the
+// seal column fraction under the strip; a fraction of 0 must answer no ink.
+async function checkStripsUneven(app, grantId, sealId, fixture, slices) {
+  const pageW = fixture.pageW;
+  const pageCount = fixture.pageCount;
+  if (slices.length !== pageCount) {
+    bad(`checkStripsUneven: slices 长度 ${slices.length} != 页数 ${pageCount}`);
+    return;
+  }
+  const fullW = STRIP_SCALE * pageW;
+  const stripH = STRIP_SCALE * pageW * (fixture.sealHeight / fixture.sealWidth);
+  const midY = STRIP_START + stripH / 2;
+  const cum = [0];
+  for (let i = 0; i < pageCount; i++) cum.push(cum[i] + slices[i]);
+  // Expected colour at a probe offset from the strip's own left edge: the seal
+  // column fraction (cumulative + offset/fullW) >= 0.5 answers HALF_R.
+  const colWant = (pageFrac) => (pageFrac >= 0.5 ? HALF_R : HALF_L);
+  const label = `slices [${slices.join(", ")}]`;
+
+  const got = await app.evaluate(
+    `(async () => {
+      const api = window.__autoStampApi, sh = window.__autoStampShell, p = window.__autoStampPreview;
+      const slices = ${JSON.stringify(slices)};
+      const FULLW = ${fullW};
+      const info = await api.request('/api/pdf/open', { method: 'POST', body: { pathGrantId: ${JSON.stringify(grantId)} } });
+      await sh.adopt(info);
+      sh.state.instances.forEach((i) => { i.sealId = null; });
+      sh.addInstance('cross', ${JSON.stringify(
+        Object.assign(instanceParams({ blend: "normal", opacity: 1, scale: STRIP_SCALE, offset: "0,0", rotation: 0, crossPage: true, startOffset: STRIP_START, binding: "right" }),
+          { "api.apply.slices": slices })
+      )});
+      sh.setSealForSelected(${JSON.stringify(sealId)});
+      await new Promise((r) => setTimeout(r, 120));
+      const applied = await sh.stampIntoPDF({ quiet: true });
+      if (!applied || !applied.assetId) return { badApply: true };
+      const read = [];
+      for (let n = 1; n <= info.pageCount; n++) {
+        await p.goTo(n);
+        await new Promise((r) => setTimeout(r, 220));
+        const w = slices[n - 1] * FULLW;
+        read.push({
+          page: n,
+          rightInside: Array.from(window.__autoStampOverlay.sample(${pageW} - 3.5, ${midY}, 2, 2, 'composite').data).slice(0, 3),
+          leftInside: Array.from(window.__autoStampOverlay.sample(${pageW} - w + 2.5, ${midY}, 2, 2, 'composite').data).slice(0, 3),
+          leftOutside: Array.from(window.__autoStampOverlay.sample(${pageW} - w - 3, ${midY}, 2, 2, 'composite').data).slice(0, 3),
+          untouched: Array.from(window.__autoStampOverlay.sample(100, ${midY}, 2, 2, 'composite').data).slice(0, 3),
+        });
+      }
+      return { read, chain: sh.probe('chain') };
+    })()`
+  );
+  if (got.badApply) {
+    bad(`${label}: 落盘没有回新 asset`);
+    return;
+  }
+  if (!Array.isArray(got.read) || got.read.length !== pageCount) {
+    bad(`${label}: 回读页数不对: ${JSON.stringify(got.read).slice(0, 240)}`);
+    return;
+  }
+  got.read.forEach((r, i) => {
+    const f = slices[i];
+    if (f === 0) {
+      if (!isClose(r.rightInside, GROUND, 6)) bad(`${label}: 页 ${r.page} 切片 0 仍盖章 ${r.rightInside.join(",")}`);
+      if (!isClose(r.untouched, GROUND, 6)) bad(`${label}: 页 ${r.page} 切片 0 页左部被盖住`);
+      return;
+    }
+    const rightWant = colWant(cum[i] + (f * fullW - 3.5) / fullW);
+    const leftWant = colWant(cum[i] + 2.5 / fullW);
+    if (!isClose(r.rightInside, rightWant, 6)) bad(`${label}: 页 ${r.page} 右缘色 ${r.rightInside.join(",")} want [${rightWant.join(",")}] (累计 ${cum[i].toFixed(2)} + 宽 ${f})`);
+    if (!isClose(r.leftInside, leftWant, 6)) bad(`${label}: 页 ${r.page} 左缘内色 ${r.leftInside.join(",")} want [${leftWant.join(",")}] (条带宽 != frac x 整章宽)`);
+    if (isClose(r.leftOutside, HALF_L, 6) || isClose(r.leftOutside, HALF_R, 6)) bad(`${label}: 页 ${r.page} 左缘外 3 pt 仍是印章(宽错)`);
+    if (!isClose(r.untouched, GROUND, 6)) bad(`${label}: 页 ${r.page} 框外被盖住: ${r.untouched.join(",")}`);
+  });
+  console.log(`  ok 不匀切片落盘 ${label}:每页宽 = frac x 整章宽、按累计列对应左右半色、0 槽不盖章`);
+  if (got.chain && got.chain.instances.length !== 0) bad(`${label}: 落盘后实例未清空: ${JSON.stringify(got.chain.instances)}`);
 }
 
 // HD11: "stamp on the page you stamp on" — pages word "2" must put ink on
@@ -522,11 +639,10 @@ async function checkChain(app, grantId, sealId, sandbox) {
       const info = await api.request('/api/pdf/open', { method: 'POST', body: { pathGrantId: ${JSON.stringify(grantId)} } });
       await sh.adopt(info);
       const before = { id: sh.probe('chain').current, pages: p.probe('pageCount') };
-      // 手动 2 拼(面板词表 v2):切点 0.5,rows 1 / cols 2 -> A4 变两份。
-      sh.setParam('ui.split.mode', 'v2');
-      const cut = await sh.runSplit();
+      // 手动 2 拼:SP1 后切分没有 UI 控件,词表走 §7 驱动 —— runSplit(opts)
+      // 每次调用带 API 词表(splitMode/rows/cols)。rows 1 / cols 2 -> A4 变两份。
+      const cut = await sh.runSplit({ splitMode: "rows-cols", rows: 1, cols: 2 });
       const afterSplit = { id: sh.probe('chain').split, pages: p.probe('pageCount') };
-      const vetoChips = document.querySelectorAll('#split-veto button[data-veto-page]').length;
       // 切完再盖章:印章必须落在切分后的新 asset 上。
       sh.state.instances.forEach((i) => { i.sealId = null; });
       sh.addInstance('after-cut', ${JSON.stringify(instanceParams({ blend: "multiply", opacity: 1, scale: 0.15 }))});
@@ -538,8 +654,7 @@ async function checkChain(app, grantId, sealId, sandbox) {
       const grant = await api.request('/api/fs/pick', { method: 'POST', body: { filePath: ${JSON.stringify(target)}, filter: 'pdf' } });
       const gid = (((grant.picks || [])[0] || {}).pathGrantId) || '';
       const reopened = gid ? await api.request('/api/pdf/open', { method: 'POST', body: { pathGrantId: gid } }) : { code: 'no_grant' };
-      sh.setParam('ui.split.mode', 'off');
-      return { before, afterSplit, cut: Boolean(cut), vetoChips, applied: Boolean(applied), chain, saved, reopened };
+      return { before, afterSplit, cut: Boolean(cut), applied: Boolean(applied), chain, saved, reopened };
     })()`
   );
 
@@ -549,8 +664,9 @@ async function checkChain(app, grantId, sealId, sandbox) {
   } else {
     console.log(`  ok 切分链:${res.before.pages} 页 -> ${res.afterSplit.pages} 页,split asset ${String(res.afterSplit.id).slice(0, 8)}…`);
   }
-  if (res.vetoChips !== 0) bad(`A4 竖排页不该被判定为 2 拼(chips = ${res.vetoChips}, want 0)`);
-  else console.log("  ok 已判定页 chip 行为空(A4 竖排不是 2 拼,D3 不用否决)");
+  const spreadPages = await app.evaluate(`window.__autoStampShell.spreadPages().length`);
+  if (spreadPages !== 0) bad(`A4 竖排页不该被判定为 2 拼(spreadPages = ${spreadPages}, want 0)`);
+  else console.log("  ok 2 拼判定为空(A4 竖排不是 2 拼,D3 无需否决)");
   if (!res.applied) bad("切分后的 asset 上盖章失败");
   if (!res.chain.apply || !res.chain.current) bad("链上 apply/current asset 缺失: " + JSON.stringify(res.chain).slice(0, 200));
   if (res.chain.current !== res.chain.apply) bad("当前文档应是落盘后的 asset(W2)");
@@ -688,13 +804,25 @@ async function main() {
       if (!info) throw new Error("two-page fixture 打不开");
       const pages = info.pages || [];
       if (pages.length < 2) bad(`两页样本页数 = ${pages.length}, want 2(printToPDF 分页未生效?)`);
-      await checkStrips(app, grant, splitSeal.sealId, {
+      const f = {
         pageW: (pages[0] && pages[0].width) || 595.28,
         pageH: (pages[0] && pages[0].height) || 841.89,
         pageCount: info.pageCount || pages.length,
         sealWidth: splitSeal.srcWidth,
         sealHeight: splitSeal.srcHeight,
-      });
+      };
+      await checkStrips(app, grant, splitSeal.sealId, f);
+      // Z4 (2026-11-09): same seal, rotation 90 - the whole seal is rotated
+      // FIRST, then cut into vertical page columns. Each page gets the same
+      // column of the rotated bitmap (clockwise 90 turns the seal's left half
+      // to the strip's TOP half); strip height = rotated bbox height. The old
+      // slice-then-rotate order is rejected by the per-page colour asserts.
+      await checkStrips(app, grant, splitSeal.sealId, f, { rotation: 90 });
+      // Z5 (2026-11-09): uneven slices ride the apply request: 0.7+0.3 puts a
+      // wider column on page 1 (cumulative content + per-page width asserted),
+      // 1+0 means page 2 answers NO ink (the seam page is missed physically).
+      await checkStripsUneven(app, grant, splitSeal.sealId, f, [0.7, 0.3]);
+      await checkStripsUneven(app, grant, splitSeal.sealId, f, [1, 0]);
       cmp("两页样本的 seal 纵横比来源", splitSeal.srcWidth > 0, true);
     }
     if (runPart("perpage")) {

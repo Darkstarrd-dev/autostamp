@@ -75,12 +75,12 @@ body, button, input, select { font: inherit; }
 button { cursor: pointer; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* ---- layout: fixed two columns (UI_SPEC §8 HD3) ---- */
+/* ---- layout: single column, full bleed (SP5 2026-11-06: the right sidebar is gone) ---- */
 #app-main {
   display: grid; height: 100vh;
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
-  grid-template-areas: "topbar topbar" "preview panel";
+  grid-template-areas: "topbar" "preview";
 }
 
 /* ---- topbar ---- */
@@ -127,30 +127,36 @@ input[type="text"] { width: 100%; }
 #empty-state {
   flex: 1; display: none; border: 2px dashed var(--border);
   background: var(--surface); padding: 28px; text-align: center;
-}
-#empty-state .msg { font-size: 16px; margin-bottom: 6px; }
-#empty-state .hint { color: var(--muted); margin-bottom: 16px; }
-#empty-state .btnrow { display: flex; gap: var(--gap); justify-content: center; flex-wrap: wrap; }
-html[data-state="empty"] #empty-state { display: block; }
+  flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+ }
+#empty-state .hint { color: var(--muted); max-width: 560px; }
+#empty-pick { width: 156px; height: 156px; border-radius: 16px; font-size: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+#empty-pick .ic { width: 44px; height: 44px; }
+html[data-state="empty"] #empty-state { display: flex; }
 html[data-state="empty"] #preview-stage, html[data-state="empty"] #page-pager { display: none; }
 
-/* state-driven surface visibility (UI_SPEC §1: the state machine drives the UI) */
-html[data-state="empty"] .btn, html[data-state="empty"] #preview-ruler, html[data-state="empty"] #pixel-readout { visibility: hidden; }
+/* state-driven surface visibility (UI_SPEC §1: the state machine drives the UI).
+   HD19 (2026-11-06): the chrome rule scopes to the topbar - the empty state's sole
+   load entry #empty-pick must stay visible (it is a .btn too). */
+html[data-state="empty"] #topbar .btn, html[data-state="empty"] #preview-ruler, html[data-state="empty"] #pixel-readout { visibility: hidden; }
 html:not([data-state="stamp-selected"]):not([data-state="stamp-dragging"]):not([data-state="stamp-resizing"]) .instance .sel-box { display: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-html:not([data-state="crosspage"]) #panel-crosspage .body, html:not([data-state="crosspage"]) #strip-previews { display: none; }
-html:not([data-state="crosspage"]):not([data-state="split-preview"]) #panel-crosspage summary { color: var(--muted); }
 html[data-state="stamp-dragging"] #preview-stage, html[data-state="stamp-resizing"] #preview-stage { cursor: grabbing; }
 /* HD10: add-seal mode turns the stage into a placement cursor. */
 html[data-state] #preview-stage[data-add="on"] { cursor: copy; }
 
-/* HD12: the floating per-instance panel (mirrors style.css). The mock keeps it
-   visible; app-shell pins it to the selected instance's right edge at runtime. */
+/* IP1/IP2 (2026-11-09, mirrors style.css): the per-instance parameter panel
+   is docked at the right edge of the preview area, full height, scrollbar
+   when the content exceeds it. */
 #instance-panel {
-  position: absolute; right: 10px; top: 76px; width: 236px; z-index: 30;
+  position: absolute; right: 10px; top: 76px; bottom: 10px; width: 236px; z-index: 30;
+  overflow-y: auto; overscroll-behavior: contain;
   background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
   box-shadow: var(--shadow); padding: 8px; display: flex; flex-direction: column; gap: 6px;
 }
+/* IP2 mirror: children keep natural height so the container produces the
+   overflow that the scrollbar rides. */
+#instance-panel > * { flex: none; }
 #instance-panel .ip-title { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-weight: 600; }
 #instance-collapse.ip-min { padding: 0; width: 22px; height: 22px; flex: none; }
 /* HD18: collapsed = the square rounded gear button (same demo anchor). */
@@ -162,9 +168,19 @@ html[data-state] #preview-stage[data-add="on"] { cursor: copy; }
 }
 #instance-fab[hidden] { display: none; }
 #instance-panel .flabel { font: var(--mono); font-size: 11px; color: var(--muted); }
+/* SP5: single-col full-bleed made the cp-group tag rows reach the viewport
+   edge; the label wraps instead of growing the document (mirrors style.css). */
+#instance-panel .flabel { flex-wrap: wrap; row-gap: 2px; }
 #instance-panel .num-pair input[type="range"] { flex: 1; min-width: 0; }
 #instance-panel .num-pair input[type="number"] { width: 56px; }
 #instance-panel .ip-actions { display: flex; gap: var(--gap-sm); }
+/* SP4: the binding segment carries three long bilingual labels; inside the
+   236 px panel it stacks vertically instead of overflowing the 34 px row
+   (mirrors style.css). */
+#instance-panel .cp-group .seg.sm { flex-direction: column; height: auto; }
+#instance-panel .cp-group .seg.sm button { width: 100%; padding: 6px 10px; }
+/* SP4: the cross-page placement toggle lights up like the add-seal toggle. */
+#btn-crosspage-add[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 
 /* HD9: bottom-left current-seal preview card. */
 #seal-preview {
@@ -248,11 +264,22 @@ html:not([data-state="empty"]) #preview[data-drag="on"] .page-frame { outline: 2
 }
 .instance[data-selected="false"] .sel-box { border-color: transparent; }
 .instance[data-selected="false"] .handle { display: none; }
-.instance[data-mode="crosspage"] .sel-box { display: none; }
-
+/* SP4: the cross-page instance keeps a strip box instead of the plain
+   selection box: it hugs the binding edge and only the vertical drag moves
+   it (the startOffset channel), which is what the ns-resize cursor marks
+   (mirrors style.css #stamp-layer .instance[data-mode="crosspage"] .sel-box). */
+#preview-stage .instance[data-mode="crosspage"] .strip-box {
+  position: absolute; border: 1px solid var(--success); background: transparent;
+  cursor: ns-resize;
+}
+/* SP2 (2026-11-05): the rail is a bare thumbnail strip - no pill behind the
+   preview, no per-chip number, 2 px gaps, and the thumb height fills the rail
+   (the rail's fixed height is the source of truth; width follows the page
+   aspect, buildPager). The leftmost counter chip keeps the default pill
+   styling; the pressed state outlines the thumbnail itself. */
 #page-pager {
-  display: flex; align-items: center; gap: var(--gap-sm);
-  padding: 7px 12px; border-top: 1px solid var(--border); background: var(--surface-2);
+  display: flex; align-items: stretch; gap: 2px;
+  height: 76px; padding: 6px 12px; border-top: 1px solid var(--border); background: var(--surface-2);
   overflow-x: auto;
 }
 .chip {
@@ -262,43 +289,25 @@ html:not([data-state="empty"]) #preview[data-drag="on"] .page-frame { outline: 2
 .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .chip.warn { color: var(--warning); }
 .chip.err { color: var(--error); border-color: var(--error); }
+button.chip { cursor: pointer; color: inherit; }
+/* SP2: the chip is the bare button wrapper (no pill, no padding, no number). */
+#page-pager button.chip { display: inline-flex; align-items: center; gap: 0; padding: 0; border: 0; background: transparent; border-radius: 0; }
+#page-pager button.chip[aria-pressed="true"] { background: transparent; }
+/* outline (not border) so the laid-out height == the rail content box exactly. */
+#page-pager canvas.pg-thumb { display: block; height: 100%; width: auto; background: #fff; outline: 1px solid var(--border); }
+#page-pager button.chip[aria-pressed="true"] canvas.pg-thumb { outline: 2px solid var(--accent); }
+#page-pager span.chip { font: var(--mono); align-self: center; }
 
-/* ---- panel ---- */
-#right-sidebar {
-  grid-area: panel; border-left: 1px solid var(--border); background: var(--surface);
-  overflow-y: auto; min-width: 0;
-}
-#panel { display: flex; flex-direction: column; }
-#panel .section { border-bottom: 1px solid var(--border); }
-#panel .section > summary {
-  display: flex; align-items: center; gap: var(--gap-sm);
-  padding: 9px 12px; background: var(--surface-2); cursor: pointer;
-  font-weight: 600; list-style: none;
-}
-#panel .section > summary::before { content: "▸"; color: var(--muted); }
-#panel .section[open] > summary::before { content: "▾"; }
-#panel .body { padding: 10px 12px; display: flex; flex-direction: column; gap: var(--gap); }
+/* SP5 (2026-11-06): the right sidebar is gone; #preview bleeds to both window
+   edges. The shared control vocabulary (.field/.row/.num-pair/.hintline) lives
+   on - the instance panel, the empty state and the save modal all use it. */
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field > .flabel { display: flex; align-items: center; gap: 8px; color: var(--fg); }
 .field > .flabel .tag { font: var(--mono); color: var(--muted); }
 .hintline { color: var(--muted); font-size: 12px; }
 .opt-label { color: var(--muted); font-size: 12px; margin-right: 6px; }
-.pick-opts { margin-top: 8px; }
 .row { display: flex; align-items: center; gap: var(--gap-sm); flex-wrap: wrap; }
 .num-pair { display: flex; align-items: center; gap: var(--gap-sm); }
-#seal-instances { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--gap-sm); }
-#seal-instances li {
-  display: flex; align-items: center; gap: var(--gap-sm);
-  border: 1px solid var(--border); border-radius: var(--radius); padding: 5px 7px;
-}
-#seal-instances li[aria-current="true"] { border-color: var(--accent); background: var(--surface-2); }
-#seal-instances li input[type="text"] { width: 110px; }
-#strip-previews { display: flex; gap: var(--gap-sm); flex-wrap: wrap; }
-#strip-previews .strip { display: flex; flex-direction: column; gap: 3px; align-items: center; }
-#strip-previews canvas { border: 1px solid var(--border); background: #fff; }
-#strip-previews .cap { font: var(--mono); color: var(--muted); }
-#asset-chips { display: flex; gap: var(--gap-sm); flex-wrap: wrap; }
-#asset-chips .chip { color: var(--muted); }
 #estimate {
   border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--surface-2); padding: 7px 9px; font: var(--mono);
@@ -328,6 +337,13 @@ html[data-modal="confirm"] #confirm-modal { display: flex; }
 .modal table { border-collapse: collapse; width: 100%; font: var(--mono); }
 .modal td { border-bottom: 1px solid var(--border); padding: 4px 6px; }
 .modal td:first-child { color: var(--muted); width: 40%; }
+/* SP5 (2026-11-06): the save dialog hosts the export section; boxed subsections
+   keep the moved fields readable without a sidebar chrome. */
+.modal .section { display: flex; flex-direction: column; gap: var(--gap); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; margin: 10px 0; background: var(--surface-2); }
+.modal .sec-title { font-weight: 600; }
+/* SP5: the save dialog grew with the export section; it scrolls inside the
+   viewport instead of pushing the actions out of reach. */
+#save-modal { top: 8vh; max-height: 84vh; overflow-y: auto; }
 
 #error-toast {
   position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
@@ -372,6 +388,15 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
       data-i18n-title="app.sealAddMode.btn" data-i18n-title-cn="添加印章模式">
       <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6" /><path d="M18 15.5v6M15 18.5h6" /></svg>
     </button>
+    <!-- SP4 (2026-11-05): the cross-page placement mode sits right of the
+         add-seal toggle. Same pattern as HD10: aria-pressed pair + a stage
+         cursor hook; clicking the page drops the current seal as a cross-page
+         strip instance anchored on the binding edge, starting at the click's
+         height. -->
+    <button id="btn-crosspage-add" class="btn icon" type="button" aria-pressed="false" title="Add cross-page seal mode" aria-label="Add cross-page seal mode" data-field="ui.seal.crosspageAddMode"
+      data-i18n-title="app.sealCrossAddMode.btn" data-i18n-title-cn="添加骑缝章模式">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M7.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h2.5" /><path d="M16.5 3H19a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-2.5" /><path d="M12 2.5v19" stroke-dasharray="2.5 2.5" /><circle cx="12" cy="12" r="3.2" /></svg>
+    </button>
     <button id="btn-save" class="btn primary icon" type="button" title="Save" aria-label="Save"
       data-i18n-title="app.save.btn" data-i18n-title-cn="保存">
       <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" /><path d="M17 21v-8H7v8" /><path d="M7 3v5h8" /></svg>
@@ -404,25 +429,11 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
 
   <section id="preview">
     <div id="empty-state">
-      <div class="msg" data-i18n="empty.msg" data-i18n-cn="还没有打开 PDF">No PDF open</div>
-      <div class="hint" data-i18n="empty.hint" data-i18n-cn="把这里拖入或粘贴（Ctrl+V）一个 PDF 即打开；拖入/粘贴图片装载为印章。也可以「打开文件」/ 直接填写路径。">Drop or paste a PDF here to open it, or drop/paste images to load them as seals. You can also open a file or type its path.</div>
-      <div class="btnrow">
-        <button id="empty-pick" class="btn primary" data-i18n="empty.pick.btn" data-i18n-cn="打开文件">Open file</button>
-        <input id="empty-path" data-field="api.fs.pick.filePath" type="text" size="30" data-i18n-placeholder="empty.path.placeholder" data-i18n-cn-placeholder="C:\docs\contract.pdf" value="C:\docs\contract.pdf">
-      </div>
-      <div class="row pick-opts">
-        <span class="opt-label" data-i18n="api.fs.pick.filePath.ctl" data-i18n-cn="打开路径">Open by path</span>
-        <label class="switch"><span class="opt-label" data-i18n="api.fs.pick.multi.ctl" data-i18n-cn="多文件">multi</span><input id="empty-pick-multi" data-field="api.fs.pick.multi" type="checkbox" checked><span data-i18n="fs.pick.multi.on" data-i18n-cn="多文件">multi</span></label>
-        <span class="opt-label" data-i18n="api.fs.pick.filter.ctl" data-i18n-cn="文件类型">filter</span>
-        <select id="empty-pick-filter" data-field="api.fs.pick.filter" aria-label="filter">
-          <option value="pdf" data-i18n="fs.pick.filter.pdf" data-i18n-cn="仅 PDF">PDF only</option>
-          <option value="all" data-i18n="fs.pick.filter.all" data-i18n-cn="所有文件">All files</option>
-        </select>
-        <span class="opt-label" data-i18n="api.fs.pick.multi.hint" data-i18n-cn="允许多选 PDF（进入批处理队列，P6）">allow multi-select</span>
-        <span class="opt-label" data-i18n="api.fs.pick.filter.hint" data-i18n-cn="原生选择器过滤条件；应用只接受 .pdf">picker filter</span>
-        <span class="chip" data-field="api.fs.pick.pathGrantId" data-field-role="display" data-i18n="api.fs.pick.pathGrantId.ctl" data-i18n-cn="授权句柄">pathGrantId: -</span>
-      <span class="opt-label" data-i18n="api.fs.pick.pathGrantId.hint" data-i18n-cn="owner 绑定 + TTL；未授权时退化为 multipart 上传">owner-bound grant with TTL</span>
-      </div>
+      <button id="empty-pick" class="btn primary" type="button">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 15V3" /><path d="m7 8 5-5 5 5" /><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /></svg>
+        <span class="elabel" data-i18n="empty.pick.btn" data-i18n-cn="打开文件">Open file</span>
+      </button>
+      <div class="hint" data-i18n="empty.hint" data-i18n-cn="也可以把 PDF 直接拖进来或粘贴（Ctrl+V）打开；图片拖入/粘贴装载为印章。">You can also drop a PDF here or paste it (Ctrl+V) to open it; dropped/pasted images load them as seals.</div>
     </div>
 
     <div id="drop-hint" aria-hidden="true"><span class="pill" data-i18n="load.drop.hint" data-i18n-cn="拖入 PDF 即打开文档；拖入图片装载为印章">Drop a PDF to open it, or images to load as seals</span></div>
@@ -443,10 +454,13 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
     </div>
 
     <div id="preview-ruler">595.3 x 841.9 pt</div>
-    <div id="path-hint" class="opt-label"><span data-i18n="api.fs.pick.filePath.ctl" data-i18n-cn="打开路径">Open by path</span> <span data-i18n="api.fs.pick.filePath.hint" data-i18n-cn="选择器返回 pathGrantId（owner 绑定 + TTL）">picker grants a bounded pathGrantId</span></div>
+    <!-- SP1: api.apply.crossPage is a ctl=no row in §2 - the placement mode sets it,
+         there is no checkbox any more - so the artifact keeps a display hook for it:
+         the live strip count and binding edge, i.e. what probe('strip') reports. -->
+    <div id="strip-readout" class="opt-label"><span data-i18n="api.apply.crossPage.ctl" data-i18n-cn="骑缝章">apply.crossPage</span> <span id="strip-readout-value">-</span></div>
     <div id="pixel-readout" data-i18n="ruler.hint" data-i18n-cn="页面尺寸（pt）；标尺原点在左上">page size in pt; origin at top-left</div>
 
-    <nav id="page-pager"></nav>
+    <nav id="page-pager" data-i18n-title="page.hint" data-i18n-title-cn="跳到某页" title="jump to page" aria-label="jump to page"></nav>
 
     <!-- HD12: the per-instance floating panel (mirrors index.html; app-shell
          pins it to the selected instance's right edge, flipping when the
@@ -462,7 +476,7 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
           <option value="screen">screen / 滤色</option>
           <option value="lighten">lighten / 变亮</option>
           <optgroup label="darken" data-i18n="blend.group.darken" data-i18n-cn="增暗">Darken</optgroup>
-          <option value="multiply">multiply / 正片叠底</option>
+          <option value="multiply" selected>multiply / 正片叠底</option>
           <option value="darken">darken / 变暗</option>
           <option value="color-burn">color-burn / 颜色加深</option>
           <optgroup label="contrast" data-i18n="blend.group.contrast" data-i18n-cn="对比">Contrast</optgroup>
@@ -522,6 +536,53 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
         </div>
         <div class="hintline" data-i18n="api.apply.rotation.hint" data-i18n-cn="-180 到 180；印章绕自身中心旋转。">Degrees around the seal centre.</div>
       </div>
+      <!-- SP4 (2026-11-05): the cross-page group rides the same floating panel
+           and answers to the selected instance; it only shows when that instance
+           is crossPage (the mode button places those, HD10's pattern). The
+           sidebar 骑缝章 section is gone: the values bind the same vocabulary as
+           before (ui.crosspage.binding / api.apply.startOffset), they just live
+           beside the six instance controls now. -->
+      <div class="field cp-group" hidden>
+        <div class="flabel"><span data-i18n="ui.crosspage.binding.ctl" data-i18n-cn="装订边（D2）">Binding edge (D2)</span><span class="tag">ui.crosspage.binding</span></div>
+        <div class="seg sm" id="crosspage-binding" data-field="ui.crosspage.binding">
+          <button type="button" data-value="right" aria-pressed="true" data-i18n="binding.right" data-i18n-cn="单面：右缘连续">Single-sided: right edge</button>
+          <button type="button" data-value="alternate" aria-pressed="false" data-i18n="binding.alternate" data-i18n-cn="双面：奇右偶左">Duplex: odd right / even left</button>
+          <button type="button" data-value="none" aria-pressed="false" data-i18n="binding.none" data-i18n-cn="无骑缝章">No cross-page seal</button>
+        </div>
+        <div class="hintline" data-i18n="ui.crosspage.binding.hint" data-i18n-cn="D2 三档：右缘连续 / 双面奇偶分别左右（左右两块属于同一条分割）/ 无骑缝章。">D2: right edge, duplex alternate, or no cross-page seal.</div>
+      </div>
+      <div class="field cp-group" hidden>
+        <div class="flabel"><span data-i18n="api.apply.startOffset.ctl" data-i18n-cn="起始位置（pt）">apply.startOffset</span><span class="tag">api.apply.startOffset</span></div>
+        <div class="num-pair">
+          <input data-field="api.apply.startOffset" type="range" min="0" max="200" step="5" value="0" aria-label="startOffset">
+          <input data-field="api.apply.startOffset" type="number" min="0" max="200" step="5" value="0" aria-label="startOffset">
+        </div>
+        <div class="hintline" data-i18n="api.apply.startOffset.hint" data-i18n-cn="沿装订边的起始偏移（pdfcpu offset:0 -N）；0 为页首。选中骑缝章后纵向拖动条带即改这个值。">Start offset along the binding edge (pdfcpu offset:0 -N); 0 sits at the page top. Dragging a selected strip vertically edits this value.</div>
+      </div>
+      <!-- Z5 (2026-11-09): 平均|随机 mirror of the app shell index.html — the seg,
+           the cover slider (随机 only) and the retry button live in the cp group. -->
+      <div class="field cp-group" hidden>
+        <div class="flabel"><span data-i18n="ui.crosspage.sliceMode.ctl" data-i18n-cn="骑缝切片">Cross-page slices</span><span class="tag">ui.crosspage.sliceMode</span></div>
+        <div class="seg sm" id="crosspage-slicemode" data-field="ui.crosspage.sliceMode">
+          <button type="button" data-value="even" aria-pressed="true" data-i18n="sliceMode.even" data-i18n-cn="平均">Even</button>
+          <button type="button" data-value="random" aria-pressed="false" data-i18n="sliceMode.random" data-i18n-cn="随机">Random</button>
+        </div>
+        <div class="hintline" data-i18n="ui.crosspage.sliceMode.hint" data-i18n-cn="平均=均分到每页；随机模拟真实装订盖章：首页 25~50%、末页 20~30%，其余页按覆盖率取条带并沿页序平滑漂移（重试按钮重新取值）。">Even = classic equal split; Random simulates a real binding run: first page 25..50%, last page 20..30%, middle pages follow the cover share and a smooth drift; the retry button re-rolls.</div>
+      </div>
+      <div class="field cp-group cp-rand" hidden>
+        <div class="flabel"><span data-i18n="ui.crosspage.cover.ctl" data-i18n-cn="覆盖率（%）">Cover</span><span class="tag">ui.crosspage.cover</span></div>
+        <div class="num-pair">
+          <input data-field="ui.crosspage.cover" type="range" min="0" max="100" step="5" value="75" aria-label="cover">
+          <input data-field="ui.crosspage.cover" type="number" min="0" max="100" step="5" value="75" aria-label="cover">
+        </div>
+        <div class="hintline" data-i18n="ui.crosspage.cover.hint" data-i18n-cn="首页末页外的页面有多少比例拿到骑缝章（四舍五入）；如 10 页中间页配 60% = 6 页有章、4 页盖不到。">Share of middle pages that get a strip (rounded); e.g. 10 middle pages at 60% = 6 stamped, 4 missed.</div>
+      </div>
+      <div class="field cp-group cp-rand" hidden>
+        <div class="row">
+          <button type="button" id="crosspage-retry" class="btn" data-i18n="crosspage.retry.btn" data-i18n-cn="重新随机">Re-roll</button>
+        </div>
+        <div class="hintline" data-i18n="crosspage.retry.hint" data-i18n-cn="重新进行一次随机取值（新的分布替换当前实例的切片）。">Re-rolls the random draw for the selected cross-page instance.</div>
+      </div>
       <div class="row ip-actions">
         <button type="button" id="instance-reset" class="btn" data-i18n="instance.reset.btn" data-i18n-cn="复位">Reset</button>
         <button type="button" id="instance-remove" class="btn danger" data-i18n="instances.delete.btn" data-i18n-cn="删除">Delete</button>
@@ -533,6 +594,10 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
     <div id="seal-preview" hidden>
       <div class="sp-head"><span data-i18n="seal.preview.title" data-i18n-cn="印章预览">Seal preview</span><span id="seal-preview-name"></span></div>
       <canvas id="seal-preview-canvas" width="150" height="150" aria-label="seal preview"></canvas>
+      <!-- The card paints the live seal/prepare result, so it carries the two
+           prepare-channel strings the upload accepts (D4, UI_SPEC §4). -->
+      <div class="hintline" data-i18n="api.seal.prepare.despill.hint" data-i18n-cn="对白底扫描件即时去背；预览可撤销，预设保存时保留 alpha。">White-background keying applied live; reversible before save.</div>
+      <div class="hintline" data-i18n="seal.err.type" data-i18n-cn="印章图片必须是带透明通道的 PNG 或 JPEG">Stamp image must be PNG or JPEG with an alpha channel</div>
     </div>
 
     <!-- HD16: the backend-terminal panel (content = GET /api/logs polling). -->
@@ -541,360 +606,68 @@ html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--s
       <pre id="log-console-body"></pre>
     </div>
   </section>
-
-
-  <aside id="right-sidebar">
-    <form id="panel" autocomplete="off">
-
-      <div id="asset-hooks" data-contract data-i18n="asset.hint" data-i18n-cn="会话资产 ID（内部状态，只读）">asset ids</div>
-      <span class="chip" data-route="open" data-field="decision.assetIds" data-i18n="asset.hint" data-i18n-cn="打开资产">assetId: -</span>
-      <span class="chip" data-route="split" data-field="decision.assetIds" data-i18n="asset.hint" data-i18n-cn="切分资产">assetId: -</span>
-      <span class="chip" data-route="apply" data-field="decision.assetIds" data-i18n="asset.hint" data-i18n-cn="叠加资产">assetId: -</span>
-      <span class="chip" data-route="export" data-field="decision.assetIds" data-i18n="asset.hint" data-i18n-cn="导出资产">assetId: -</span>
-      <span class="chip" data-route="save" data-field="decision.assetIds" data-i18n="asset.hint" data-i18n-cn="存盘资产">assetId: -</span>
-
-
-      <details class="section" id="panel-seal" open>
-        <summary data-i18n="panel.seal.title" data-i18n-cn="印章">Stamp</summary>
-        <div class="body">
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.seal.prepare.despill.ctl" data-i18n-cn="去白底">seal.prepare.despill</span><span class="tag">seal.prepare.despill</span></div>
-            <div class="row">
-              <label class="switch"><input data-field="api.seal.prepare.despill" type="checkbox" checked><span data-i18n="seal.despill.on" data-i18n-cn="开">on</span></label>
-              <button type="button" id="seal-despill-revert" class="btn" data-i18n="seal.despill.revert" data-i18n-cn="撤销">revert</button>
-            </div>
-            <div class="hintline" data-i18n="api.seal.prepare.despill.hint" data-i18n-cn="对白底扫描件即时去背；预览可撤销，预设保存时保留 alpha。">White-background keying applied live; reversible before save.</div>
-            <div class="hintline" data-i18n="seal.err.nosource" data-i18n-cn="先上传印章图片，再点撤销">Upload a seal image first, then revert</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.seal.prepare.alphaTrim.ctl" data-i18n-cn="自动裁边">seal.prepare.alphaTrim</span><span class="tag">seal.prepare.alphaTrim</span></div>
-            <div class="row">
-              <label class="switch"><input data-field="api.seal.prepare.alphaTrim" type="checkbox" checked><span data-i18n="seal.alphatrim.on" data-i18n-cn="开">on</span></label>
-            </div>
-            <div class="hintline" data-i18n="api.seal.prepare.alphaTrim.hint" data-i18n-cn="按 alpha 包围盒裁掉空白，保持印章本体比例。">Trims the alpha bounding box, keeps the seal aspect ratio.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.seal.prepare.resampleDpi.ctl" data-i18n-cn="印章重采样 DPI">seal.prepare.resampleDpi</span><span class="tag">seal.prepare.resampleDpi</span></div>
-            <div class="num-pair"><input data-field="api.seal.prepare.resampleDpi" type="number" min="72" max="600" step="1" value="300" aria-label="resampleDpi"></div>
-            <div class="hintline" data-i18n="api.seal.prepare.resampleDpi.hint" data-i18n-cn="只影响落盘像素，不影响预览清晰度。">Affects baked-in pixels only, not preview sharpness.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.seal.preset.presetName.ctl" data-i18n-cn="存为预设">seal.preset.presetName</span><span class="tag">seal.preset.presetName</span></div>
-            <div class="row">
-              <input id="seal-preset-name" data-field="api.seal.preset.presetName" type="text" data-i18n-placeholder="seal.preset.placeholder" data-i18n-cn-placeholder="公司甲 · 红章" placeholder="Company A - red seal">
-              <button type="button" id="seal-preset-save" class="btn" data-i18n="seal.preset.save" data-i18n-cn="保存预设">Save preset</button>
-            </div>
-            <div class="hintline" data-i18n="api.seal.preset.presetName.hint" data-i18n-cn="预设写入 %APPDATA%\AutoStamp\seals：图片与参数一起存。">Presets keep image and parameter group together.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="seal.preset.label" data-i18n-cn="预设">Preset</span><span class="tag" data-i18n="seal.preset.select" data-i18n-cn="预设列表">preset list</span></div>
-            <div class="row">
-              <select id="seal-preset-select" aria-label="preset">
-                <option value="company-a" selected>Company A - red seal</option>
-                <option value="finance">Finance - round seal</option>
-              </select>
-              <button type="button" id="seal-preset-load" class="btn" data-i18n="seal.preset.load" data-i18n-cn="应用预设">Apply preset</button>
-              <button type="button" id="seal-preset-delete" class="btn" data-i18n="seal.preset.delete" data-i18n-cn="删除预设">Delete preset</button>
-            </div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="seal.meta.label" data-i18n-cn="印章元数据">Seal metadata</span><span class="tag">seal.prepare</span></div>
-            <div class="row">
-              <span class="chip" id="seal-meta">-</span>
-            </div>
-          <div class="hintline" data-i18n="seal.upload.hint" data-i18n-cn="去白底/自动裁边/重采样按上方参数处理；「撤销」会用原图重跑一次。">Keying, trim and resample follow the options above; revert re-runs from the source.</div>
-          <div class="hintline" data-i18n="seal.err.type" data-i18n-cn="印章图片必须是带透明通道的 PNG 或 JPEG">Stamp image must be PNG or JPEG with an alpha channel</div>
-          <div class="hintline" data-i18n="stamp.drag.hint" data-i18n-cn="拖动虚线框移动，四角缩放，顶部手柄旋转。">Drag the dashed box to move; corners resize; the top handle rotates.</div>
-          </div>
-      </details>
-
-      <details class="section" id="panel-instances" open>
-        <summary data-i18n="panel.instances.title" data-i18n-cn="印章实例">Instances</summary>
-        <div class="body">
-          <ul id="seal-instances"></ul>
-          <div class="row">
-            <button type="button" id="instance-add" class="btn" data-i18n="instances.add.btn" data-i18n-cn="新增实例">Add instance</button>
-            <button type="button" id="instance-duplicate" class="btn" data-i18n="instances.duplicate.btn" data-i18n-cn="复制">Duplicate</button>
-            <button type="button" id="instance-delete" class="btn danger" data-i18n="instances.delete.btn" data-i18n-cn="删除">Delete</button>
-          </div>
-          <div class="row">
-            <button type="button" id="apply-write" class="btn primary" data-i18n="apply.write.btn" data-i18n-cn="盖到 PDF">Stamp into PDF</button>
-            <button type="button" id="apply-undo" class="btn ghost" data-i18n="apply.undo.btn" data-i18n-cn="撤销盖章">Undo stamping</button>
-          </div>
-          <div class="hintline" data-i18n="apply.write.hint" data-i18n-cn="把实例烘焙成新的会话 asset（原文件不动）；保存时若仍有未落盘实例会自动先盖章。">Bakes the instances into a new session asset; the original file is untouched. Saving stamps first if anything is still unbaked.</div>
-        </div>
-      </details>
-
-      <details class="section" id="panel-split" open>
-        <summary data-i18n="panel.split.title" data-i18n-cn="切分（2 拼 → 单页）">Split</summary>
-        <div class="body">
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.split.auto.ctl" data-i18n-cn="自动判定 2 拼">split.auto</span><span class="tag">split.auto</span></div>
-            <label class="switch"><input data-field="api.split.auto" type="checkbox" checked><span data-i18n="split.auto.on" data-i18n-cn="开">on</span></label>
-            <div class="hintline" data-i18n="api.split.auto.hint" data-i18n-cn="按 MediaBox 纵横比判定；判定结果可被 vetoedPages 逐页否决（D3）。">Aspect-based heuristic; per-page veto list (decision D3).</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="ui.split.vetoedPages.ctl" data-i18n-cn="已判定页">Auto-detected pages</span><span class="tag">ui.split.vetoedPages</span></div>
-            <div id="split-veto" class="row"></div>
-            <div class="hintline" data-i18n="ui.split.vetoedPages.hint" data-i18n-cn="点击某页即否决其自动切分；否决页保持原样不切。">Click a page to veto its auto-split.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="ui.split.mode.ctl" data-i18n-cn="手动切分">Manual split</span><span class="tag">ui.split.mode</span></div>
-            <div class="seg sm" id="split-mode" data-field="ui.split.mode">
-              <button type="button" data-value="off" data-i18n="split.mode.off" data-i18n-cn="不切">No split</button>
-              <button type="button" data-value="v2" aria-pressed="true" data-i18n="split.mode.v2" data-i18n-cn="2 拼（左右）">2-up LR</button>
-              <button type="button" data-value="h2" data-i18n="split.mode.h2" data-i18n-cn="2 拼（上下）">2-up TB</button>
-              <button type="button" data-value="grid" data-i18n="split.mode.grid" data-i18n-cn="网格">Grid</button>
-            </div>
-            <div class="hintline" data-i18n="ui.split.mode.hint" data-i18n-cn="manual 覆盖 auto；rows/cols 与 cutFractions 都进 /api/pdf/split。">manual overrides auto; rows/cols and cutFractions go to the API.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.split.rows.ctl" data-i18n-cn="网格行数 rows">split.rows</span><span class="tag">split.rows</span></div>
-            <div class="num-pair"><input data-field="api.split.rows" type="number" min="1" max="6" value="1" aria-label="rows"></div>
-            <div class="hintline" data-i18n="api.split.rows.hint" data-i18n-cn="rows >= 1；与 cols 一起决定等分网格。">rows >= 1.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.split.cols.ctl" data-i18n-cn="网格列数 cols">split.cols</span><span class="tag">split.cols</span></div>
-            <div class="num-pair"><input data-field="api.split.cols" type="number" min="1" max="6" value="2" aria-label="cols"></div>
-            <div class="hintline" data-i18n="api.split.cols.hint" data-i18n-cn="cols >= 1。">cols >= 1.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.split.cutFractions.ctl" data-i18n-cn="切点（相对分数）">split.cutFractions</span><span class="tag">split.cutFractions</span></div>
-            <div class="row">
-              <input data-field="api.split.cutFractions" type="text" size="12" value="0.5" aria-label="cutFractions">
-              <button type="button" id="split-apply" class="btn" data-i18n="split.apply.btn" data-i18n-cn="切分预览">Split preview</button>
-              <button type="button" id="split-undo" class="btn ghost" data-i18n="split.undo.btn" data-i18n-cn="撤销切分">Undo split</button>
-            </div>
-            <div class="hintline" data-i18n="api.split.cutFractions.hint" data-i18n-cn="0..1 的相对分数，可多个（逗号分隔）；>1 或 >=1 会被拒绝（pdfcpu 实测）。">Relative fractions 0..1, comma separated; pdfcpu rejects >= 1.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.split.pages.ctl" data-i18n-cn="切分页范围">split.pages</span><span class="tag">split.pages</span></div>
-            <div class="row"><input data-field="api.split.pages" type="text" size="16" value="all" aria-label="split pages"></div>
-            <div class="hintline" data-i18n="api.split.pages.hint" data-i18n-cn="与 apply.pages 同一词表。">Same vocabulary as apply.pages.</div>
-          </div>
-        </div>
-      </details>
-
-      <details class="section" id="panel-export" open>
-        <summary data-i18n="panel.export.title" data-i18n-cn="导出设置">Export</summary>
-        <div class="body">
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.export.mode.ctl" data-i18n-cn="导出方式（D1）">export.mode</span><span class="tag">export.mode</span></div>
-            <div class="seg" id="export-mode" data-field="api.export.mode">
-              <button type="button" data-value="vector" aria-pressed="true">vector</button>
-              <button type="button" data-value="raster">raster</button>
-            </div>
-            <div class="hintline" data-i18n="api.export.mode.hint" data-i18n-cn="vector 保留文字/矢量（默认可搜索）；raster 整页位图，抗篡改、便于扫描件。">vector keeps text/vectors (searchable); raster flattens each page to a bitmap.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.export.dpi.ctl" data-i18n-cn="分辨率 DPI">export.dpi</span><span class="tag">export.dpi</span></div>
-            <div class="seg sm" id="export-dpi" data-field="api.export.dpi">
-              <button type="button" data-value="72">72</button>
-              <button type="button" data-value="150" aria-pressed="true">150</button>
-              <button type="button" data-value="300">300</button>
-              <button type="button" data-value="custom" data-i18n="export.dpi.custom" data-i18n-cn="自定义">Custom</button>
-            </div>
-            <div class="hintline" data-i18n="api.export.dpi.hint" data-i18n-cn="raster 模式生效；custom 时取 customDpi。">Effective in raster mode; custom uses customDpi.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.export.customDpi.ctl" data-i18n-cn="自定义 DPI">export.customDpi</span><span class="tag">export.customDpi</span></div>
-            <div class="num-pair"><input data-field="api.export.customDpi" data-i18n-placeholder="export.customDpi.placeholder" data-i18n-cn-placeholder="96..600" type="number" min="96" max="600" step="1" value="150" aria-label="customDpi"></div>
-            <div class="hintline" data-i18n="api.export.customDpi.hint" data-i18n-cn="96..600，仅 raster 且 dpi=custom 时读取。">96..600, raster + custom only.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.export.quality.ctl" data-i18n-cn="JPEG 质量">export.quality 40..95</span><span class="tag">export.quality 40..95</span></div>
-            <div class="num-pair">
-              <input data-field="api.export.quality" type="range" min="40" max="95" step="5" value="75" aria-label="quality">
-              <input data-field="api.export.quality" type="number" min="40" max="95" step="5" value="75" aria-label="quality">
-            </div>
-            <div class="hintline" data-i18n="api.export.quality.hint" data-i18n-cn="40..95；仅 raster。落盘用 stdlib DCTDecode（FACTS §4）。">40..95, raster only.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.export.pages.ctl" data-i18n-cn="导出页">export.pages</span><span class="tag">export.pages</span></div>
-            <div class="row">
-              <input data-field="api.export.pages" type="text" size="16" value="all" aria-label="export pages">
-              <button type="button" class="btn" data-value="all" data-i18n="pages.all.btn" data-i18n-cn="全部">All</button>
-            </div>
-            <div class="hintline" data-i18n="api.export.pages.hint" data-i18n-cn="与 apply.pages 同一词表。">Same vocabulary as apply.pages.</div>
-          </div>
-          <div id="estimate" data-warn="false">
-            <div class="row"><span data-i18n="export.estimate.label" data-i18n-cn="体积预估">Estimate</span><span class="big" id="estimate-total">356 KB</span></div>
-            <div class="hintline" id="estimate-per-page" data-i18n="export.estimate.hint" data-i18n-cn="每页约 124 KB（150dpi q75，A4 单页）。">about 124 KB/page (150dpi q75, A4).</div>
-            <div class="note" data-i18n="export.estimate.note" data-i18n-cn="预估值由 FACTS §4 实测表按页面积与页数缩放；raster 才受 DPI/质量影响。">Estimate scales the FACTS 4 measured table by page area and count.</div>
-            <div class="note" data-i18n="warn.export.tooBig" data-i18n-cn="单页位图超过 90 MB 上限：请把 DPI 降到 300 或少选几页。">page bitmap exceeds the 90 MB cap: lower DPI to 300 or fewer pages</div>
-          </div>
-        </div>
-      </details>
-
-      <details class="section" id="panel-batch" open>
-        <summary data-i18n="batch.title" data-i18n-cn="批处理">Batch</summary>
-        <div class="body">
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.presetName.ctl" data-i18n-cn="批处理预设">preset</span><span class="tag">batch.presetName</span></div>
-            <select id="batch-preset" data-field="api.batch.presetName" aria-label="batch preset">
-              <option value="" data-i18n="batch.preset.placeholder" data-i18n-cn="选择预设">pick a preset</option>
-              <option value="company-a" selected>Company A - red seal</option>
-              <option value="finance">Finance - round seal</option>
-            </select>
-            <div class="hintline" data-i18n="api.batch.presetName.hint" data-i18n-cn="预设提供印章图与盖章/骑缝参数（PR1）">the preset carries the seal image and the stamp/cross-page parameters</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.files.ctl" data-i18n-cn="批处理输入">batch input</span><span class="tag">batch.files</span></div>
-            <div class="row">
-              <textarea id="batch-files" data-field="api.batch.files" rows="3" aria-label="batch files">C:\docs\a-01.pdf&#10;C:\docs\a-02.pdf&#10;C:\docs\bad-20.pdf</textarea>
-              <button type="button" id="batch-pick-files" class="btn" data-i18n="batch.pickFiles" data-i18n-cn="选择 PDF">Pick PDFs</button>
-            </div>
-            <div class="hintline" data-i18n="api.batch.files.hint" data-i18n-cn="由原生选择器取得；选目录则收该目录下所有 .pdf">picked with the native picker; a folder picks every *.pdf in it</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.dirPath.ctl" data-i18n-cn="目录">folder</span><span class="tag">batch.dirPath</span></div>
-            <div class="row">
-              <input id="batch-dir-path" data-field="api.batch.dirPath" type="text" size="26" data-i18n-placeholder="empty.path.placeholder" data-i18n-cn-placeholder="C:\docs\contract.pdf" placeholder="C:\docs\contract.pdf">
-              <button type="button" id="batch-pick-dir" class="btn" data-i18n="batch.pickDir" data-i18n-cn="选择目录">Pick folder</button>
-            </div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.dpi.ctl" data-i18n-cn="分辨率 DPI">resolution DPI</span><span class="tag">batch.dpi</span></div>
-            <div class="seg sm" id="batch-dpi" data-field="api.batch.dpi">
-              <button type="button" data-value="72">72</button>
-              <button type="button" data-value="150" aria-pressed="true">150</button>
-              <button type="button" data-value="300">300</button>
-              <button type="button" data-value="custom" data-i18n="export.dpi.custom" data-i18n-cn="自定义">Custom</button>
-            </div>
-            <div class="hintline" data-i18n="api.batch.dpi.hint" data-i18n-cn="每个文件都按此 DPI 光栅重导出（BM1）">every file is re-exported raster at this DPI (BM1)</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.customDpi.ctl" data-i18n-cn="自定义 DPI">custom DPI</span><span class="tag">batch.customDpi</span></div>
-            <div class="num-pair"><input data-field="api.batch.customDpi" type="number" min="72" max="600" step="1" value="150" aria-label="batch customDpi"></div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.quality.ctl" data-i18n-cn="JPEG 质量">JPEG quality</span><span class="tag">batch.quality</span></div>
-            <div class="num-pair">
-              <input data-field="api.batch.quality" type="range" min="40" max="95" step="5" value="75" aria-label="batch quality">
-              <input data-field="api.batch.quality" type="number" min="40" max="95" step="5" value="75" aria-label="batch quality">
-            </div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.concurrency.ctl" data-i18n-cn="并发数">concurrency</span><span class="tag">batch.concurrency</span></div>
-            <div class="num-pair"><input data-field="api.batch.concurrency" type="number" min="1" max="8" step="1" value="2" aria-label="batch concurrency"></div>
-            <div class="hintline" data-i18n="api.batch.concurrency.hint" data-i18n-cn="前端队列同时处理几个文件（1..8）">how many files the front-end queue runs at once</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.autoSplit.ctl" data-i18n-cn="先自动切分">auto split first</span><span class="tag">batch.autoSplit</span></div>
-            <label class="switch"><input id="batch-auto-split" data-field="api.batch.autoSplit" type="checkbox" checked><span data-i18n="fs.pick.multi.on" data-i18n-cn="多文件">multi</span></label>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.splitMode.ctl" data-i18n-cn="切分方式">split mode</span><span class="tag">batch.splitMode</span></div>
-            <select id="batch-split-mode" data-field="api.batch.splitMode" aria-label="batch split mode">
-              <option value="auto" selected>auto</option>
-              <option value="rows-cols">rows-cols</option>
-            </select>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.rows.ctl" data-i18n-cn="行数">rows</span><span class="tag">batch.rows</span></div>
-            <div class="num-pair"><input id="batch-rows" data-field="api.batch.rows" type="number" min="2" max="6" step="1" value="2" aria-label="batch rows"></div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.cols.ctl" data-i18n-cn="列数">cols</span><span class="tag">batch.cols</span></div>
-            <div class="num-pair"><input id="batch-cols" data-field="api.batch.cols" type="number" min="1" max="3" step="1" value="2" aria-label="batch cols"></div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.crossPage.ctl" data-i18n-cn="骑缝章">cross-page seal</span><span class="tag">batch.crossPage</span></div>
-            <label class="switch"><input id="batch-cross-page" data-field="api.batch.crossPage" type="checkbox"><span data-i18n="fs.pick.multi.on" data-i18n-cn="多文件">multi</span></label>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.binding.ctl" data-i18n-cn="装订边">binding edge</span><span class="tag">batch.binding</span></div>
-            <select id="batch-binding" data-field="api.batch.binding" aria-label="batch binding">
-              <option value="right" selected>right</option>
-              <option value="alternate">alternate</option>
-            </select>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.startOffset.ctl" data-i18n-cn="起始位置">start offset</span><span class="tag">batch.startOffset</span></div>
-            <div class="num-pair">
-              <input id="batch-start-offset" data-field="api.batch.startOffset" type="range" min="0" max="200" step="1" value="0" aria-label="batch startOffset">
-              <input id="batch-start-offset-num" data-field="api.batch.startOffset" type="number" min="0" max="200" step="1" value="0" aria-label="batch startOffset">
-            </div>
-          </div>
-          <div class="row">
-            <button type="button" id="batch-start" class="btn primary" data-i18n="batch.start" data-i18n-cn="开始批处理">Run batch</button>
-            <button type="button" id="batch-cancel" class="btn" data-i18n="batch.cancel" data-i18n-cn="取消">Cancel</button>
-            <span class="chip" id="batch-progress" data-i18n="batch.progress.idle" data-i18n-cn="空闲">idle</span>
-          </div>
-          <div id="batch-report">
-            <div class="flabel"><span data-i18n="batch.report.title" data-i18n-cn="报表">Report</span></div>
-            <ul id="batch-queue">
-              <li><span class="stat" data-i18n="batch.status.pending" data-i18n-cn="排队">queued</span> a-00.pdf</li>
-              <li><span class="stat" data-i18n="batch.status.running" data-i18n-cn="进行中">running</span> a-01.pdf</li>
-              <li><span class="stat" data-i18n="batch.status.ok" data-i18n-cn="成功">ok</span> a-02.pdf <span class="chip">→ _batch\a-02.dpi150.q75.pdf</span></li>
-              <li><span class="stat" data-i18n="batch.status.fail" data-i18n-cn="失败">failed</span> bad-20.pdf</li>
-              <li><span class="stat" data-i18n="batch.status.encrypted" data-i18n-cn="跳过（加密）">skipped (encrypted)</span> scan-30.pdf</li>
-            </ul>
-            <div class="hintline" data-i18n="batch.queue.hint" data-i18n-cn="每个文件一行，按顺序">one row per file, in order</div>
-            <div class="hintline" data-i18n="batch.skip.encrypted.hint" data-i18n-cn="加密 PDF 直接跳过并在报表列出，不弹密码框">encrypted PDFs are skipped and listed in the report, no password prompt</div>
-            <div class="row">
-              <button type="button" id="batch-export-csv" class="btn" data-i18n="batch.export.csv" data-i18n-cn="CSV">CSV</button>
-              <button type="button" id="batch-export-json" class="btn" data-i18n="batch.export.json" data-i18n-cn="JSON">JSON</button>
-            </div>
-            <div class="hintline" data-i18n="batch.report.hint" data-i18n-cn="每文件一行；下方可下载 CSV/JSON">one row per file; CSV/JSON download below</div>
-            <div class="hintline" data-i18n="batch.out.hint" data-i18n-cn="写进 <目录>\_batch，文件名带 dpi 与质量（BM2）">writes into &lt;folder&gt;\_batch, dpi/quality in the file name</div>
-          </div>
-        </div>
-      </details>
-
-      <details class="section" id="panel-crosspage" open>
-        <summary data-i18n="panel.crosspage.title" data-i18n-cn="骑缝章">Cross-page seal</summary>
-        <div class="body">
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.apply.crossPage.ctl" data-i18n-cn="骑缝章">apply.crossPage</span><span class="tag">apply.crossPage</span></div>
-            <label class="switch"><input data-field="api.apply.crossPage" type="checkbox"><span data-i18n="crosspage.on" data-i18n-cn="开">on</span></label>
-            <div class="hintline" data-i18n="api.apply.crossPage.hint" data-i18n-cn="切分后每页放一枚条带，第 i 页第 i 条；落盘后逐页合并（P3）。">One strip per page, strip i on page i; merged after per-page stamping.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="ui.crosspage.binding.ctl" data-i18n-cn="装订边（D2）">Binding edge (D2)</span><span class="tag">ui.crosspage.binding</span></div>
-            <div class="seg sm" id="crosspage-binding" data-field="ui.crosspage.binding">
-              <button type="button" data-value="right" aria-pressed="true" data-i18n="binding.right" data-i18n-cn="单面：右缘连续">Single-sided: right edge</button>
-              <button type="button" data-value="alternate" aria-pressed="false" data-i18n="binding.alternate" data-i18n-cn="双面：奇右偶左">Duplex: odd right / even left</button>
-              <button type="button" data-value="none" aria-pressed="false" data-i18n="binding.none" data-i18n-cn="无骑缝章">No cross-page seal</button>
-            </div>
-            <div class="hintline" data-i18n="ui.crosspage.binding.hint" data-i18n-cn="D2 三档：右缘连续 / 双面奇偶分别左右（左右两块属于同一条分割）/ 无骑缝章。切换后预览立即重算。">D2: right edge, duplex alternate (each side belongs to the same split), or no cross-page seal. Preview recomputes instantly.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.apply.startOffset.ctl" data-i18n-cn="起始位置（pt）">apply.startOffset</span><span class="tag">apply.startOffset</span></div>
-            <div class="num-pair">
-              <input data-field="api.apply.startOffset" type="range" min="0" max="200" step="5" value="0" aria-label="startOffset">
-              <input data-field="api.apply.startOffset" type="number" min="0" max="200" step="5" value="0" aria-label="startOffset">
-            </div>
-            <div class="hintline" data-i18n="api.apply.startOffset.hint" data-i18n-cn="沿装订边的起始偏移（pdfcpu offset:0 -N）；0 为页首。">Start offset along the binding edge (pdfcpu offset:0 -N).</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="ui.crosspage.stripPreview.ctl" data-i18n-cn="逐页条带放大">Per-page strip zoom</span><span class="tag">ui.crosspage.stripPreview</span></div>
-            <div id="strip-previews"></div>
-            <div class="hintline" data-i18n="ui.crosspage.stripPreview.hint" data-i18n-cn="每页一枚条带的放大预览；主画布也叠加同一条带（CP1）。">Zoomed strip per page; the main canvas shows the same strip.</div>
-          </div>
-        </div>
-      </details>
-
-      <div class="section" id="panel-actions">
-      <div class="hintline" id="prefs-hint"><span data-i18n="ui.lang.ctl" data-i18n-cn="语言">language</span> <span data-i18n="ui.lang.hint" data-i18n-cn="界面语言；每个标签都有 i18n key">interface language</span> · <span data-i18n="ui.theme.ctl" data-i18n-cn="主题">theme</span> <span data-i18n="ui.theme.hint" data-i18n-cn="配色令牌一并切换">colour tokens switch together</span></div>
-        <div class="body">
-          <div class="row">
-            <button type="button" id="save-open" class="btn primary" data-i18n="save.open.btn" data-i18n-cn="保存到文件">Save to file</button>
-          </div>
-        </div>
-      </div>
-    </form>
-  </aside>
-<div id="error-toast" data-i18n="asset.hint" data-i18n-cn="提示条">notice</div>
+<div id="error-toast">notice</div>
 <div id="modal-layer">
   <div class="scrim"></div>
 
   <div class="modal" id="save-modal" role="dialog">
     <h2 data-i18n="save.title" data-i18n-cn="保存 PDF">Save PDF</h2>
     <div class="pathbox" id="save-source">C:\docs\contract.pdf</div>
+    <!-- SP5 (2026-11-06): the export section moved here from the deleted right
+         sidebar (ids and data-field names unchanged - the §2 vocabulary, the
+         P5/W5 save chain and probe('estimate') all keep working through the
+         modal). -->
+    <div class="section" id="panel-export">
+      <div class="sec-title"><span data-i18n="panel.export.title" data-i18n-cn="导出设置">Export settings</span></div>
+      <div class="field">
+        <div class="flabel"><span data-i18n="api.export.mode.ctl" data-i18n-cn="导出方式（D1）">export.mode</span><span class="tag">export.mode</span></div>
+        <div class="seg" id="export-mode" data-field="api.export.mode">
+          <button type="button" data-value="vector" aria-pressed="true">vector</button>
+          <button type="button" data-value="raster">raster</button>
+        </div>
+        <div class="hintline" data-i18n="api.export.mode.hint" data-i18n-cn="vector 保留文字/矢量（默认可搜索）；raster 整页位图，抗篡改、便于扫描件。">vector keeps text/vectors (searchable); raster flattens each page to a bitmap.</div>
+      </div>
+      <div class="field">
+        <div class="flabel"><span data-i18n="api.export.dpi.ctl" data-i18n-cn="分辨率 DPI">export.dpi</span><span class="tag">export.dpi</span></div>
+        <div class="seg sm" id="export-dpi" data-field="api.export.dpi">
+          <button type="button" data-value="72">72</button>
+          <button type="button" data-value="150" aria-pressed="true">150</button>
+          <button type="button" data-value="300">300</button>
+          <button type="button" data-value="custom" data-i18n="export.dpi.custom" data-i18n-cn="自定义">Custom</button>
+        </div>
+        <div class="hintline" data-i18n="api.export.dpi.hint" data-i18n-cn="raster 模式生效；custom 时取 customDpi。">Effective in raster mode; custom uses customDpi.</div>
+      </div>
+      <div class="field">
+        <div class="flabel"><span data-i18n="api.export.customDpi.ctl" data-i18n-cn="自定义 DPI">export.customDpi</span><span class="tag">export.customDpi</span></div>
+        <div class="num-pair"><input data-field="api.export.customDpi" data-i18n-placeholder="export.customDpi.placeholder" data-i18n-cn-placeholder="96..600" type="number" min="96" max="600" step="1" value="150" aria-label="customDpi"></div>
+        <div class="hintline" data-i18n="api.export.customDpi.hint" data-i18n-cn="96..600，仅 raster 且 dpi=custom 时读取。">96..600, raster + custom only.</div>
+      </div>
+      <div class="field">
+        <div class="flabel"><span data-i18n="api.export.quality.ctl" data-i18n-cn="JPEG 质量">export.quality 40..95</span><span class="tag">export.quality 40..95</span></div>
+        <div class="num-pair">
+          <input data-field="api.export.quality" type="range" min="40" max="95" step="5" value="75" aria-label="quality">
+          <input data-field="api.export.quality" type="number" min="40" max="95" step="5" value="75" aria-label="quality">
+        </div>
+        <div class="hintline" data-i18n="api.export.quality.hint" data-i18n-cn="40..95；仅 raster。落盘用 stdlib DCTDecode（FACTS §4）。">40..95, raster only.</div>
+      </div>
+      <div class="field">
+        <div class="flabel"><span data-i18n="api.export.pages.ctl" data-i18n-cn="导出页">export.pages</span><span class="tag">export.pages</span></div>
+        <div class="row">
+          <input data-field="api.export.pages" type="text" size="16" value="all" aria-label="export pages">
+          <button type="button" class="btn" data-value="all" data-i18n="pages.all.btn" data-i18n-cn="全部">All</button>
+        </div>
+        <div class="hintline" data-i18n="api.export.pages.hint" data-i18n-cn="与 apply.pages 同一词表。">Same vocabulary as apply.pages.</div>
+      </div>
+      <div id="estimate" data-warn="false">
+        <div class="row"><span data-i18n="export.estimate.label" data-i18n-cn="体积预估">Estimate</span><span class="big" id="estimate-total">356 KB</span></div>
+        <div class="hintline" id="estimate-per-page" data-i18n="export.estimate.hint" data-i18n-cn="每页约 124 KB（150dpi q75，A4 单页）。">about 124 KB/page (150dpi q75, A4).</div>
+        <div class="note" data-i18n="export.estimate.note" data-i18n-cn="预估值由 FACTS §4 实测表按页面积与页数缩放；raster 才受 DPI/质量影响。">Estimate scales the FACTS 4 measured table by page area and count.</div>
+        <div class="note" data-i18n="warn.export.tooBig" data-i18n-cn="单页位图超过 90 MB 上限：请把 DPI 降到 300 或少选几页。">page bitmap exceeds the 90 MB cap: lower DPI to 300 or fewer pages</div>
+      </div>
+    </div>
     <div class="row">
       <button type="button" id="save-pick" class="btn" data-i18n="save.pick.btn" data-i18n-cn="系统文件选择器">System file picker</button>
-      <span class="chip" data-field="api.fs.pick.pathGrantId" data-field-role="display">pathGrantId: -</span>
+      <span class="chip" data-field="api.fs.pick.pathGrantId" data-field-role="display" data-i18n="api.fs.pick.pathGrantId.ctl" data-i18n-cn="授权句柄">pathGrantId: -</span>
     </div>
     <div class="field">
       <div class="flabel"><span data-i18n="api.save.targetPath.ctl" data-i18n-cn="目标路径">save.targetPath</span><span class="tag">save.targetPath</span></div>
@@ -965,28 +738,29 @@ window.__autoStampMock = (function () {
   var S = {
     state: "empty", lang: "en", theme: "light", version: "0.1-dev",
     fileOpen: false, splitOn: false, current: 1, nextId: 3, selId: 0,
+    // HD10 + SP4: the two placement modes are mutually exclusive, one flag each.
+    addMode: false, crosspageAdd: false,
     pages: mkPages(5),
+    // I1: an instance is a mode (normal / crosspage strip) plus its own geometry;
+    // HD17 lets them delete down to zero, so selId can be -1.
     instances: [{ name: "Seal 1", mode: "normal" }, { name: "Seal 2", mode: "normal" }],
-    geo: [{ x: 130, y: 480, w: 120, rot: 0 }, { x: 300, y: 480, w: 120, rot: 0 }],
+    geo: [{ x: 130, y: 480, w: 120, rot: 0, so: 0 }, { x: 300, y: 480, w: 120, rot: 0, so: 0 }],
+    // The parameter group the panel edits. The assetIds stay internal (SP1: they
+    // never reach the UI), and the split/seal.prepare channels are ctl=no rows in
+    // §2 - the drive API and the state machine reach them, no control does.
     p: {
       "open.assetId": null, "split.assetId": null, "apply.assetId": null,
       "export.assetId": null, "save.assetId": null, "fs.pick.pathGrantId": null,
       "fs.pick.filePath": "C:\\docs\\contract.pdf", "fs.pick.multi": true, "fs.pick.filter": "pdf",
       "open.pw": "", "split.pages": "all", "split.auto": true,
       "ui.split.vetoedPages": [], "ui.split.mode": "v2", "split.rows": 1, "split.cols": 2,
-      "split.cutFractions": "0.5", "seal.prepare.despill": true, "seal.prepare.alphaTrim": true,
-      "seal.prepare.resampleDpi": 300, "apply.blend": "multiply", "apply.opacity": 0.6,
+      "split.cutFractions": "0.5", "apply.blend": "multiply", "apply.opacity": 0.6,
       "apply.brightness": 1, "apply.saturate": 1, "apply.scale": 0.202,
-      "apply.pos": "130,480", "apply.offset": "0,0", "apply.rotation": 0,
+      "apply.pos": "130,480", "apply.offset": "0,0", "apply.rotation": 0, "apply.anchor": "center",
       "apply.pages": "1-2,5", "apply.crossPage": false, "apply.startOffset": 0,
       "export.dpi": "150", "export.customDpi": 150, "export.quality": 75,
       "export.mode": "vector", "export.pages": "all",
-      "batch.presetName": "company-a", "batch.dpi": "150", "batch.customDpi": 150,
-      "batch.quality": 75, "batch.concurrency": 2, "batch.autoSplit": true,
-      "batch.splitMode": "auto", "batch.rows": 2, "batch.cols": 2,
-      "batch.crossPage": false, "batch.binding": "right", "batch.startOffset": 0,
-      "seal.preset.presetName": "Company A - red seal", "apply.anchor": "center",
-      "ui.crosspage.binding": "right", "ui.crosspage.stripPreview": true,
+      "ui.crosspage.binding": "right",
       "ui.lang": "en", "ui.theme": "light"
     }
   };
@@ -999,11 +773,6 @@ window.__autoStampMock = (function () {
 
   function setField(name, value) {
     qa('[data-field="api.' + name + '"], [data-field="ui.' + name + '"]').forEach(function (n) {
-      if (n.closest("#asset-hooks")) { n.textContent = name + ": " + (value === null ? "-" : value); return; }
-      if (/(\.|)assetId$/.test(name)) {
-        var chip = qa('#asset-hooks .chip[data-route="' + name.split(".")[0] + '"]')[0];
-        if (chip) chip.textContent = name.split(".")[0] + "=" + (value === null ? "-" : value);
-      }
       if (qa("button", n).length) {
         qa("button", n).forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.value === String(value))); });
         return;
@@ -1015,22 +784,36 @@ window.__autoStampMock = (function () {
   }
   function touch() { syncGeo(); draw(); layout(); readouts(); }
   function pset(name, value) { S.p[name] = value; setField(name, value); touch(); }
+  // The geometry of the selected instance: the plain instance moves through
+  // scale/pos/rotation, the cross-page strip through scale/rotation plus its
+  // own startOffset channel (SP4: the vertical drag writes startOffset, exactly
+  // like app-overlay.js's moveDrag).
   function syncGeo() {
     var i = S.instances[S.selId], g = S.geo[S.selId];
-    if (!i || !g || i.mode !== "normal") return;
+    if (!i || !g) return;
     g.w = S.p["apply.scale"] * A4.w;
+    g.rot = num(S.p["apply.rotation"], 0);
+    if (i.mode === "crosspage") {
+      g.so = clamp(num(S.p["apply.startOffset"], 0), 0, 200);
+      return;
+    }
     var pp = String(S.p["apply.pos"]).split(",");
     if (pp.length === 2) { g.x = num(pp[0], g.x); g.y = num(pp[1], g.y); }
-    g.rot = num(S.p["apply.rotation"], 0);
   }
   function geoToField() {
-    var g = S.geo[S.selId];
+    var i = S.instances[S.selId], g = S.geo[S.selId];
+    if (!g) return;
     S.p["apply.scale"] = +(g.w / A4.w).toFixed(3);
-    S.p["apply.pos"] = Math.round(g.x) + "," + Math.round(g.y);
     S.p["apply.rotation"] = Math.round(g.rot);
     setField("apply.scale", S.p["apply.scale"]);
-    setField("apply.pos", S.p["apply.pos"]);
     setField("apply.rotation", S.p["apply.rotation"]);
+    if (i && i.mode === "crosspage") {
+      S.p["apply.startOffset"] = g.so;
+      setField("apply.startOffset", g.so);
+      return;
+    }
+    S.p["apply.pos"] = Math.round(g.x) + "," + Math.round(g.y);
+    setField("apply.pos", S.p["apply.pos"]);
   }
   // ---------- fixtures ----------
   var img = {};
@@ -1075,7 +858,6 @@ window.__autoStampMock = (function () {
   }
 
   // ---------- rendering ----------
-  function curPage() { return S.pages[S.current - 1] || S.pages[0]; }
   function viewBox() {
     var w = S.splitOn ? A4.w / num(S.p["split.cols"], 2) : A4.w;
     var h = S.splitOn ? A4.h / num(S.p["split.rows"], 1) : A4.h;
@@ -1086,16 +868,17 @@ window.__autoStampMock = (function () {
     cv.style.height = Math.round(hpt * SC) + "px";
     cv.width = Math.round(wpt * SC); cv.height = Math.round(hpt * SC);
   }
-  function composite(ctx, w, h) {
+  function composite(ctx, w, h, p) {
     ctx.globalCompositeOperation = "source-over";
     ctx.filter = "none";
     ctx.globalAlpha = 1;
     if (img.page) {
+      // The split halves come from the page model (applySplitMode tags each page
+      // with its half index), not from the current-page pointer.
       var cols = num(S.p["split.cols"], 2), rows = num(S.p["split.rows"], 1);
-      var sx = S.splitOn ? (curPage().halfIdx || 0) * img.page.width / cols : 0;
-      var sw = img.page.width / cols;
-      var sh = img.page.height / rows;
-      var sy = S.splitOn ? (curPage().halfRow || 0) * sh : 0;
+      var sw = img.page.width / cols, sh = img.page.height / rows;
+      var sx = S.splitOn ? (p.halfIdx || 0) * sw : 0;
+      var sy = S.splitOn ? (p.halfRow || 0) * sh : 0;
       ctx.drawImage(img.page, sx, sy, sw, sh, 0, 0, w, h);
     } else {
       ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, w, h);
@@ -1129,202 +912,164 @@ window.__autoStampMock = (function () {
     ctx.globalCompositeOperation = "source-over";
     ctx.restore();
   }
-  function bindingSide() {
+  // D2 vocabulary (app-overlay.js stripContext: odd page = right, even = left
+  // only in duplex mode; single-sided stays on the right edge).
+  function sideFor(i) {
     var b = S.p["ui.crosspage.binding"];
     if (b === "none") return "none";
-    if (b === "alternate") return (S.current % 2 === 1) ? "right" : "left";
+    if (b === "alternate") return (i + 1) % 2 === 1 ? "right" : "left";
     return b;
   }
-  function stripGeom() {
+  function bindingSide() { return sideFor(S.current - 1); }
+  // stripGeom mirrors overlay's rectFor({strip}): the seal is sliced across the
+  // whole page set (count = pages), the band hugs the binding edge, and
+  // startOffset is the only axis the drag writes.
+  function stripGeom(i, g) {
     var vb = viewBox();
-    var n = Math.max(1, S.pages.length);
-    var i = S.current - 1;
-    var sw = vb.w / 4;
-    var x = bindingSide() === "right" ? vb.w - sw : 0;
-    var sh = vb.w * 0.25;
-    var y = clamp(num(S.p["apply.startOffset"], 0), 0, vb.h - sh);
+    var count = Math.max(1, S.pages.length);
+    var full = g ? g.w : num(S.p["apply.scale"], 0.202) * A4.w;
+    var w = full / count;
+    var h = full;                     // the fixture seal is square (aspect 1)
+    var edge = sideFor(i);
+    var x = edge === "left" ? 0 : vb.w - w;
+    var y = clamp(g ? g.so : num(S.p["apply.startOffset"], 0), 0, Math.max(0, vb.h - h));
     var iw = img.seal ? img.seal.width : 1;
-    return { x: x, y: y, sw: sw, sh: sh,
-      sx: Math.round(iw * i / n), sy: 0, isw: Math.round(iw / n), ish: img.seal ? img.seal.height : 0 };
+    return { x: x, y: y, sw: w, sh: h, edge: edge, index: i, count: count,
+      sx: Math.round(iw * i / count), sy: 0, isw: Math.round(iw / count),
+      ish: img.seal ? img.seal.height : 0 };
   }
+  // The stage composites every page frame with every instance: a plain
+  // instance paints whole, a cross-page instance paints its slice of the seal
+  // at the binding edge (one strip per page, like app-overlay.js repaints).
   function draw() {
     if (!S.fileOpen) return;
-    qa("#preview-stage .page-canvas").forEach(function (cv) {
-      var frame = cv.closest(".page-frame");
-      var half = frame.dataset.half;
+    qa("#preview-stage .page-frame").forEach(function (frame, i) {
+      var cv = q("canvas.page-canvas", frame);
+      if (!cv || !S.pages[i]) return;
       var ctx = cv.getContext("2d");
-      composite(ctx, cv.width, cv.height);
-      if (S.p["apply.crossPage"]) {
-        curPage().halfIdx = half === "right" ? 1 : 0;
-        drawSealOn(ctx, cv, S.geo[S.selId], stripGeom());
-      } else {
-        S.instances.forEach(function (inst, k) {
-          if (inst.mode !== "normal") return;
-          drawSealOn(ctx, cv, S.geo[k]);
-        });
-      }
+      composite(ctx, cv.width, cv.height, S.pages[i]);
+      S.instances.forEach(function (inst, k) {
+        var g = S.geo[k];
+        if (!g) return;
+        if (inst.mode === "crosspage") drawSealOn(ctx, cv, g, stripGeom(i, g));
+        else drawSealOn(ctx, cv, g);
+      });
     });
   }
 
 
 
   // ---------- layout: frames, pager, instances, strips ----------
+  // Every page frame carries the instance affordances: the plain instance's
+  // selection box (positioned by its own geometry) and the cross-page strip box
+  // (binding-edge anchored, the vertical drag writes its startOffset).
   function buildStage() {
     var stage = q("#preview-stage");
     qa(".page-frame", stage).forEach(function (n) { n.remove(); });
     var vb = viewBox();
-    var halfIdx = { left: 0, right: 1 };
     S.pages.forEach(function (p, i) {
       var frame = mk("div", "page-frame");
       frame.dataset.page = p.n;
       if (S.splitOn) {
         frame.dataset.half = p.half || "left";
-        frame.dataset.halfIdx = halfIdx[p.half || "left"];
+        frame.dataset.halfIdx = p.halfIdx || 0;
       }
       var cv = mk("canvas", "page-canvas");
       setCanvasSize(cv, vb.w, vb.h);
       frame.appendChild(cv);
-      if (!S.splitOn && !S.p["apply.crossPage"]) {
-        S.instances.forEach(function (inst, k) {
-          var ins = mk("div", "instance");
-          ins.dataset.instance = String(k + 1);
-          ins.dataset.selected = String(k === S.selId);
-          ins.dataset.mode = inst.mode;
-          var box = mk("div", "sel-box");
-          box.setAttribute("role", "group");
-          var lab = mk("span", "sr-only");
-          lab.dataset.i18n = "stamp.box.aria";
-          lab.dataset.i18nCn = "选中印章实例的位置";
-          lab.textContent = "Selected stamp instance position";
-          box.appendChild(lab);
-          ["nw", "ne", "sw", "se", "rot"].forEach(function (h) {
-            var hs = mk("span", "handle"); hs.dataset.handle = h; box.appendChild(hs);
-          });
-          var g = S.geo[k];
-          box.style.left = pt2px(g.x) + "px"; box.style.top = pt2px(g.y) + "px";
-          box.style.width = pt2px(g.w) + "px"; box.style.height = pt2px(g.w) + "px";
-          ins.appendChild(box);
+      S.instances.forEach(function (inst, k) {
+        var g = S.geo[k];
+        if (!g) return;
+        var ins = mk("div", "instance");
+        ins.dataset.instance = String(k + 1);
+        ins.dataset.selected = String(k === S.selId);
+        ins.dataset.mode = inst.mode;
+        if (inst.mode === "crosspage") {
+          var st = stripGeom(i, g);
+          var sb = mk("div", "strip-box");
+          sb.dataset.page = String(p.n);
+          sb.dataset.edge = st.edge;
+          sb.style.left = pt2px(st.x) + "px"; sb.style.top = pt2px(st.y) + "px";
+          sb.style.width = pt2px(st.sw) + "px"; sb.style.height = pt2px(st.sh) + "px";
+          ins.appendChild(sb);
           frame.appendChild(ins);
+          return;
+        }
+        var box = mk("div", "sel-box");
+        box.setAttribute("role", "group");
+        var lab = mk("span", "sr-only");
+        lab.dataset.i18n = "stamp.box.aria";
+        lab.dataset.i18nCn = "选中印章实例的位置";
+        lab.textContent = "Selected stamp instance position";
+        box.appendChild(lab);
+        ["nw", "ne", "sw", "se", "rot"].forEach(function (h) {
+          var hs = mk("span", "handle"); hs.dataset.handle = h; box.appendChild(hs);
         });
-      }
+        box.style.left = pt2px(g.x) + "px"; box.style.top = pt2px(g.y) + "px";
+        box.style.width = pt2px(g.w) + "px"; box.style.height = pt2px(g.w) + "px";
+        ins.appendChild(box);
+        frame.appendChild(ins);
+      });
       stage.appendChild(frame);
     });
-    q("#preview-stage").dataset.split = S.splitOn ? "on" : "off";
+    stage.dataset.split = S.splitOn ? "on" : "off";
   }
+  // buildPager mirrors app-pager.js (SP2): the rail is a bare thumbnail strip -
+  // one counter chip, then one button per page whose only child is the thumb
+  // canvas; the pressed state outlines the thumbnail. No number span, no All
+  // chip, no pill.
   function buildPager() {
     var nav = q("#page-pager");
     nav.textContent = "";
+    if (!S.pages.length) return;
     var cnt = mk("span", "chip");
-    cnt.dataset.i18n = "pager.count";
-    cnt.dataset.i18nCn = "页 " + S.current + "/" + S.pages.length;
-    cnt.textContent = "pages " + S.current + "/" + S.pages.length;
+    cnt.dataset.role = "pager-count";
+    labelEl(cnt, "pager.count", "页 " + S.current + "/" + S.pages.length,
+      "page " + S.current + "/" + S.pages.length);
+    cnt.textContent = S.current + " / " + S.pages.length;
     nav.appendChild(cnt);
     S.pages.forEach(function (p) {
       var b = mk("button", "chip");
-      b.textContent = "p" + p.n + (p.half ? " " + p.half : "");
+      b.type = "button";
+      b.dataset.page = String(p.n);
       b.setAttribute("aria-pressed", String(p.n === S.current));
-      b.addEventListener("click", function () { S.current = p.n; layout(); draw(); });
+      labelEl(b, "page.hint", "跳到某页 " + p.n, "jump to page " + p.n);
+      var cv = mk("canvas", "pg-thumb");
+      cv.dataset.page = String(p.n);
+      b.appendChild(cv);
+      b.addEventListener("click", function () { S.current = p.n; layout(); draw(); readouts(); });
       nav.appendChild(b);
-    });
-    if (S.pages.length > 1) {
-      var all = mk("button", "chip");
-      all.dataset.i18n = "pages.all.btn"; all.dataset.i18nCn = "全部";
-      all.textContent = "All";
-      all.addEventListener("click", function () {
-        pset("apply.pages", "all"); pset("export.pages", "all");
-      });
-      nav.appendChild(all);
-    }
-  }
-  function buildVeto() {
-    var host = q("#split-veto");
-    if (!host) return;
-    host.textContent = "";
-    if (!S.p["split.auto"]) return;
-    S.pages.forEach(function (p) {
-      var b = mk("button", "chip");
-      var vetoed = S.p["ui.split.vetoedPages"].indexOf(p.n) >= 0;
-      b.dataset.i18n = vetoed ? "chip.veto" : "chip.2up";
-      b.dataset.i18nCn = vetoed ? "已否决" : "2 拼";
-      b.textContent = (vetoed ? "vetoed " : "2-up ") + "p" + p.n;
-      b.setAttribute("aria-pressed", String(vetoed));
-      b.addEventListener("click", function () {
-        var v = S.p["ui.split.vetoedPages"];
-        var at = v.indexOf(p.n);
-        if (at >= 0) v.splice(at, 1); else v.push(p.n);
-        applySplitMode(); buildVeto(); layout(); draw();
-      });
-      host.appendChild(b);
+      paintThumb(cv, p);
     });
   }
-  function buildStrips() {
-    var host = q("#strip-previews");
-    if (!host) return;
-    host.textContent = "";
-    if (!S.p["apply.crossPage"]) return;
+  // The chip's name is its title/aria-label (the visible counter text is
+  // dynamic, so an data-i18n text node would fight applyLang - §6).
+  function labelEl(el, key, cn, en) {
+    el.setAttribute("data-i18n-title", key);
+    el.setAttribute("data-i18n-title-cn", cn);
+    el.setAttribute("title", en);
+    el.setAttribute("aria-label", en);
+  }
+  // SP2: the CSS rail height is the source of truth - the backing store is
+  // measured from the laid-out canvas and the width follows the page aspect
+  // (app-pager.js renderThumb). The mock paints it from the page fixture.
+  function paintThumb(cv, p) {
+    var h = Math.round(cv.getBoundingClientRect().height) || 64;
     var vb = viewBox();
-    S.pages.forEach(function (p, i) {
-      var wrap = mk("div", "strip");
-      var cv = mk("canvas");
-      var side = S.p["ui.crosspage.binding"] === "alternate"
-        ? ((i + 1) % 2 === 1 ? "right" : "left") : S.p["ui.crosspage.binding"];
-      var sw = vb.w / 4, sh = vb.w * 0.25;
-      var zoom = 1.6;
-      cv.width = Math.round(pt2px(sw) * zoom); cv.height = Math.round(pt2px(sh) * zoom);
-      var ctx = cv.getContext("2d");
-      var cols = num(S.p["split.cols"], 2);
-      if (img.page && img.seal) {
-        var srcX = (side === "right" ? (cols - 1) * img.page.width / cols : 0);
-        var srcW = img.page.width / cols / 4;
-        ctx.filter = "none"; ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1;
-        ctx.drawImage(img.page, srcX, 0, srcW, img.page.height, 0, 0, cv.width, cv.height);
-        var n = S.pages.length;
-        var iw = img.seal.width;
-        var st = { x: 0, y: num(S.p["apply.startOffset"], 0), sw: sw, sh: sh,
-          sx: Math.round(iw * i / n), sy: 0, isw: Math.round(iw / n), ish: img.seal.height };
-        ctx.save();
-        ctx.scale(cv.width / pt2px(sw), cv.height / pt2px(sh));
-        drawSealOn(ctx, { width: pt2px(sw), height: pt2px(sh) }, S.geo[S.selId], st);
-        ctx.restore();
-      }
-      var cap = mk("div", "cap");
-      cap.textContent = "p" + p.n + " " + side;
-      wrap.appendChild(cv); wrap.appendChild(cap);
-      host.appendChild(wrap);
-    });
-  }
-  function buildInstances() {
-    var ul = q("#seal-instances");
-    ul.textContent = "";
-    S.instances.forEach(function (inst, k) {
-      var li = mk("li");
-      li.dataset.instance = String(k + 1);
-      li.setAttribute("aria-current", String(k === S.selId));
-      var inp = mk("input"); inp.type = "text"; inp.value = inst.name;
-      inp.dataset.i18nPlaceholder = "instances.rename.placeholder";
-      inp.dataset.i18nCnPlaceholder = "实例名称";
-      inp.setAttribute("aria-label", "instance name");
-      inp.addEventListener("input", function () { inst.name = inp.value; });
-      inp.addEventListener("focus", function () { selectInstance(k); });
-      var badge = mk("span", "chip");
-      badge.textContent = inst.mode === "crosspage" ? "cross-page" : "normal";
-      if (inst.baked) {
-        var bk = mk("span", "chip");
-        bk.dataset.i18n = "apply.write.btn"; bk.dataset.i18nCn = "盖到 PDF";
-        bk.textContent = "baked";
-        li.appendChild(bk);
-      }
-      var rm = mk("button", "btn danger");
-      rm.dataset.i18n = "instances.delete.btn"; rm.dataset.i18nCn = "删除";
-      rm.textContent = "x";
-      rm.addEventListener("click", function () { removeInstance(k); });
-      li.appendChild(inp); li.appendChild(badge); li.appendChild(rm);
-      li.addEventListener("click", function () { selectInstance(k); });
-      ul.appendChild(li);
-    });
+    var w = Math.max(1, Math.round(h * vb.w / vb.h));
+    var dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    cv.style.width = w + "px"; cv.style.height = h + "px";
+    var ctx = cv.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, w, h);
+    if (!img.page) return;
+    var cols = num(S.p["split.cols"], 2), rows = num(S.p["split.rows"], 1);
+    var sw = img.page.width / cols, sh = img.page.height / rows;
+    ctx.drawImage(img.page, (p.halfIdx || 0) * sw, (p.halfRow || 0) * sh, sw, sh, 0, 0, w, h);
   }
 
-  // setDocTitle mirrors app-shell.js (HD2, revised by HD5): the window title is
+  // setDocTitle mirrors the app-shell-* modules (HD2, revised by HD5): the window title is
   // "AutoStamp <version>", then the open file's name. The topbar has no text of
   // its own, so document.title carries both for the browser tab.
   function setDocTitle() {
@@ -1334,7 +1079,7 @@ window.__autoStampMock = (function () {
   }
   // ---------- layout / readouts ----------
   function layout() {
-    buildStage(); buildPager(); buildInstances(); buildVeto(); buildStrips();
+    buildStage(); buildPager();
     q("#preview-ruler").textContent =
       viewBox().w.toFixed(1) + " x " + viewBox().h.toFixed(1) + " pt";
     setDocTitle();
@@ -1349,15 +1094,18 @@ window.__autoStampMock = (function () {
     q("#estimate-per-page").setAttribute("data-i18n-cn", est.cn);
     q("#estimate-per-page").textContent = est.en;
     q("#estimate").dataset.warn = String(est.warn);
-    var po = qa("#panel [data-field=\"api.apply.opacity\"]");
     var blend = S.p["apply.blend"], op = S.p["apply.opacity"];
     q("#pixel-readout").textContent =
       "sample: dst*src/255 via " + blend + " @ a=" + op.toFixed(2) +
       " | pos " + S.p["apply.pos"] + "pt | scale " + (g ? Math.round(g.w) : 0) + "pt";
-    ["open", "split", "apply", "export", "save"].forEach(function (r) {
-      setField(r + ".assetId", S.p[r + ".assetId"]);
-    });
-    setField("fs.pick.pathGrantId", S.p["fs.pick.pathGrantId"]);
+    // SP1: the only crossPage reading left on the UI is the display hook below
+    // (§2 ctl=no); the assetIds stay internal (probe('chain') reads them).
+    q("#strip-readout-value").textContent = stripCount() + " strip(s) side " + bindingSide();
+  }
+  // probe('strip') reads the same surface the strip readout shows: every
+  // cross-page instance contributes one strip box per page frame.
+  function stripCount() {
+    return qa("#preview-stage .instance[data-mode=\"crosspage\"]").length;
   }
   function estimateBytes() {
     var mode = S.p["export.mode"];
@@ -1385,20 +1133,12 @@ window.__autoStampMock = (function () {
   var STATES = ["empty", "open-error", "opened", "stamp-selected", "stamp-dragging",
     "stamp-resizing", "split-preview", "crosspage", "export", "save-confirm",
     "replace-confirm", "password-error", "save-error", "warn-no-text", "warn-large-page"];
-  function syncChips() {
-    qa("#asset-hooks .chip").forEach(function (n) {
-      var r = n.dataset.route;
-      var v = S.p[r + ".assetId"];
-      n.textContent = r + "=" + (v === null ? "-" : v);
-    });
-  }
   function resetFile() {
     S.fileOpen = false; S.splitOn = false; S.current = 1;
     S.pages = mkPages(5);
     ["open", "split", "apply", "export", "save"].forEach(function (r) { S.p[r + ".assetId"] = null; });
     S.p["fs.pick.pathGrantId"] = null;
     clearToast(); setModal(null);
-    syncChips();
   }
   function openFile(path) {
     S.fileOpen = true;
@@ -1406,13 +1146,15 @@ window.__autoStampMock = (function () {
     S.p["fs.pick.pathGrantId"] = "grant-" + Math.random().toString(36).slice(2, 8);
     S.p["open.assetId"] = "a-" + Math.random().toString(36).slice(2, 8);
     S.current = 1;
+    // adopt mirror (HD17): a fresh document starts with no instances.
+    S.instances = []; S.geo = []; S.selId = -1;
   }
   function applySplitMode() {
     var mode = S.p["ui.split.mode"];
     var fr = String(S.p["split.cutFractions"]).split(",").map(function (s) { return num(s, 0.5); });
     var bad = fr.some(function (v) { return v <= 0 || v >= 1; });
     if (bad) {
-      toast("split.err.badFraction.hint", "cut fraction must be in (0,1) - pdfcpu rejects >= 1", "err");
+      toast("", "split_failed: cut fraction must be in (0,1) - pdfcpu rejects >= 1", "err");
       return false;
     }
     clearToast();
@@ -1451,8 +1193,6 @@ window.__autoStampMock = (function () {
     S.state = name;
     document.documentElement.dataset.state = name;
     setModal(null); clearToast();
-    S.p["apply.crossPage"] = false;
-    setField("apply.crossPage", false);
     switch (name) {
       case "empty": resetFile(); break;
       case "open-error":
@@ -1465,22 +1205,20 @@ window.__autoStampMock = (function () {
         break;
       case "split-preview":
         openFile(S.p["fs.pick.filePath"]);
-        S.p["ui.split.mode"] = "v2"; setField("ui.split.mode", "v2");
+        S.p["ui.split.mode"] = "v2";
         applySplitMode();
         break;
       case "crosspage":
         openFile(S.p["fs.pick.filePath"]);
-        S.p["ui.split.mode"] = "v2"; setField("ui.split.mode", "v2");
-        if (S.p["ui.crosspage.binding"] === "none") {
-          S.p["ui.crosspage.binding"] = "right"; setField("crosspage.binding", "right");
-        }
-        applySplitMode();
-        pset("apply.crossPage", true);
-        pset("apply.startOffset", 0);
+        // SP4: the state demos the placed strip instance, not a sidebar section
+        // (and the placement button carries its aria-pressed pair).
+        setAddMode("crosspage");
+        addCrossInstanceAt({ y: 60 });
         break;
       case "export":
         openFile(S.p["fs.pick.filePath"]);
-        q("#panel-export").open = true;
+        // SP5 (2026-11-06): the "export" auto-open branch died with the sidebar -
+        // #panel-export now lives inside the save dialog; the state name stays.
         break;
       case "save-confirm": openFile(S.p["fs.pick.filePath"]); setModal("save"); break;
       case "replace-confirm":
@@ -1505,44 +1243,165 @@ window.__autoStampMock = (function () {
         break;
       case "warn-large-page":
         openFile(S.p["fs.pick.filePath"]);
-        toast("warn.render.hint", "Page 3 has 33 MP: rendered at reduced scale", "warn",
-          [["Render at full size", function () { setState("opened"); }, "render.full.btn", "按原尺寸渲染"]]);
+        toast("warn.render.hint", "Page 3 has 33 MP: rendered at reduced scale", "warn");
         break;
     }
-    S.instances[S.selId].mode = S.p["apply.crossPage"] ? "crosspage" : "normal";
+    syncCpGroup();
     layout(); draw(); readouts();
+  }
+  // SP4 mirror of syncCpGroup in app-shell-instances.js: the cross-page fields
+  // ride the floating panel only when the selected instance *is* a strip.
+  function syncCpGroup() {
+    var inst = S.selId >= 0 ? S.instances[S.selId] : null;
+    var on = Boolean(inst && inst.mode === "crosspage");
+    qa("#instance-panel .cp-group").forEach(function (g) { g.hidden = !on; });
+    // Z5: the cover slider + retry ride only the random draw.
+    var segBtn = document.querySelector("#crosspage-slicemode button[aria-pressed='true']");
+    var rand = on && segBtn && segBtn.dataset.value === "random";
+    qa("#instance-panel .cp-rand").forEach(function (g) { g.hidden = !rand; });
+    return on;
+  }
+  // The instance's cross-page state is the entry point (the placement mode puts
+  // a strip instance, the binding segment moves back off "none").
+  function armCrossInstance() {
+    var i = S.instances[S.selId], g = S.geo[S.selId];
+    if (!i || !g) return false;
+    i.mode = "crosspage";
+    S.p["apply.crossPage"] = true;
+    if (S.p["ui.crosspage.binding"] === "none") setBinding("right");
+    return true;
+  }
+  function demoteSelected() {
+    var i = S.instances[S.selId];
+    if (!i) return false;
+    i.mode = "normal";
+    S.p["apply.crossPage"] = false;
+    return true;
+  }
+  function setBinding(v) {
+    S.p["ui.crosspage.binding"] = v;
+    setField("crosspage.binding", v);
+  }
+  // §7 drive API mirrors: the write-back chain has no buttons any more (SP1), so
+  // the keyboard and these calls are the entry points. A split step arms the
+  // chain; undo order matters - the newest step first (err.undo.newer).
+  function runSplit(opts) {
+    var o = opts || {};
+    if (o.splitMode === "rows-cols") {
+      S.p["split.rows"] = num(o.rows, 1); S.p["split.cols"] = num(o.cols, 2);
+      S.p["ui.split.mode"] = "grid";
+    } else if (o.splitMode === "unsplit") {
+      S.p["ui.split.mode"] = "off";
+    } else if (o.splitMode === "custom") {
+      S.p["split.cutFractions"] = String(o.customCuts || "0.5");
+      S.p["ui.split.mode"] = "v2";
+    } else {
+      S.p["ui.split.mode"] = "v2";   // auto: the heuristic answer (2-up)
+    }
+    if (!applySplitMode()) return false;
+    S.p["split.assetId"] = "s-" + Math.random().toString(36).slice(2, 8);
+    S.splitChain = true;
+    toast("split.ok", "split preview ready: " + S.pages.length + " page(s)", "ok");
+    layout(); draw(); readouts();
+    return true;
+  }
+  function undoSplit() {
+    if (S.applyChain) { toast("err.undo.newer", "undo the newer step first", "err"); return false; }
+    if (!S.splitChain) { toast("err.undo.empty", "nothing to undo", "warn"); return false; }
+    S.splitChain = false; S.p["split.assetId"] = null;
+    S.p["ui.split.mode"] = "off";
+    applySplitMode();
+    toast("ok.undoStep", "reverted to the previous step", "ok");
+    layout(); draw(); readouts();
+    return true;
+  }
+  function stampIntoPDF() {
+    if (!S.fileOpen) { toast("err.apply.noDoc", "no document is open", "err"); return false; }
+    var need = S.instances.filter(function (i) { return !i.baked; });
+    if (!need.length) { toast("err.apply.noSeal", "the selected instance has no seal yet", "err"); return false; }
+    need.forEach(function (i) { i.baked = true; });
+    S.p["apply.assetId"] = "a-" + Math.random().toString(36).slice(2, 8);
+    S.applyChain = true;
+    toast("ok.applied", "stamped " + need.length + " instance(s) into " + S.p["apply.assetId"], "ok");
+    readouts();
+    return true;
+  }
+  function undoStamping() {
+    if (!S.applyChain) { toast("err.undo.empty", "nothing to undo", "warn"); return false; }
+    S.applyChain = false; S.p["apply.assetId"] = null;
+    S.instances.forEach(function (i) { i.baked = false; });
+    toast("ok.undoStep", "reverted to the previous step", "ok");
+    readouts();
+    return true;
   }
 
   // ---------- controls, interactions, shortcuts ----------
+  // §7 mirror: selectInstance / addInstance(name, params) drive the instance
+  // model the way the shell does; selecting one re-loads its parameter group
+  // into the panel and re-gates the cp-group on the mode.
   function selectInstance(k) {
-    if (k < 0 || k >= S.instances.length) return;
+    if (k < 0 || k >= S.instances.length) {
+      S.selId = -1;
+      syncCpGroup(); buildStage(); draw(); readouts();
+      return -1;
+    }
     S.selId = k;
+    var g = S.geo[k];
     S.p["apply.crossPage"] = S.instances[k].mode === "crosspage";
-    setField("apply.crossPage", S.p["apply.crossPage"]);
-    syncGeo();
-    buildInstances(); buildStrips(); buildStage(); draw(); readouts();
+    if (g) {
+      S.p["apply.scale"] = +(g.w / A4.w).toFixed(3);
+      S.p["apply.rotation"] = Math.round(g.rot);
+      S.p["apply.startOffset"] = num(g.so, 0);
+      setField("apply.scale", S.p["apply.scale"]);
+      setField("apply.rotation", S.p["apply.rotation"]);
+      setField("apply.startOffset", S.p["apply.startOffset"]);
+    }
+    syncCpGroup(); syncGeo(); buildStage(); draw(); readouts();
+    return k;
   }
-  function addInstance() {
-    S.instances.push({ name: "Seal " + S.nextId, mode: "normal" });
-    S.geo.push({ x: 130, y: 300, w: S.p["apply.scale"] * A4.w, rot: 0 });
+  function addInstance(name, params) {
+    var p = params || {};
+    var cross = Boolean(p["api.apply.crossPage"]);
+    S.instances.push({ name: name || "Seal " + S.nextId, mode: cross ? "crosspage" : "normal" });
+    S.geo.push({
+      x: 130, y: 300, rot: 0,
+      w: num(p["api.apply.scale"], S.p["apply.scale"]) * A4.w,
+      so: clamp(num(p["api.apply.startOffset"], S.p["apply.startOffset"]), 0, 200)
+    });
     S.selId = S.instances.length - 1;
     S.nextId++;
-    buildInstances(); buildStage(); draw(); readouts();
+    // A placed strip carries its click height into the panel state (syncGeo
+    // reads the startOffset field, so the seed must land there first).
+    if (cross && p["api.apply.startOffset"] !== undefined) S.p["apply.startOffset"] = num(p["api.apply.startOffset"], 0);
+    if (cross) armCrossInstance();
+    syncCpGroup(); syncGeo(); buildStage(); draw(); readouts();
+    return S.selId;
+  }
+  // SP4: the cross-page add mode's placement (addCrossInstanceAt) - the click's
+  // height becomes the startOffset, the binding edge anchors the strip.
+  function addCrossInstanceAt(pt) {
+    return addInstance(null, {
+      "api.apply.crossPage": true,
+      "api.apply.startOffset": pt ? pt.y : 0
+    });
   }
   function duplicateInstance() {
     var src = S.instances[S.selId], g = S.geo[S.selId];
+    if (!src || !g) return -1;
     S.instances.push({ name: src.name + " copy", mode: src.mode });
-    S.geo.push({ x: g.x + 20, y: g.y + 20, w: g.w, rot: g.rot });
+    S.geo.push({ x: g.x + 20, y: g.y + 20, w: g.w, rot: g.rot, so: g.so });
     S.selId = S.instances.length - 1;
-    buildInstances(); buildStage(); draw();
+    syncCpGroup(); buildStage(); draw(); readouts();
+    return S.selId;
   }
   function removeInstance(k) {
     // HD17 mirror: instances delete down to zero (no last-instance guard).
-    if (k < 0 || !S.instances.length) return;
+    if (k < 0 || !S.instances.length) return null;
     S.instances.splice(k, 1); S.geo.splice(k, 1);
     if (!S.instances.length) S.selId = -1;
     else if (S.selId >= S.instances.length) S.selId = 0;
-    buildInstances(); buildStage(); draw();
+    syncCpGroup(); buildStage(); draw(); readouts();
+    return k;
   }
   function segWire(id, key, after) {
     var host = q(id);
@@ -1605,227 +1464,80 @@ window.__autoStampMock = (function () {
     });
   }
   function wireControls() {
-    ["apply.opacity", "apply.brightness", "apply.saturate", "apply.scale", "apply.rotation",
-      "apply.startOffset", "export.quality", "export.customDpi", "apply.pos", "apply.offset",
-      "apply.pages", "apply.blend", "split.pages", "split.rows", "split.cols",
-      "split.cutFractions", "export.pages", "save.targetPath", "seal.preset.presetName",
-      "batch.presetName", "batch.customDpi", "batch.quality", "batch.concurrency",
-      "open.pw", "fs.pick.filePath"].forEach(bindPair);
-    // P6 批处理: the batch toggles join the same change channel as the panel ones.
-    qa('[data-field="api.batch.autoSplit"], [data-field="api.batch.crossPage"]').forEach(function (inp) {
-      inp.addEventListener("change", function () {
-        S.p[inp.getAttribute("data-field").replace(/^api\./, "")] = inp.checked;
-      });
-    });
-    qa('[data-field="api.apply.crossPage"], [data-field="api.split.auto"], [data-field="api.seal.prepare.despill"], [data-field="api.save.replaceOriginal"]').forEach(function (inp) {
-      inp.addEventListener("change", function () {
-        var name = inp.getAttribute("data-field").replace(/^api\./, "");
-        S.p[name] = inp.checked;
-        if (name === "apply.crossPage") {
-          S.instances[S.selId].mode = inp.checked ? "crosspage" : "normal";
-          if (inp.checked) {
-            if (S.p["ui.crosspage.binding"] === "none") {
-              S.p["ui.crosspage.binding"] = "right";
-              setField("crosspage.binding", "right");
-              toast("crosspage.binding.fixed", "binding edge restored to right: a cross-page seal cannot stay on \u201cno cross-page seal\u201d", "ok");
-            }
-            if (!S.splitOn) { S.p["ui.split.mode"] = "v2"; applySplitMode(); }
-          }
-        }
-        if (name === "split.auto" && !inp.checked) S.p["ui.split.mode"] = "manual";
-        if (name === "seal.prepare.despill" && !inp.checked) {
-          toast("seal.despill.revert", "despill reverted: original alpha kept", "ok");
-        }
-        buildStage(); buildStrips(); draw();
-      });
+    // The channels that still carry controls: the instance parameter group
+    // (panel), the export group, and the save box (HD19: the pick path box is gone).
+    ["apply.blend", "apply.opacity", "apply.brightness", "apply.saturate",
+      "apply.scale", "apply.rotation", "apply.startOffset", "export.quality", "export.customDpi",
+      "export.pages", "save.targetPath", "open.pw"].forEach(bindPair);
+    // §2 marks the split / seal.prepare / assetId groups ctl=no: the drive API
+    // and the state machine set those channels, no control does (SP1).
+    qa('[data-field="api.save.replaceOriginal"]').forEach(function (inp) {
+      inp.addEventListener("change", function () { S.p["save.replaceOriginal"] = inp.checked; });
     });
     segWire("#lang-seg", "ui.lang");
     segWire("#theme-seg", "ui.theme");
     segWire("#export-dpi", "export.dpi", readouts);
-    segWire("#batch-dpi", "batch.dpi", readouts);
     segWire("#export-mode", "export.mode", readouts);
-    segWire("#apply-anchor", "apply.anchor", function (v) {
-      var vb = viewBox(), g = S.geo[S.selId], sw = g.w;
-      if (v === "center") { g.x = (vb.w - sw) / 2; g.y = (vb.h - sw) / 2; }
-      if (v === "tl") { g.x = 10; g.y = 10; }
-      if (v === "tr") { g.x = vb.w - sw - 10; g.y = 10; }
-      if (v === "bl") { g.x = 10; g.y = vb.h - sw - 10; }
-      if (v === "br") { g.x = vb.w - sw - 10; g.y = vb.h - sw - 10; }
-      geoToField(); draw(); readouts();
+    // D2 vocabulary on the *selected* instance: right/alternate promote it to a
+    // cross-page strip, "none" demotes it back to a plain seal (SP4). With no
+    // instance selected nothing can be promoted - the segment puts itself back
+    // and warns (the shell's crosspage.binding.fixed guard).
+    qa("#crosspage-binding button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        if (S.selId < 0 || !S.instances[S.selId]) {
+          setBinding(S.p["ui.crosspage.binding"]);
+          toast("crosspage.binding.fixed",
+            "no instance selected: the binding edge stays " + S.p["ui.crosspage.binding"], "warn");
+          return;
+        }
+        var v = b.dataset.value;
+        setBinding(v);
+        if (v === "none") demoteSelected();
+        else armCrossInstance();
+        syncCpGroup(); buildStage(); draw(); readouts();
+      });
     });
-    // D2: right / alternate imply a cross-page stamp; "none" clears apply.crossPage
-    segWire("#crosspage-binding", "ui.crosspage.binding", function (v) {
-      var cp = v !== "none";
-      S.p["apply.crossPage"] = cp;
-      setField("apply.crossPage", cp);
-      S.instances[S.selId].mode = cp ? "crosspage" : "normal";
-      if (cp && !S.splitOn) { S.p["ui.split.mode"] = "v2"; applySplitMode(); }
-      buildStage(); buildInstances(); buildStrips(); draw(); readouts();
+    // Z5 mirror: the sliceMode seg gates the cover/retry sub-fields (设计产物
+    // only; the mock does not draw the random distribution itself).
+    qa("#crosspage-slicemode button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        if (S.selId < 0 || !S.instances[S.selId]) {
+          toast("crosspage.binding.fixed",
+            "no instance selected: the slice mode stays " + S.p["ui.crosspage.sliceMode"], "warn");
+          return;
+        }
+        var v = b.dataset.value;
+        S.p["ui.crosspage.sliceMode"] = v;
+        qa("#crosspage-slicemode button").forEach(function (x) {
+          x.setAttribute("aria-pressed", String(x === b));
+        });
+        syncCpGroup(); readouts();
+      });
     });
-    segWire("#split-mode", "ui.split.mode", function (v) {
-      if (v === "off") { S.splitOn = false; S.pages = mkPages(5); }
-      else applySplitMode();
-      layout(); draw();
-    });
-    q("#instance-add").addEventListener("click", addInstance);
-    q("#instance-duplicate").addEventListener("click", duplicateInstance);
-    q("#instance-delete").addEventListener("click", function () { removeInstance(S.selId); });
-    q("#split-apply").addEventListener("click", function () {
-      if (applySplitMode()) {
-        S.p["split.assetId"] = "s-" + Math.random().toString(36).slice(2, 8);
-        toast("split.ok", "split preview ready: " + S.pages.length + " pages (result page set replaces the original once trimmed)", "ok");
-        layout(); draw(); readouts();
-      }
-    });
-    q("#apply-write").addEventListener("click", function () {
-      var need = S.instances.filter(function (i) { return !i.baked; });
-      if (!need.length) { toast("err.apply.noSeal", "the selected instance has no seal yet", "err"); return; }
-      need.forEach(function (i) { i.baked = true; });
-      S.p["apply.assetId"] = "a-" + Math.random().toString(36).slice(2, 8);
-      toast("ok.applied", "stamped " + need.length + " instance(s) into " + S.p["apply.assetId"], "ok");
-      buildInstances(); readouts();
-    });
-    q("#apply-undo").addEventListener("click", function () {
-      var any = S.instances.filter(function (i) { return i.baked; });
-      if (!any.length) { toast("err.undo.empty", "nothing to undo", "err"); return; }
-      any.forEach(function (i) { i.baked = false; });
-      toast("ok.undoStep", "reverted to the previous step", "ok");
-      buildInstances(); readouts();
-    });
-    q("#split-undo").addEventListener("click", function () {
-      if (!S.splitOn) { toast("err.undo.newer", "undo the newer step first", "err"); return; }
-      S.splitOn = false; S.pages = mkPages(5);
-      toast("ok.undoStep", "reverted to the previous step", "ok");
-      layout(); draw();
-    });
-    q("#save-confirm").addEventListener("click", function () {
-      if (!S.p["open.assetId"]) { toast("err.apply.noDoc", "no document is open", "err"); return; }
-      var pending = S.instances.filter(function (i) { return !i.baked; });
-      if (pending.length) toast("ok.applied", "stamp first: " + pending.length + " instance(s) are baked before the write", "ok");
-      // W5/W6 (UI_SPEC §8): raster mode bakes pages before the write, and the
-      // 90 MB/page cap is caught from the estimate *before* any request goes out.
-      if (S.p["export.mode"] !== "raster") return;
-      var est = estimateBytes();
-      if (est.warn) { toast("warn.export.tooBig", "page bitmap exceeds the 90 MB cap: lower DPI to 300 or fewer pages", "warn"); return; }
-      toast("ok.exported", "rasterised " + S.pages.length + " page(s) at " + S.p["export.dpi"] + " dpi q" + S.p["export.quality"], "ok");
-    });
-    qa("#panel .btn[data-value=\"all\"], #panel .btn[data-value=\"current\"]").forEach(function (b) {
+    // The export page-word buttons share the apply/export page vocabulary (§2).
+    qa("#panel-export .btn[data-value=\"all\"], #panel-export .btn[data-value=\"current\"]").forEach(function (b) {
       b.addEventListener("click", function () {
         var v = b.dataset.value === "all" ? "all" : String(S.current);
         S.p["apply.pages"] = v; S.p["export.pages"] = v;
         setField("apply.pages", v); setField("export.pages", v);
       });
     });
-    q("#seal-despill-revert").addEventListener("click", function () {
-      pset("seal.prepare.despill", false);
-      toast("seal.despill.revert", "despill reverted: original alpha kept", "ok");
-    });
-    // P6 预设库演示：保存 = 列表加一项（同名覆盖）、载入 = 参数写回面板、删除 = 移除。
-    q("#seal-preset-save").addEventListener("click", function () {
-      var name = S.p["seal.preset.presetName"];
-      if (q("#seal-meta").textContent === "-") { toast("seal.preset.noSeal", "upload a seal before saving a preset", "warn"); return; }
-      if (!name) { toast("warn.preset.name", "preset name is empty", "warn"); return; }
-      if (!String(name).trim()) { toast("seal.preset.nameNeeded", "preset name is required", "warn"); return; }
-      var sel = q("#seal-preset-select");
-      var existing = qa("option", sel).some(function (o) { return o.value === name; });
-      if (existing) {
-        sel.value = name;
-        toast("preset.ok", "preset stored (same name overwrites): " + name, "ok");
-        return;
-      }
-      var o = mk("option", "");
-      o.value = name; o.textContent = name;
-      sel.appendChild(o);
-      sel.value = name;
-      toast("seal.preset.saved", "preset saved: " + name, "ok");
-    });
-    q("#seal-preset-load").addEventListener("click", function () {
-      var sel = q("#seal-preset-select");
-      if (q("#seal-meta").textContent === "-") { toast("warn.preset.noSeal", "upload a seal image first", "warn"); return; }
-      if (!sel.value) { toast("seal.preset.empty", "no presets yet", "warn"); return; }
-      setField("apply.opacity", 0.6); setField("apply.scale", 0.202);
-      S.p["apply.opacity"] = 0.6; S.p["apply.scale"] = 0.202;
-      toast("ok.preset.applied", "preset applied: " + sel.value, "ok");
-      toast("seal.preset.loaded", "preset loaded, panel updated", "ok");
-    });
-    q("#seal-preset-delete").addEventListener("click", function () {
-      var sel = q("#seal-preset-select");
-      var name = sel.value || q("#seal-preset-name").value;
-      if (!name) { toast("seal.preset.empty", "no presets yet", "warn"); return; }
-      qa("option", sel).forEach(function (o) { if (o.value === name) o.remove(); });
-      toast("ok.preset.deleted", "preset deleted: " + name, "ok");
-      toast("seal.preset.deleted", "preset deleted", "ok");
-    });
-    q("#batch-pick-files").addEventListener("click", function () {
-      q("#batch-files").dataset.i18n = "batch.files.count";
-      q("#batch-files").textContent = "3 file(s) selected";
-    });
-    q("#batch-pick-dir").addEventListener("click", function () {
-      if (!q("#batch-dir-path").value) { toast("err.batch.dirEmpty", "no PDF under that folder", "warn"); return; }
-      toast("batch.empty", "no PDF in this folder", "warn");
-    });
-    // P6 批处理演示：把队列渲染成假状态行（含加密跳过），让 ui-smoke 有东西可断言。
-    var BATCH_FAKE = [
-      ["a-01.pdf", "batch.status.ok", "ok", "成功", "_batch\\a-01.dpi150.q75.pdf"],
-      ["a-02.pdf", "batch.status.fail", "failed", "失败", ""],
-      ["scan-30.pdf", "batch.status.encrypted", "skipped (encrypted)", "跳过（加密）", ""],
-    ];
-    q("#batch-start").addEventListener("click", function () {
-      if (!q("#batch-preset").value) { toast("err.batch.noPreset", "pick a seal preset first", "warn"); return; }
-      if (!q("#seal-preset-select").value) { toast("batch.noPreset", "pick a preset first", "warn"); return; }
-      if (!q("#batch-files").value && !q("#batch-dir-path").value) { toast("err.batch.noSources", "pick files or a folder first", "warn"); return; }
-      if (S.p["batch.dpi"] === "custom" && !(S.p["batch.customDpi"] >= 72 && S.p["batch.customDpi"] <= 600)) {
-        toast("batch.fileFail", "file failed: custom DPI out of range", "warn");
-        return;
-      }
-      if (S.p["export.mode"] === "raster") { toast("warn.batch.rasterUnsupported", "batch writes vector only: raster needs the on-screen preview", "warn"); return; }
-      var ul = q("#batch-queue");
-      ul.textContent = "";
-      BATCH_FAKE.forEach(function (r) {
-        var li = mk("li", "");
-        var stat = mk("span", "stat");
-        stat.dataset.i18n = r[1];
-        stat.setAttribute("data-i18n-cn", r[3]);
-        stat.textContent = r[2];
-        li.appendChild(stat);
-        li.appendChild(document.createTextNode(" " + r[0]));
-        if (r[4]) {
-          var out = mk("span", "chip");
-          out.textContent = " → " + r[4];
-          li.appendChild(out);
-        }
-        ul.appendChild(li);
-      });
-      toast("ok.batch.started", "batch started: 3 file(s)", "ok");
-      toast("batch.started", "batch started", "ok");
-    });
-    q("#batch-cancel").addEventListener("click", function () {
-      toast("ok.batch.done", "batch done: 18 ok, 2 failed", "ok");
-      toast("batch.stopped", "batch stopped by user", "warn");
-    });
-    q("#batch-export-csv").addEventListener("click", function () {
-      toast("batch.done", "batch finished: batch-report.csv downloaded (Blob)", "ok");
-    });
-    q("#batch-export-json").addEventListener("click", function () {
-      toast("batch.done", "batch finished: batch-report.json downloaded (Blob)", "ok");
-    });
-    // The two load channels mirror app-shell.js: the native picker (#btn-open /
-    // #empty-pick -> pickAndOpen) and the typed path box (#empty-path, whose
-    // Enter key opens via openByPath). Drag and paste land in the funnel below.
-    function pickAndOpen() { setState("opened"); }
-    function openByPath() {
-      var path = String(q("#empty-path").value || "").trim();
-      if (!path) { q("#empty-path").focus(); return; }
+    // HD19 (2026-11-06): the native picker is the single load channel (#btn-open /
+    // #empty-pick -> pickAndOpen). Drag and paste land in the funnel below; the typed
+    // path box is gone, so the §7 drive channel openByPath(path) further down is the
+    // only path-driven opener.
+    function pickAndOpen() {
+      // The mock stand-in for api.pick({ filter: "pdf", multi: true }): the simulated
+      // native picker hands back the default open path, then openFile() inside
+      // setState("opened") mints the pathGrantId + open.assetId (grant simulation).
+      var path = String(S.p["fs.pick.filePath"] || "").trim() || "C:\\docs\\contract.pdf";
+      S.p["fs.pick.filePath"] = path;
       setState("opened");
+      setField("fs.pick.pathGrantId", S.p["fs.pick.pathGrantId"]);
     }
     q("#btn-open").addEventListener("click", pickAndOpen);
     q("#empty-pick").addEventListener("click", pickAndOpen);
-    q("#empty-path").addEventListener("keydown", function (e) {
-      if (e.key !== "Enter") return;
-      e.preventDefault();
-      openByPath();
-    });
-    // PD1/PD2 load gate (mirrors app-shell.js): only "one PDF" or "images only".
+    // PD1/PD2 load gate (mirrors the app-shell-* modules): only "one PDF" or "images only".
     function loadClassify(files) {
       var isImg = function (f) { return (f.type || "").indexOf("image/") === 0 || /\.(png|jpe?g|gif|bmp|webp|tiff?)$/i.test(f.name || ""); };
       var isPdf = function (f) { return (f.type || "") === "application/pdf" || /\.pdf$/i.test(f.name || ""); };
@@ -1875,7 +1587,6 @@ window.__autoStampMock = (function () {
       else toast("load.reject.other.hint", "only PDF files and images can be loaded here", "warn");
     });
     q("#btn-save").addEventListener("click", function () { setState("save-confirm"); });
-    q("#save-open").addEventListener("click", function () { setState("save-confirm"); });
     q("#save-cancel").addEventListener("click", function () { setModal(null); });
     q("#save-pick").addEventListener("click", function () {
       S.p["fs.pick.pathGrantId"] = "grant-" + Math.random().toString(36).slice(2, 8);
@@ -1933,6 +1644,7 @@ window.__autoStampMock = (function () {
         mode: h ? h.dataset.handle : "move",
         g: g, frame: frame, cv: cv, rect: rect,
         x0: e.clientX, y0: e.clientY, gx: g.x, gy: g.y, gw: g.w,
+        cross: S.instances[idx] && S.instances[idx].mode === "crosspage",
         side: bindingSide()
       };
       if (S.state === "opened") document.documentElement.dataset.state =
@@ -1944,8 +1656,16 @@ window.__autoStampMock = (function () {
       var dx = (e.clientX - drag.x0) / SC, dy = (e.clientY - drag.y0) / SC;
       var vb = viewBox();
       if (drag.mode === "move") {
-        drag.g.x = clamp(drag.gx + dx, 0, vb.w - drag.g.w);
-        drag.g.y = clamp(drag.gy + dy, 0, vb.h - drag.g.w);
+        if (drag.cross) {
+          // SP4: the strip box stays anchored on the binding edge; the vertical
+          // drag writes the instance's startOffset channel (§2 apply.startOffset,
+          // max 200pt) and the box repaints through the channel.
+          drag.g.so = clamp(Math.round(drag.gy + dy), 0, 200);
+          pset("apply.startOffset", drag.g.so);
+        } else {
+          drag.g.x = clamp(drag.gx + dx, 0, vb.w - drag.g.w);
+          drag.g.y = clamp(drag.gy + dy, 0, vb.h - drag.g.w);
+        }
       } else if (drag.mode === "rot") {
         drag.g.rot = Math.round(drag.r0 === undefined
           ? (drag.r0 = drag.g.rot) : drag.r0 + (e.clientX - drag.x0) / 4);
@@ -1976,10 +1696,15 @@ window.__autoStampMock = (function () {
       ["Ctrl+O", "open.hint", "open a PDF", "打开 PDF"],
       ["Ctrl+S", "save.hint", "save dialog", "保存对话框"],
       ["Ctrl+V", "load.paste.hint", "paste/drop: one PDF opens, images load as seals", "粘贴或拖入：单个 PDF 直接打开，图片装载为印章"],
-      ["Del", "del.hint", "delete selected instance", "删除选中的印章实例"],
-      ["Ctrl+D", "dup.hint", "duplicate instance", "复制印章实例"],
+      ["Del", "instances.delete.btn", "delete selected instance", "删除选中的印章实例"],
+      ["Ctrl+D", "instances.duplicate.btn", "duplicate instance", "复制印章实例"],
+      ["加章模式: 左键页面点击", "app.sealAddMode.btn", "drop current seal at click point", "在点击处放置当前印章"],
+      ["骑缝章模式: 左键页面点击", "app.sealCrossAddMode.btn", "place cross-page seal starting at click height", "以点击处高度为起点放置骑缝章"],
+      ["Ctrl+Enter", "apply.write.btn", "stamp into the PDF (write)", "盖到 PDF（写入落盘）"],
+      ["Ctrl+Z", "apply.undo.btn", "undo the stamp write", "撤销落盘"],
       ["Arrows", "nudge.hint", "move 1pt (Shift: 10pt)", "移动 1pt（Shift = 10pt）"],
-      ["+/-", "scale.hint", "scale +-0.01", "缩放 +-0.01"],
+      ["+/-", "scale.hint", "scale +-0.01", "缩放 +−0.01"],
+      ["Ctrl+wheel", "view.zoom.hint", "zoom the whole page (seal scales with it)", "缩放整页（印章随页面一起缩放）"],
       ["Space + arrows / Space + left-drag / wheel", "view.pan.hint", "pan the view (Space + arrows / Space + left-drag / wheel)", "平移视图（Space+方向键 / Space+左键拖动 / 滚轮）"],
       ["Ctrl + middle click", "view.fit.hint", "restore fit (Ctrl+middle click)", "恢复整页适配（Ctrl+鼠标中键）"],
       ["1..9", "page.hint", "jump to page", "跳到某页"],
@@ -2004,13 +1729,31 @@ window.__autoStampMock = (function () {
   // HD8-HD12: the design artifact only needs to *show* the new surfaces and
   // hand ui-smoke enough truth to assert them: the dropdown options, the
   // toggle behaviour, the floating panel's visibility and the preview canvas.
+  // SP1: the two placement add modes are one flag - normal and cross-page are
+  // mutually exclusive (both aria-pressed, only one on at a time), which is the
+  // whole placement model now; the keyboard and the stage use the same pair.
+  function setAddMode(m) {
+    if (m !== "normal" && m !== "crosspage" && m !== "off") m = "normal";
+    S.addMode = m;
+    q("#btn-seal-add").setAttribute("aria-pressed", String(m === "normal"));
+    q("#btn-crosspage-add").setAttribute("aria-pressed", String(m === "crosspage"));
+    q("#preview-stage").dataset.add = m === "crosspage" ? "crosspage" : m === "normal" ? "on" : "off";
+    return m;
+  }
+  function applySealMode() {
+    if (!S.fileOpen) { toast("open.hint", "open a PDF first", "warn"); return false; }
+    if (!img.seal) { toast("seal.addMode.noseal", "upload or pick a seal first", "warn"); return false; }
+    toast("", (S.addMode === "crosspage" ? "cross-page " : "") + "placement: click the page to drop the current seal", "ok");
+    return true;
+  }
   function wireSealChannel() {
-    var add = q("#btn-seal-add");
-    add.addEventListener("click", function () {
-      S.addMode = !S.addMode;
-      add.setAttribute("aria-pressed", String(S.addMode));
-      q("#preview-stage").dataset.add = S.addMode ? "on" : "off";
-      if (S.addMode) toast("app.sealAddMode.hint", "when on, a left click on empty page space stamps the current seal at that point", "ok");
+    qa("#btn-seal-add, #btn-crosspage-add").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var want = b.id === "btn-seal-add" ? "normal" : "crosspage";
+        // SP4 mutual exclusion, same toggle pattern as the shell's two flags.
+        setAddMode(S.addMode === want ? "off" : want);
+        applySealMode();
+      });
     });
     q("#seal-recent-select").addEventListener("change", function (e) {
       var opt = e.target.options[e.target.selectedIndex];
@@ -2023,6 +1766,13 @@ window.__autoStampMock = (function () {
         return;
       }
       showSealPreview(opt.textContent);
+    });
+    // P1 swaps the real #file-input for pixels; the mock keeps a demo upload
+    // that just re-reads the demo seal.
+    q("#btn-seal-upload").addEventListener("click", function () {
+      if (!S.fileOpen) { toast("open.hint", "open a PDF before uploading a seal", "warn"); return; }
+      showSealPreview(q("#seal-recent-select").options[1].textContent);
+      toast("seal.ok", "seal uploaded: stamp.png (204 KB), auto-despill on the alpha", "ok");
     });
     q("#instance-reset").addEventListener("click", function () {
       var g = S.geo[S.selId];
@@ -2041,13 +1791,19 @@ window.__autoStampMock = (function () {
       q("#instance-fab").hidden = true;
       q("#instance-panel").hidden = false;
     });
-    // HD10: a left click on empty page space places the seal at the click.
+    // HD10 + SP4: a left click on empty page space drops the seal; the
+    // cross-page mode anchors the strip on the binding edge at the click's
+    // height instead of using the plain placement frame.
     q("#preview-stage").addEventListener("click", function (e) {
-      if (!S.addMode || S.state === "empty") return;
+      if (S.addMode !== "normal" && S.addMode !== "crosspage") return;
+      if (S.state === "empty") return;
       if (!e.target.closest || !e.target.closest(".page-frame")) return;
       if (e.target.closest(".instance") || e.target.closest(".handle")) return;
       if (!img.seal) { toast("seal.addMode.noseal", "upload or pick a seal first", "warn"); return; }
-      addInstance();
+      if (S.addMode === "normal") { addInstance(); return; }
+      var frame = e.target.closest(".page-frame");
+      var rect = frame.getBoundingClientRect();
+      addCrossInstanceAt({ y: Math.round((e.clientY - rect.top) / rect.height * viewBox().h) });
     });
     showSealPreview(q("#seal-recent-select").options[1].textContent);
     // HD18: the panel stays collapsed by default - the gear fab (#instance-fab,
@@ -2079,12 +1835,16 @@ window.__autoStampMock = (function () {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "o") { e.preventDefault(); setState("opened"); }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); setState("save-confirm"); }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") { e.preventDefault(); duplicateInstance(); }
+      // SP1: the 盖到 PDF / 撤销盖章 buttons died with the sidebar sections, so
+      // the keyboard is the entry (Ctrl+Enter / Ctrl+Z, app-shell-chrome mirror).
+      else if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); stampIntoPDF(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undoStamping(); }
       else if (e.key === "Delete") removeInstance(S.selId);
-      else if (e.key === "Escape") { setModal(null); clearToast(); }
+      else if (e.key === "Escape") { setModal(null); clearToast(); setAddMode("normal"); }
       else if (e.key === "?") setModal("shortcuts");
       else if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown") {
         var step = e.shiftKey ? 10 : 1;
-        var g = S.geo[S.selId];
+        var g = S.geo[S.selId]; if (!g) return;
         if (e.key === "ArrowLeft") g.x -= step;
         if (e.key === "ArrowRight") g.x += step;
         if (e.key === "ArrowUp") g.y -= step;
@@ -2132,10 +1892,12 @@ window.__autoStampMock = (function () {
   }
   function probe(name) {
     if (name === "pixel-blend") return { blend: S.p["apply.blend"], opacity: S.p["apply.opacity"] };
-    if (name === "strip") return { strips: qa("#strip-previews canvas").length, side: bindingSide() };
+    // probe('strip'): the cross-page instances' strip boxes, side from the edge.
+    if (name === "strip") return { strips: stripCount(), side: bindingSide() };
     if (name === "split") return { pages: S.pages.length, splitOn: S.splitOn, mode: S.p["ui.split.mode"] };
     if (name === "estimate") return q("#estimate-total").textContent;
     if (name === "instances") return S.instances.length;
+    if (name === "instanceCount") return S.instances.length;
     if (name === "state") return S.state;
     if (name === "images") {
       return { page: !!img.page && img.page.complete, seal: !!img.seal && img.seal.complete };
@@ -2147,7 +1909,36 @@ window.__autoStampMock = (function () {
     if (name === "version") return S.version;
     if (name === "docTitle") return document.title;
     if (name === "addMode") return { on: q("#btn-seal-add").getAttribute("aria-pressed") === "true",
-      cursor: q("#preview-stage").dataset.add === "on" };
+      mode: S.addMode, cursor: q("#preview-stage").dataset.add === "on" };
+    // SP4 mirror of probe('crosspageAdd') in app-shell-verify.js: the second
+    // placement mode, the cp-group it gates, and the strip's startOffset.
+    if (name === "crosspageAdd") {
+      var gcp = S.geo[S.selId];
+      return { on: q("#btn-crosspage-add").getAttribute("aria-pressed") === "true",
+        mode: S.addMode,
+        cpFields: qa("#instance-panel .cp-group").some(function (n) { return !n.hidden; }),
+        binding: S.p["ui.crosspage.binding"],
+        startOffset: gcp ? Math.round(num(gcp.so, 0)) : null };
+    }
+    if (name === "cpGroup") {
+      var fields = qa("#instance-panel .cp-group");
+      return { count: fields.length, visible: fields.some(function (n) { return !n.hidden; }) };
+    }
+    if (name === "chain") {
+      return {
+        current: String(S.p["open.assetId"] || ""),
+        open: S.p["open.assetId"] || null,
+        split: S.p["split.assetId"] || null,
+        apply: S.p["apply.assetId"] || null,
+        export: S.p["export.assetId"] || null,
+        save: S.p["save.assetId"] || null,
+        splitUndoArmed: Boolean(S.splitChain),
+        applyUndoArmed: Boolean(S.applyChain),
+        instances: S.instances.map(function (i, k) {
+          return { id: k, name: i.name, crossPage: i.mode === "crosspage" };
+        }),
+      };
+    }
     if (name === "instancePanel") {
       var p = q("#instance-panel");
       var f = q("#instance-fab");
@@ -2179,17 +1970,48 @@ window.__autoStampMock = (function () {
       var ids = qa("#topbar button, #topbar select").map(function (b) { return b.id; });
       return ids.join(",");
     }
-    if (name === "sidebarSections") {
-      return qa("#panel details").map(function (d) { return d.id; }).join(",");
-    }
     if (name === "geoInputs") {
-      return qa("#panel [data-field=\"api.apply.pos\"], #panel [data-field=\"api.apply.anchor\"], " +
-        "#panel [data-field=\"api.apply.offset\"], #panel [data-field=\"api.apply.pages\"]").length;
+      // SP5: there is no sidebar to scope the count to any more, so the probe
+      // runs on the whole document - still zero, none of the four channels has a
+      // control (§2 marks them ctl=no; the drive API and the state machine set them).
+      return qa("[data-field=\"api.apply.pos\"], [data-field=\"api.apply.anchor\"], " +
+        "[data-field=\"api.apply.offset\"], [data-field=\"api.apply.pages\"]").length;
     }
     return null;
   }
+  function drive(name, arg) {
+    // §7 drive mirror: the entry points ui-smoke calls on the real shell,
+    // translated to this design artifact's demo model.
+    switch (name) {
+      case "openByPath": {
+        // HD19: the drive channel takes the path (no box to read); blank → no open.
+        var path = String(arg || "").trim();
+        if (!path) return false;
+        S.p["fs.pick.filePath"] = path;
+        if (!S.fileOpen) setState("opened");
+        return true;
+      }
+      case "setParams": setParams(arg); return true;
+      case "runSplit": return runSplit(arg);
+      case "undoSplit": return undoSplit();
+      case "stampIntoPDF": return stampIntoPDF();
+      case "undoStamping": return undoStamping();
+      case "saveAsset":
+        toast("ok.saved", "saved: " + S.p["save.targetPath"], "ok");
+        return true;
+      case "selectInstance": return selectInstance(Number(arg) || 0);
+      case "addInstance":
+        return addInstance((arg && arg.name) || "", (arg && arg.params) || null);
+      case "duplicateInstance": return duplicateInstance();
+      case "removeInstance": return removeInstance(S.selId);
+      case "applySealMode": return applySealMode();
+      case "addCrossInstanceAt": return addCrossInstanceAt(arg);
+      case "verifyState": return verifyState(String(arg || ""));
+    }
+    return false;
+  }
   return {
-    syncChips: syncChips,
+    drive: drive,
     S: S, STATES: STATES, boot: boot, setState: setState, setParams: setParams,
     verifyState: verifyState, probe: probe, applyLang: applyLang, applyTheme: applyTheme,
     q: q, qa: qa, setModal: setModal, clearToast: clearToast,

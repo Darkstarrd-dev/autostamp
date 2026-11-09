@@ -368,10 +368,10 @@ async function main() {
   if (blendNames.length < 16) bad(`blend vocabulary: expected >=16 modes, got ${blendNames.length}`);
   console.log(`overlay-smoke: ${blendNames.length} blend modes in the panel`);
 
-  // 3) open the document through the real UI channel: the typed path box opens on
-  // Enter now that the empty state has no path/Open button pair (HD6).
+  // 3) open the document through the §7 drive channel (HD19: the path box is
+  // gone, openByPath(path) takes the path directly).
   await app.evaluate(
-    `(() => { const i = document.getElementById('empty-path'); i.value = ${JSON.stringify(docFile)}; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); return i.value === ${JSON.stringify(docFile)}; })()`
+    `(() => { window.__autoStampShell.openByPath(${JSON.stringify(docFile)}); return true; })()`
   );
   await waitFor(
     async () => (await app.evaluate(shellEval("p.probe('canvas') && p.probe('canvas').backing[0] > 100"))) === true,
@@ -394,21 +394,22 @@ async function main() {
     nearPixel(`block ${b.name} backdrop`, px.rgb, b.rgb, 3);
   }
 
-  // 4) upload the seal through the file input; the panel options are set to
-  // known values so the parity has one unambiguous source bitmap
-  await setParams(app, {
-    "api.seal.prepare.despill": false,
-    "api.seal.prepare.alphaTrim": false,
-    "api.seal.prepare.resampleDpi": 300,
-  });
-  // HD8: the upload button now goes through the native picker, which a headless
-  // run cannot drive. The recent-seal channel shares the same openSealByGrant
-  // path, so the scripts replay it with a typed-path grant.
-  await app.evaluate(`window.__autoStampShell.openRecentSeal(${JSON.stringify(sealFile)}).then(() => true)`, true);
+  // 4) prepare the seal through the fs/pick grant channel (HD8's path); the
+  // prepare options ride the call itself - with the seal panel gone (SP1),
+  // the defaults are despill-on/trim-on and the scripts pin the raw bitmap
+  // by passing the overrides directly.
+  await app.evaluate(
+    `(async () => {
+      const g = await window.__autoStampApi.request('/api/fs/pick', { method: 'POST', body: { filePath: ${JSON.stringify(sealFile)}, filter: 'image' } });
+      const gid = ((g.picks || [])[0] || {}).pathGrantId;
+      const m = await window.__autoStampSeal.prepareFromGrant(gid, ${JSON.stringify(sealFile)}, { despill: false, alphaTrim: false, resampleDpi: 300 });
+      window.__autoStampShell.setCurrentSeal(m.sealId, "overlay-seal.png", ${JSON.stringify(sealFile)});
+      return true;
+    })()`, true);
   await waitFor(
     async () => (await app.evaluate(shellEval("window.__autoStampSeal.probe('seals').length > 0"))) === true,
     12000,
-    "the seal upload never produced a seal record"
+    "the seal prepare never produced a seal record"
   );
   const sealProbe = await app.evaluate(shellEval("window.__autoStampSeal.probe('seals')"));
   if (!sealProbe.length) bad("seal probe is empty");
@@ -416,8 +417,8 @@ async function main() {
     const meta = sealProbe[0];
     truthy(`seal prepared (${JSON.stringify(meta).slice(0, 160)})`, meta.sealId);
   }
-  const metaChip = await app.evaluate(`(() => { const e = document.getElementById('seal-meta'); return e ? e.textContent : ''; })()`);
-  truthy(`seal metadata chip shows the alpha readback (${metaChip})`, /[\d]/.test(metaChip));
+  const metaChip = await app.evaluate(shellEval("window.__autoStampSeal.probe('meta')"));
+  truthy(`seal metadata readback shows the alpha fields (${metaChip})`, /[\d]/.test(metaChip));
   // HD17 (2026-11-05): boot seeds no instance - the geometry sections need one,
   // and creation snapshots the seal the channel above just opened.
   await app.evaluate(shellEval("s.addInstance('probe'); true"), true);
@@ -612,15 +613,19 @@ async function main() {
     truthy(`rotate handle writes api.apply.rotation (${p["api.apply.rotation"]})`, Math.abs(Number(p["api.apply.rotation"])) > 3);
     await setParams(app, { "api.apply.rotation": 0, "api.apply.offset": SEAL.offset, "api.apply.scale": SEAL.scale });
 
-    // V3: ctrl+wheel over the instance scales it, over the page zooms the view
+    // V7 (2026-11-05, replaces V3): ctrl+wheel is the whole-page zoom. Over
+    // the selected seal it must zoom the view and leave apply.scale alone -
+    // the seal/page ratio stays constant at any view zoom.
+    const zoomBefore = await app.evaluate(shellEval("p.probe('zoom')"));
     const before = await readParams(app);
     const over = await clientOf(app, SEAL.x + 45, SEAL.y + 45);
     await mouse(app, "mouseWheel", over.x, over.y, 0, { deltaX: 0, deltaY: -120, modifiers: 2 });
     await sleep(250);
+    const zoomMid = await app.evaluate(shellEval("p.probe('zoom')"));
     const after = await readParams(app);
-    truthy(`ctrl+wheel over the seal changes scale (${before["api.apply.scale"]} -> ${after["api.apply.scale"]})`,
-      Number(after["api.apply.scale"]) !== Number(before["api.apply.scale"]));
-    const zoomBefore = await app.evaluate(shellEval("p.probe('zoom')"));
+    truthy(`ctrl+wheel over the seal zooms the view (${zoomBefore} -> ${zoomMid})`, zoomMid !== zoomBefore);
+    truthy(`ctrl+wheel over the seal leaves api.apply.scale alone (${before["api.apply.scale"]})`,
+      Number(after["api.apply.scale"]) === Number(before["api.apply.scale"]));
     // the wheel must land inside #preview-stage (the gesture owner) but not on
     // the floating panel (HD12) or the instance box; the stage letterbox strip
     // above the page is exactly that.
@@ -628,7 +633,7 @@ async function main() {
     await mouse(app, "mouseWheel", bg.x, bg.y, 0, { deltaX: 0, deltaY: -120, modifiers: 2 });
     await sleep(250);
     const zoomAfter = await app.evaluate(shellEval("p.probe('zoom')"));
-    truthy(`ctrl+wheel on the page background zooms the view (${zoomBefore} -> ${zoomAfter})`, zoomAfter !== zoomBefore);
+    truthy(`ctrl+wheel on the page background zooms the view (${zoomMid} -> ${zoomAfter})`, zoomAfter !== zoomMid);
     await app.evaluate(shellEval("p.fit()"));
     await sleep(200);
     await setParams(app, { "api.apply.scale": SEAL.scale, "api.apply.offset": SEAL.offset });
@@ -701,16 +706,114 @@ async function main() {
     cmp("startOffset moves the strip down by the field value", Math.round(rAfter.y - rBefore.y), 120);
     cmp("startOffset does not change the strip width", rAfter.w, rBefore.w);
 
-    // the affordance is hidden for a cross-page instance and drag is refused
+    // Z5 (2026-11-09): uneven fractions ride the same instance — probe frac/cum
+    // and each strip's gradient centre must land at cum + frac/2 of the ramp
+    // (a fixed equal split would fail these centre samples on page 1+). The
+    // seal fixture keeps transparent margins at both ramp edges, so the chosen
+    // distribution keeps every centre sample in [0.05, 0.90] of the image.
+    const UNEVEN = [0.4, 0.1, 0.3, 0.2];
+    await setParams(app, { "api.apply.startOffset": 0 });
+    await app.evaluate(shellEval(`(() => {
+      const inst = s.selectedInstance() || s.state.instances[s.state.instances.length - 1];
+      inst.params["api.apply.slices"] = ${JSON.stringify(UNEVEN)};
+      s.notify("autostamp:param", "overlay-smoke uneven");
+      return true;
+    })()`));
+    await sleep(250);
+    for (const page of [1, 2, 3, 4]) {
+      await app.evaluate(shellEval(`p.goTo(${page})`));
+      await sleep(400);
+      const sU = (await strips(app))[0];
+      if (!sU) { bad(`uneven page ${page}: no strip`); continue; }
+      const i = sU.index;
+      const cumBefore = UNEVEN.slice(0, i).reduce((a, b) => a + b, 0);
+      cmp(`uneven frac page ${page}`, sU.frac, UNEVEN[i]);
+      cmp(`uneven cum page ${page}`, sU.cum, cumBefore);
+      const uRect = (await rects(app))[0] || {};
+      const mU = await app.evaluate(shellEval("p.pageMeta(p.probe('page'))"));
+      const sw = UNEVEN[i] * SEAL.scale * mU.width;
+      cmp(`uneven width page ${page}`, Math.round((uRect.w || 0) * 100), Math.round(sw * 100));
+      // sample the painted strip centre via its own probe rect (the visible
+      // surface), not a hand-computed edge guess
+      const x = (uRect.x || 0) + (uRect.w || 0) / 2;
+      const gotU = await sampleAt(app, x, 40, "composite");
+      const tU = cumBefore + UNEVEN[i] / 2;
+      const wantU = STOPS.left.map((v, k) => Math.round(v + (STOPS.right[k] - v) * tU));
+      nearPixel(`uneven page ${page} strip ${i} gradient centre`, gotU.rgb, wantU, 6);
+    }
+    await app.evaluate(shellEval(`(() => {
+      const inst = s.selectedInstance() || s.state.instances[s.state.instances.length - 1];
+      delete inst.params["api.apply.slices"];
+      s.notify("autostamp:param", "overlay-smoke uneven-reset");
+      return true;
+    })()`));
+    await sleep(200);
+
+    // Z3 (2026-11-09, user fix): a cross-page instance is selectable like any
+    // other - the strip box and its five handles are visible, a single click
+    // selects it (no press-and-hold), and press+move drags right away.
     const affX = await affordance(app);
     const box = affX.find((a) => a.mode === "crosspage") || affX[0] || {};
-    cmp("cross-page instance hides the handles", box.visible, false);
+    cmp("cross-page instance shows the selection box (Z3)", box.visible, true);
     cmp("cross-page instance keeps its wrapper", box.mode, "crosspage");
+    cmp("cross-page instance keeps the five affordance handles", box.handles, 5);
+
+    // a bare click (press + release, no move, no hold) selects the instance and
+    // shows the box: the old CSS hid the strip affordance, so the user had to
+    // hold-and-drag to make anything happen.
+    await app.evaluate(shellEval("s.selectInstance(null)"));
+    await sleep(160);
+    const rrClick = (await rects(app))[0] || {};
+    const clickPt = await clientOf(app, rrClick.x + rrClick.w / 2, rrClick.y + rrClick.h / 2);
+    await mouse(app, "mousePressed", clickPt.x, clickPt.y, 1);
+    await mouse(app, "mouseReleased", clickPt.x, clickPt.y, 1);
+    await sleep(200);
+    const clickedId = await app.evaluate(
+      shellEval("s.selectedInstance() && s.selectedInstance().crossPage ? s.selectedInstance().id : -1")
+    );
+    truthy(`single click selects the cross-page instance (Z3, id=${clickedId})`, clickedId >= 0);
+    const affClick = (await affordance(app)).find((a) => a.mode === "crosspage") || {};
+    cmp("the click shows the selection box without any hold (Z3)", affClick.visible, true);
+
+    // SP4 semantics moved the strip box: its y IS startOffset (left at 120
+    // above), so the press must land INSIDE the box - a press outside would
+    // just clear the selection (bindStage's empty-page rule) and the probe
+    // would read an unselected instance. Drag from the box centre; the drag
+    // rides the vertical startOffset channel, never the offset field.
+    const selectedBefore = await app.evaluate(shellEval("s.selectedInstance() ? s.selectedInstance().id : -1"));
     const before = await readParams(app);
-    const pt = await clientOf(app, (await rects(app))[0].x + 5, 40);
+    const rr = await rects(app);
+    const pt = await clientOf(app, rr[0].x + rr[0].w / 2, rr[0].y + rr[0].h / 2);
     await dragTo(app, pt, { x: pt.x + 40, y: pt.y + 40 });
     const after = await readParams(app);
     cmp("cross-page strip refuses canvas drag (offset unchanged)", String(after["api.apply.offset"]), String(before["api.apply.offset"]));
+    cmp("strip drag keeps the instance selected (SP4 vertical channel)",
+      await app.evaluate(shellEval("s.selectedInstance() ? s.selectedInstance().id : -1")), selectedBefore);
+    const zNow = await app.evaluate(shellEval("p.probe('zoom')"));
+    const movedStart = Number(after["api.apply.startOffset"]);
+    truthy(`strip drag writes the vertical startOffset channel (${before["api.apply.startOffset"]} -> ${movedStart}, want +${Math.round(40 / zNow)})`,
+      Math.abs(movedStart - (Number(before["api.apply.startOffset"]) + 40 / zNow)) <= 3);
+
+    // Z4 (2026-11-09, user fix): rotation on a cross-page instance means
+    // rotate-the-whole-seal FIRST, then slice. The test seal is a horizontal
+    // gradient ramp (left stop -> right stop); after a clockwise 90 the ramp
+    // runs VERTICAL down the strip (top = left stop, bottom = right stop),
+    // and every page's column carries the whole vertical range. The old
+    // slice-then-rotate order painted a constant ramp value per column, so
+    // top/bottom would match at the wrong colour - these three samples pin
+    // the difference.
+    await setParams(app, { "api.apply.rotation": 90 });
+    await sleep(250);
+    const rrRot = (await rects(app))[0] || {};
+    const cx = rrRot.x + rrRot.w / 2;
+    const sTop = await sampleAt(app, cx, rrRot.y + 8, "composite");
+    const sMid = await sampleAt(app, cx, rrRot.y + rrRot.h / 2, "composite");
+    const sBot = await sampleAt(app, cx, rrRot.y + rrRot.h - 8, "composite");
+    nearPixel("rotated strip top == left ramp stop (rotated-then-sliced, not sliced-then-rotated)", sTop.rgb, STOPS.left, 14);
+    nearPixel("rotated strip middle == ramp mid", sMid.rgb, GRAD_MID, 14);
+    nearPixel("rotated strip bottom == right ramp stop", sBot.rgb, STOPS.right, 14);
+    await setParams(app, { "api.apply.rotation": 0 });
+    await sleep(200);
 
     // binding=none clears the strip
     await setParams(app, { "ui.crosspage.binding": "none" });
@@ -813,7 +916,7 @@ async function main() {
     await app.evaluate(`window.__autoStampShell.openRecentSeal(${JSON.stringify(sealFile)}).then(() => true)`, true);
     await sleep(600);
     const withDespill = await app.evaluate(shellEval("window.__autoStampSeal.probe('seals')"));
-    await app.evaluate(`(() => { document.getElementById('seal-despill-revert').click(); return true; })()`);
+    await app.evaluate(`(() => { window.__autoStampSeal.revert(); return true; })()`);
     await sleep(600);
     const reverted = await app.evaluate(shellEval("window.__autoStampSeal.probe('seals')"));
     truthy("despill re-run produced a second seal record", withDespill.length >= 1 && reverted.length >= 1);

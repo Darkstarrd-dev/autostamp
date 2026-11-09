@@ -27,10 +27,11 @@
   <header id="topbar">
     <!-- HD1 + HD5 (2026-11-04): the topbar carries no text at all - not even the
          window-title mirror. Left cluster = open, then the seal channel (HD8:
-         upload button + recent-seal dropdown + HD10 add-mode toggle) and save;
-         right cluster = language, theme, the HD16 backend-log toggle, then the
-         shortcuts button rightmost. The version and the opened file's name
-         live in the window title only (HD2 revised). -->
+         upload button + recent-seal dropdown + HD10 add-mode toggle + SP4
+         cross-page add-mode toggle) and save; right cluster = language, theme,
+         the HD16 backend-log toggle, then the shortcuts button rightmost. The
+         version and the opened file's name live in the window title only
+         (HD2 revised). -->
     <button id="btn-open" class="btn icon" type="button" title="Open PDF" aria-label="Open PDF"
       data-i18n-title="app.open.btn" data-i18n-title-cn="打开 PDF">
       <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a1 1 0 0 1 .95 1.31l-1.4 5.6A2 2 0 0 1 17.6 18H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v4" /></svg>
@@ -44,6 +45,15 @@
     <button id="btn-seal-add" class="btn icon" type="button" aria-pressed="false" title="Add-seal mode" aria-label="Add-seal mode" data-field="ui.seal.addMode"
       data-i18n-title="app.sealAddMode.btn" data-i18n-title-cn="添加印章模式">
       <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6" /><path d="M18 15.5v6M15 18.5h6" /></svg>
+    </button>
+    <!-- SP4 (2026-11-05): the cross-page placement mode sits right of the
+         add-seal toggle. Same pattern as HD10: aria-pressed pair + a stage
+         cursor hook; clicking the page drops the current seal as a cross-page
+         strip instance anchored on the binding edge, starting at the click's
+         height. -->
+    <button id="btn-crosspage-add" class="btn icon" type="button" aria-pressed="false" title="Add cross-page seal mode" aria-label="Add cross-page seal mode" data-field="ui.seal.crosspageAddMode"
+      data-i18n-title="app.sealCrossAddMode.btn" data-i18n-title-cn="添加骑缝章模式">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M7.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h2.5" /><path d="M16.5 3H19a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-2.5" /><path d="M12 2.5v19" stroke-dasharray="2.5 2.5" /><circle cx="12" cy="12" r="3.2" /></svg>
     </button>
     <button id="btn-save" class="btn primary icon" type="button" title="Save" aria-label="Save"
       data-i18n-title="app.save.btn" data-i18n-title-cn="保存">
@@ -79,26 +89,11 @@
 
   <section id="preview">
     <div id="empty-state">
-      <div class="msg" data-i18n="empty.msg" data-i18n-cn="还没有打开 PDF">No PDF open</div>
-      <div class="hint" data-i18n="empty.hint" data-i18n-cn="把这里拖入或粘贴（Ctrl+V）一个 PDF 即打开；拖入/粘贴图片装载为印章。也可以「打开文件」/ 直接填写路径。">Drop or paste a PDF here to open it, or drop/paste images to load them as seals. You can also open a file or type its path.</div>
-      <div class="btnrow">
-        <button id="empty-pick" class="btn primary" data-i18n="empty.pick.btn" data-i18n-cn="打开文件">Open file</button>
-        <input id="empty-path" data-field="api.fs.pick.filePath" type="text" size="30" data-i18n-placeholder="empty.path.placeholder" data-i18n-cn-placeholder="C:\docs\contract.pdf" placeholder="C:\docs\contract.pdf">
-      </div>
-      <div class="row pick-opts">
-        <span class="opt-label" data-i18n="api.fs.pick.filePath.ctl" data-i18n-cn="打开路径">Open by path</span>
-        <label class="switch"><span class="opt-label" data-i18n="api.fs.pick.multi.ctl" data-i18n-cn="多文件">multi</span><input id="empty-pick-multi" data-field="api.fs.pick.multi" type="checkbox" checked><span data-i18n="fs.pick.multi.on" data-i18n-cn="多文件">multi</span></label>
-        <span class="opt-label" data-i18n="api.fs.pick.filter.ctl" data-i18n-cn="文件类型">filter</span>
-        <select id="empty-pick-filter" data-field="api.fs.pick.filter" aria-label="filter">
-          <option value="pdf" data-i18n="fs.pick.filter.pdf" data-i18n-cn="仅 PDF">PDF only</option>
-          <option value="all" data-i18n="fs.pick.filter.all" data-i18n-cn="所有文件">All files</option>
-        </select>
-        <span class="chip" data-field="api.fs.pick.pathGrantId" data-field-role="display">-</span>
-      </div>
-      <div class="row">
-        <span class="opt-label" data-i18n="api.fs.pick.filePath.hint" data-i18n-cn="选择器返回 pathGrantId（owner 绑定 + TTL）">picker grants a bounded pathGrantId</span>
-        <span class="opt-label" data-i18n="api.fs.pick.pathGrantId.hint" data-i18n-cn="owner 绑定 + TTL；未授权时退化为 multipart 上传">owner-bound grant with TTL</span>
-      </div>
+      <button id="empty-pick" class="btn primary" type="button">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 15V3" /><path d="m7 8 5-5 5 5" /><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /></svg>
+        <span class="elabel" data-i18n="empty.pick.btn" data-i18n-cn="打开文件">Open file</span>
+      </button>
+      <div class="hint" data-i18n="empty.hint" data-i18n-cn="也可以把 PDF 直接拖进来或粘贴（Ctrl+V）打开；图片拖入/粘贴装载为印章。">You can also drop a PDF here or paste it (Ctrl+V) to open it; dropped/pasted images load them as seals.</div>
     </div>
 
     <!-- The stage is empty by design: app-preview.js renders one page-frame
@@ -127,7 +122,7 @@
           <option value="screen">screen / 滤色</option>
           <option value="lighten">lighten / 变亮</option>
           <optgroup label="darken" data-i18n="blend.group.darken" data-i18n-cn="增暗">Darken</optgroup>
-          <option value="multiply">multiply / 正片叠底</option>
+          <option value="multiply" selected>multiply / 正片叠底</option>
           <option value="darken">darken / 变暗</option>
           <option value="color-burn">color-burn / 颜色加深</option>
           <optgroup label="contrast" data-i18n="blend.group.contrast" data-i18n-cn="对比">Contrast</optgroup>
@@ -186,6 +181,57 @@
         </div>
         <div class="hintline" data-i18n="api.apply.rotation.hint" data-i18n-cn="-180 到 180；印章绕自身中心旋转。">Degrees around the seal centre.</div>
       </div>
+      <!-- SP4 (2026-11-05): the cross-page group rides the same floating panel
+         and answers to the selected instance; it only shows when that instance
+         is crossPage (the mode button places those, HD10's pattern). The
+         sidebar 骑缝章 section is gone: the values bind the same vocabulary as
+         before (ui.crosspage.binding / api.apply.startOffset), they just live
+         beside the six instance controls now. -->
+      <div class="field cp-group" hidden>
+        <div class="flabel"><span data-i18n="ui.crosspage.binding.ctl" data-i18n-cn="装订边（D2）">Binding edge (D2)</span><span class="tag">ui.crosspage.binding</span></div>
+        <div class="seg sm" id="crosspage-binding" data-field="ui.crosspage.binding">
+          <button type="button" data-value="right" aria-pressed="true" data-i18n="binding.right" data-i18n-cn="单面：右缘连续">Single-sided: right edge</button>
+          <button type="button" data-value="alternate" aria-pressed="false" data-i18n="binding.alternate" data-i18n-cn="双面：奇右偶左">Duplex: odd right / even left</button>
+          <button type="button" data-value="none" aria-pressed="false" data-i18n="binding.none" data-i18n-cn="无骑缝章">No cross-page seal</button>
+        </div>
+        <div class="hintline" data-i18n="ui.crosspage.binding.hint" data-i18n-cn="D2 三档：右缘连续 / 双面奇偶分别左右（左右两块属于同一条分割）/ 无骑缝章。">D2: right edge, duplex alternate, or no cross-page seal.</div>
+      </div>
+      <div class="field cp-group" hidden>
+        <div class="flabel"><span data-i18n="api.apply.startOffset.ctl" data-i18n-cn="起始位置（pt）">apply.startOffset</span><span class="tag">api.apply.startOffset</span></div>
+        <div class="num-pair">
+          <input data-field="api.apply.startOffset" type="range" min="0" max="200" step="5" value="0" aria-label="startOffset">
+          <input data-field="api.apply.startOffset" type="number" min="0" max="200" step="5" value="0" aria-label="startOffset">
+        </div>
+        <div class="hintline" data-i18n="api.apply.startOffset.hint" data-i18n-cn="沿装订边的起始偏移（pdfcpu offset:0 -N）；0 为页首。选中骑缝章后纵向拖动条带即改这个值。">Start offset along the binding edge (pdfcpu offset:0 -N); 0 sits at the page top. Dragging a selected strip vertically edits this value.</div>
+      </div>
+      <!-- Z5 (2026-11-09, 用户指令): 平均|随机 slice simulation. 随机 models a
+           real stamping run: first page 25..50%, last page 20..30%, the cover
+           slider picks how many middle pages get a strip (四舍五入), the rest of
+           the shares drift as one smooth trend along page order, and the retry
+           button re-rolls. The drawn fractions (api.apply.slices) go to the
+          preview and the disk unchanged. -->
+      <div class="field cp-group" hidden>
+        <div class="flabel"><span data-i18n="ui.crosspage.sliceMode.ctl" data-i18n-cn="骑缝切片">Cross-page slices</span><span class="tag">ui.crosspage.sliceMode</span></div>
+        <div class="seg sm" id="crosspage-slicemode" data-field="ui.crosspage.sliceMode">
+          <button type="button" data-value="even" aria-pressed="true" data-i18n="sliceMode.even" data-i18n-cn="平均">Even</button>
+          <button type="button" data-value="random" aria-pressed="false" data-i18n="sliceMode.random" data-i18n-cn="随机">Random</button>
+        </div>
+        <div class="hintline" data-i18n="ui.crosspage.sliceMode.hint" data-i18n-cn="平均=均分到每页；随机模拟真实装订盖章：首页 25~50%、末页 20~30%，其余页按覆盖率取条带并沿页序平滑漂移（重试按钮重新取值）。">Even = classic equal split; Random simulates a real binding run: first page 25..50%, last page 20..30%, middle pages follow the cover share and a smooth drift; the retry button re-rolls.</div>
+      </div>
+      <div class="field cp-group cp-rand" hidden>
+        <div class="flabel"><span data-i18n="ui.crosspage.cover.ctl" data-i18n-cn="覆盖率（%）">Cover</span><span class="tag">ui.crosspage.cover</span></div>
+        <div class="num-pair">
+          <input data-field="ui.crosspage.cover" type="range" min="0" max="100" step="5" value="75" aria-label="cover">
+          <input data-field="ui.crosspage.cover" type="number" min="0" max="100" step="5" value="75" aria-label="cover">
+        </div>
+        <div class="hintline" data-i18n="ui.crosspage.cover.hint" data-i18n-cn="首页末页外的页面有多少比例拿到骑缝章（四舍五入）；如 10 页中间页配 60% = 6 页有章、4 页盖不到。">Share of middle pages that get a strip (rounded); e.g. 10 middle pages at 60% = 6 stamped, 4 missed.</div>
+      </div>
+      <div class="field cp-group cp-rand" hidden>
+        <div class="row">
+          <button type="button" id="crosspage-retry" class="btn" data-i18n="crosspage.retry.btn" data-i18n-cn="重新随机">Re-roll</button>
+        </div>
+        <div class="hintline" data-i18n="crosspage.retry.hint" data-i18n-cn="重新进行一次随机取值（新的分布替换当前实例的切片）。">Re-rolls the random draw for the selected cross-page instance.</div>
+      </div>
       <div class="row ip-actions">
         <button type="button" id="instance-reset" class="btn" data-i18n="instance.reset.btn" data-i18n-cn="复位">Reset</button>
         <button type="button" id="instance-remove" class="btn danger" data-i18n="instances.delete.btn" data-i18n-cn="删除">Delete</button>
@@ -215,349 +261,10 @@
     </div>
   </section>
 
-  <aside id="right-sidebar">
-    <form id="panel" autocomplete="off">
-
-      <div id="asset-hooks" data-contract>
-        <span class="chip" data-route="open" data-field="decision.assetIds">-</span>
-        <span class="chip" data-route="split" data-field="decision.assetIds">-</span>
-        <span class="chip" data-route="apply" data-field="decision.assetIds">-</span>
-        <span class="chip" data-route="export" data-field="decision.assetIds">-</span>
-        <span class="chip" data-route="save" data-field="decision.assetIds">-</span>
-      </div>
-
-      <details class="section" id="panel-seal" open>
-        <summary data-i18n="panel.seal.title" data-i18n-cn="印章">Stamp</summary>
-        <div class="body">
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.seal.prepare.despill.ctl" data-i18n-cn="去白底">seal.prepare.despill</span><span class="tag">seal.prepare.despill</span></div>
-            <div class="row">
-              <label class="switch"><input data-field="api.seal.prepare.despill" type="checkbox" checked><span data-i18n="seal.despill.on" data-i18n-cn="开">on</span></label>
-              <button type="button" id="seal-despill-revert" class="btn" data-i18n="seal.despill.revert" data-i18n-cn="撤销">revert</button>
-            </div>
-            <div class="hintline" data-i18n="api.seal.prepare.despill.hint" data-i18n-cn="对白底扫描件即时去背；预览可撤销，预设保存时保留 alpha。">White-background keying applied live; reversible before save.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.seal.prepare.alphaTrim.ctl" data-i18n-cn="自动裁边">seal.prepare.alphaTrim</span><span class="tag">seal.prepare.alphaTrim</span></div>
-            <div class="row">
-              <label class="switch"><input data-field="api.seal.prepare.alphaTrim" type="checkbox" checked><span data-i18n="seal.alphatrim.on" data-i18n-cn="开">on</span></label>
-            </div>
-            <div class="hintline" data-i18n="api.seal.prepare.alphaTrim.hint" data-i18n-cn="按 alpha 包围盒裁掉空白，保持印章本体比例。">Trims the alpha bounding box, keeps the seal aspect ratio.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.seal.prepare.resampleDpi.ctl" data-i18n-cn="印章重采样 DPI">seal.prepare.resampleDpi</span><span class="tag">seal.prepare.resampleDpi</span></div>
-            <div class="num-pair"><input data-field="api.seal.prepare.resampleDpi" type="number" min="72" max="600" step="1" value="300" aria-label="resampleDpi"></div>
-            <div class="hintline" data-i18n="api.seal.prepare.resampleDpi.hint" data-i18n-cn="只影响落盘像素，不影响预览清晰度。">Affects baked-in pixels only, not preview sharpness.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.seal.preset.presetName.ctl" data-i18n-cn="存为预设">seal.preset.presetName</span><span class="tag">seal.preset.presetName</span></div>
-            <div class="row">
-              <input id="seal-preset-name" data-field="api.seal.preset.presetName" type="text" data-i18n-placeholder="seal.preset.placeholder" data-i18n-cn-placeholder="公司甲 · 红章" placeholder="Company A - red seal">
-              <button type="button" id="seal-preset-save" class="btn" data-i18n="seal.preset.save" data-i18n-cn="保存预设">Save preset</button>
-            </div>
-            <div class="hintline" data-i18n="api.seal.preset.presetName.hint" data-i18n-cn="预设写入 %APPDATA%\AutoStamp\seals：图片与参数一起存。">Presets keep image and parameter group together.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="seal.preset.label" data-i18n-cn="预设">Preset</span><span class="tag" data-i18n="seal.preset.select" data-i18n-cn="预设列表">preset list</span></div>
-            <div class="row">
-              <select id="seal-preset-select" aria-label="preset">
-                <option value=""></option>
-              </select>
-              <button type="button" id="seal-preset-load" class="btn" data-i18n="seal.preset.load" data-i18n-cn="应用预设">Apply preset</button>
-              <button type="button" id="seal-preset-delete" class="btn" data-i18n="seal.preset.delete" data-i18n-cn="删除预设">Delete preset</button>
-            </div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="seal.meta.label" data-i18n-cn="印章元数据">Seal metadata</span><span class="tag">seal.prepare</span></div>
-            <div class="row">
-              <span class="chip" id="seal-meta">-</span>
-            </div>
-            <div class="hintline" data-i18n="seal.upload.hint" data-i18n-cn="去白底/自动裁边/重采样按上方参数处理；「撤销」会用原图重跑一次。">Keying, trim and resample follow the options above; revert re-runs from the source.</div>
-            <div class="hintline" data-i18n="stamp.drag.hint" data-i18n-cn="拖动虚线框移动，四角缩放，顶部手柄旋转。">Drag the dashed box to move; corners resize; the top handle rotates.</div>
-            <div class="hintline" data-i18n="seal.err.type" data-i18n-cn="印章图片必须是带透明通道的 PNG 或 JPEG">Stamp image must be PNG or JPEG with an alpha channel</div>
-
-          </div>
-        </div>
-      </details>
-
-      <details class="section" id="panel-instances" open>
-        <summary data-i18n="panel.instances.title" data-i18n-cn="印章实例">Instances</summary>
-        <div class="body">
-          <ul id="seal-instances"></ul>
-          <div class="row">
-            <button type="button" id="instance-add" class="btn" data-i18n="instances.add.btn" data-i18n-cn="新增实例">Add instance</button>
-            <button type="button" id="instance-duplicate" class="btn" data-i18n="instances.duplicate.btn" data-i18n-cn="复制">Duplicate</button>
-            <button type="button" id="instance-delete" class="btn danger" data-i18n="instances.delete.btn" data-i18n-cn="删除">Delete</button>
-          </div>
-          <div class="row">
-            <button type="button" id="apply-write" class="btn primary" data-i18n="apply.write.btn" data-i18n-cn="盖到 PDF">Stamp into PDF</button>
-            <button type="button" id="apply-undo" class="btn ghost" data-i18n="apply.undo.btn" data-i18n-cn="撤销盖章">Undo stamping</button>
-          </div>
-          <div class="hintline" data-i18n="apply.write.hint" data-i18n-cn="把实例烘焙成新的会话 asset（原文件不动）；保存时若仍有未落盘实例会自动先盖章。">Bakes the instances into a new session asset; the original file is untouched. Saving stamps first if anything is still unbaked.</div>
-          <div class="hintline" data-i18n="instances.rename.placeholder" data-i18n-cn="实例名称">Instance name</div>
-        </div>
-      </details>
-
-      <details class="section" id="panel-split" open>
-        <summary data-i18n="panel.split.title" data-i18n-cn="切分（2 拼 → 单页）">Split</summary>
-        <div class="body">
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.split.auto.ctl" data-i18n-cn="自动判定 2 拼">split.auto</span><span class="tag">split.auto</span></div>
-            <label class="switch"><input data-field="api.split.auto" type="checkbox" checked><span data-i18n="split.auto.on" data-i18n-cn="开">on</span></label>
-            <div class="hintline" data-i18n="api.split.auto.hint" data-i18n-cn="按 MediaBox 纵横比判定；判定结果可被 vetoedPages 逐页否决（D3）。">Aspect-based heuristic; per-page veto list (decision D3).</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="ui.split.vetoedPages.ctl" data-i18n-cn="已判定页">Auto-detected pages</span><span class="tag">ui.split.vetoedPages</span></div>
-            <div id="split-veto" class="row"></div>
-            <div class="hintline" data-i18n="ui.split.vetoedPages.hint" data-i18n-cn="点击某页即否决其自动切分；否决页保持原样不切。">Click a page to veto its auto-split.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="ui.split.mode.ctl" data-i18n-cn="手动切分">Manual split</span><span class="tag">ui.split.mode</span></div>
-            <div class="seg sm" id="split-mode" data-field="ui.split.mode">
-              <button type="button" data-value="off" data-i18n="split.mode.off" data-i18n-cn="不切">No split</button>
-              <button type="button" data-value="v2" aria-pressed="true" data-i18n="split.mode.v2" data-i18n-cn="2 拼（左右）">2-up LR</button>
-              <button type="button" data-value="h2" data-i18n="split.mode.h2" data-i18n-cn="2 拼（上下）">2-up TB</button>
-              <button type="button" data-value="grid" data-i18n="split.mode.grid" data-i18n-cn="网格">Grid</button>
-            </div>
-            <div class="hintline" data-i18n="ui.split.mode.hint" data-i18n-cn="manual 覆盖 auto；rows/cols 与 cutFractions 都进 /api/pdf/split。">manual overrides auto; rows/cols and cutFractions go to the API.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.split.rows.ctl" data-i18n-cn="网格行数 rows">split.rows</span><span class="tag">split.rows</span></div>
-            <div class="num-pair"><input data-field="api.split.rows" type="number" min="1" max="6" value="1" aria-label="rows"></div>
-            <div class="hintline" data-i18n="api.split.rows.hint" data-i18n-cn="rows >= 1；与 cols 一起决定等分网格。">rows >= 1.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.split.cols.ctl" data-i18n-cn="网格列数 cols">split.cols</span><span class="tag">split.cols</span></div>
-            <div class="num-pair"><input data-field="api.split.cols" type="number" min="1" max="6" value="2" aria-label="cols"></div>
-            <div class="hintline" data-i18n="api.split.cols.hint" data-i18n-cn="cols >= 1。">cols >= 1.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.split.cutFractions.ctl" data-i18n-cn="切点（相对分数）">split.cutFractions</span><span class="tag">split.cutFractions</span></div>
-            <div class="row">
-              <input data-field="api.split.cutFractions" type="text" size="12" value="0.5" aria-label="cutFractions">
-              <button type="button" id="split-apply" class="btn" data-i18n="split.apply.btn" data-i18n-cn="切分预览">Split preview</button>
-              <button type="button" id="split-undo" class="btn ghost" data-i18n="split.undo.btn" data-i18n-cn="撤销切分">Undo split</button>
-            </div>
-            <div class="hintline" data-i18n="api.split.cutFractions.hint" data-i18n-cn="0..1 的相对分数，可多个（逗号分隔）；>1 或 >=1 会被拒绝（pdfcpu 实测）。">Relative fractions 0..1, comma separated; pdfcpu rejects >= 1.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.split.pages.ctl" data-i18n-cn="切分页范围">split.pages</span><span class="tag">split.pages</span></div>
-            <div class="row"><input data-field="api.split.pages" type="text" size="16" value="all" aria-label="split pages"></div>
-            <div class="hintline" data-i18n="api.split.pages.hint" data-i18n-cn="与 apply.pages 同一词表；只有所在页参与切分。">Same vocabulary as apply.pages; only the selected pages get cut.</div>
-          </div>
-        </div>
-      </details>
-
-      <details class="section" id="panel-crosspage" open>
-        <summary data-i18n="panel.crosspage.title" data-i18n-cn="骑缝章">Cross-page seal</summary>
-        <div class="body">
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.apply.crossPage.ctl" data-i18n-cn="骑缝章">apply.crossPage</span><span class="tag">apply.crossPage</span></div>
-            <label class="switch"><input data-field="api.apply.crossPage" type="checkbox"><span data-i18n="crosspage.on" data-i18n-cn="开">on</span></label>
-            <div class="hintline" data-i18n="api.apply.crossPage.hint" data-i18n-cn="切分后每页放一枚条带，第 i 页第 i 条；落盘后逐页合并（P3）。">One strip per page, strip i on page i; merged after per-page stamping.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="ui.crosspage.binding.ctl" data-i18n-cn="装订边（D2）">Binding edge (D2)</span><span class="tag">ui.crosspage.binding</span></div>
-            <div class="seg sm" id="crosspage-binding" data-field="ui.crosspage.binding">
-              <button type="button" data-value="right" aria-pressed="true" data-i18n="binding.right" data-i18n-cn="单面：右缘连续">Single-sided: right edge</button>
-              <button type="button" data-value="alternate" aria-pressed="false" data-i18n="binding.alternate" data-i18n-cn="双面：奇右偶左">Duplex: odd right / even left</button>
-              <button type="button" data-value="none" aria-pressed="false" data-i18n="binding.none" data-i18n-cn="无骑缝章">No cross-page seal</button>
-            </div>
-            <div class="hintline" data-i18n="ui.crosspage.binding.hint" data-i18n-cn="D2 三档：右缘连续 / 双面奇偶分别左右（左右两块属于同一条分割）/ 无骑缝章。">D2: right edge, duplex alternate, or no cross-page seal.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.apply.startOffset.ctl" data-i18n-cn="起始位置（pt）">apply.startOffset</span><span class="tag">apply.startOffset</span></div>
-            <div class="num-pair">
-              <input data-field="api.apply.startOffset" type="range" min="0" max="200" step="5" value="0" aria-label="startOffset">
-              <input data-field="api.apply.startOffset" type="number" min="0" max="200" step="5" value="0" aria-label="startOffset">
-            </div>
-            <div class="hintline" data-i18n="api.apply.startOffset.hint" data-i18n-cn="沿装订边的起始偏移（pdfcpu offset:0 -N）；0 为页首。">Start offset along the binding edge (pdfcpu offset:0 -N).</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="ui.crosspage.stripPreview.ctl" data-i18n-cn="逐页条带放大">Per-page strip zoom</span><span class="tag">ui.crosspage.stripPreview</span></div>
-            <div id="strip-previews"></div>
-            <div class="hintline" data-i18n="ui.crosspage.stripPreview.hint" data-i18n-cn="每页一枚条带的放大预览；主画布也叠加同一条带（CP1）。">Zoomed strip per page; the main canvas shows the same strip.</div>
-          </div>
-        </div>
-      </details>
-
-      <details class="section" id="panel-export" open>
-        <summary data-i18n="panel.export.title" data-i18n-cn="导出设置">Export</summary>
-        <div class="body">
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.export.mode.ctl" data-i18n-cn="导出方式（D1）">export.mode</span><span class="tag">export.mode</span></div>
-            <div class="seg" id="export-mode" data-field="api.export.mode">
-              <button type="button" data-value="vector" aria-pressed="true">vector</button>
-              <button type="button" data-value="raster">raster</button>
-            </div>
-            <div class="hintline" data-i18n="api.export.mode.hint" data-i18n-cn="vector 保留文字/矢量（默认可搜索）；raster 整页位图，抗篡改、便于扫描件。">vector keeps text/vectors (searchable); raster flattens each page to a bitmap.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.export.dpi.ctl" data-i18n-cn="分辨率 DPI">export.dpi</span><span class="tag">export.dpi</span></div>
-            <div class="seg sm" id="export-dpi" data-field="api.export.dpi">
-              <button type="button" data-value="72">72</button>
-              <button type="button" data-value="150" aria-pressed="true">150</button>
-              <button type="button" data-value="300">300</button>
-              <button type="button" data-value="custom" data-i18n="export.dpi.custom" data-i18n-cn="自定义">Custom</button>
-            </div>
-            <div class="hintline" data-i18n="api.export.dpi.hint" data-i18n-cn="raster 模式生效；custom 时取 customDpi。">Effective in raster mode; custom uses customDpi.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.export.customDpi.ctl" data-i18n-cn="自定义 DPI">export.customDpi</span><span class="tag">export.customDpi</span></div>
-            <div class="num-pair"><input data-field="api.export.customDpi" data-i18n-placeholder="export.customDpi.placeholder" data-i18n-cn-placeholder="96..600" type="number" min="96" max="600" step="1" value="150" aria-label="customDpi"></div>
-            <div class="hintline" data-i18n="api.export.customDpi.hint" data-i18n-cn="96..600，仅 raster 且 dpi=custom 时读取。">96..600, raster + custom only.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.export.quality.ctl" data-i18n-cn="JPEG 质量">export.quality 40..95</span><span class="tag">export.quality 40..95</span></div>
-            <div class="num-pair">
-              <input data-field="api.export.quality" type="range" min="40" max="95" step="5" value="75" aria-label="quality">
-              <input data-field="api.export.quality" type="number" min="40" max="95" step="5" value="75" aria-label="quality">
-            </div>
-            <div class="hintline" data-i18n="api.export.quality.hint" data-i18n-cn="40..95；仅 raster。落盘用 stdlib DCTDecode（FACTS §4）。">40..95, raster only.</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.export.pages.ctl" data-i18n-cn="导出页">export.pages</span><span class="tag">export.pages</span></div>
-            <div class="row">
-              <input data-field="api.export.pages" type="text" size="16" value="all" aria-label="export pages">
-              <button type="button" class="btn" data-value="all" data-i18n="pages.all.btn" data-i18n-cn="全部">All</button>
-            </div>
-            <div class="hintline" data-i18n="api.export.pages.hint" data-i18n-cn="与 apply.pages 同一词表。">Same vocabulary as apply.pages.</div>
-          </div>
-          <div id="estimate">
-            <div class="row"><span data-i18n="export.estimate.label" data-i18n-cn="体积预估">Estimate</span><output id="estimate-total">-</output></div>
-            <div class="hintline"><output id="estimate-per-page" data-i18n="export.estimate.hint" data-i18n-cn="每页约 124 KB（150dpi q75，A4 单页）。">-</output></div>
-            <div class="hintline" data-i18n="export.estimate.note" data-i18n-cn="预估值由 FACTS §4 实测表按页面积与页数缩放；raster 才受 DPI/质量影响。">Estimate scales the FACTS 4 measured table by page area and count.</div>
-          </div>
-        </div>
-      </details>
-
-      <!-- P6 批处理 (BM1): the front-end walks fs/pick -> pdf/open -> (split)
-           -> apply -> export(raster) -> save(mkdirs) per file; the structure
-           mirrors docs/ui/mockup.html #panel-batch so no CSS fork is needed. -->
-      <details class="section" id="panel-batch" open>
-        <summary data-i18n="batch.title" data-i18n-cn="批处理">Batch</summary>
-        <div class="body">
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.presetName.ctl" data-i18n-cn="批处理预设">preset</span><span class="tag">batch.presetName</span></div>
-            <select id="batch-preset" data-field="api.batch.presetName" aria-label="batch preset">
-              <option value="" data-i18n="batch.preset.placeholder" data-i18n-cn="选择预设">pick a preset</option>
-            </select>
-            <div class="hintline" data-i18n="api.batch.presetName.hint" data-i18n-cn="预设提供印章图与盖章/骑缝参数（PR1）">the preset carries the seal image and the stamp/cross-page parameters</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.files.ctl" data-i18n-cn="批处理输入">batch input</span><span class="tag">batch.files</span></div>
-            <div class="row">
-              <textarea id="batch-files" data-field="api.batch.files" rows="3" aria-label="batch files"></textarea>
-              <button type="button" id="batch-pick-files" class="btn" data-i18n="batch.pickFiles" data-i18n-cn="选择 PDF">Pick PDFs</button>
-            </div>
-            <div class="hintline" data-i18n="api.batch.files.hint" data-i18n-cn="由原生选择器取得；选目录则收该目录下所有 .pdf">picked with the native picker; a folder picks every *.pdf in it</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.dirPath.ctl" data-i18n-cn="目录">folder</span><span class="tag">batch.dirPath</span></div>
-            <div class="row">
-              <input id="batch-dir-path" data-field="api.batch.dirPath" type="text" size="26" data-i18n-placeholder="empty.path.placeholder" data-i18n-cn-placeholder="C:\docs\contract.pdf" placeholder="C:\docs\contract.pdf">
-              <button type="button" id="batch-pick-dir" class="btn" data-i18n="batch.pickDir" data-i18n-cn="选择目录">Pick folder</button>
-            </div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.dpi.ctl" data-i18n-cn="分辨率 DPI">resolution DPI</span><span class="tag">batch.dpi</span></div>
-            <div class="seg sm" id="batch-dpi" data-field="api.batch.dpi">
-              <button type="button" data-value="72">72</button>
-              <button type="button" data-value="150" aria-pressed="true">150</button>
-              <button type="button" data-value="300">300</button>
-              <button type="button" data-value="custom" data-i18n="export.dpi.custom" data-i18n-cn="自定义">Custom</button>
-            </div>
-            <div class="hintline" data-i18n="api.batch.dpi.hint" data-i18n-cn="每个文件都按此 DPI 光栅重导出（BM1）">every file is re-exported raster at this DPI (BM1)</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.customDpi.ctl" data-i18n-cn="自定义 DPI">custom DPI</span><span class="tag">batch.customDpi</span></div>
-            <div class="num-pair"><input data-field="api.batch.customDpi" type="number" min="72" max="600" step="1" value="150" aria-label="batch customDpi"></div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.quality.ctl" data-i18n-cn="JPEG 质量">JPEG quality</span><span class="tag">batch.quality</span></div>
-            <div class="num-pair">
-              <input data-field="api.batch.quality" type="range" min="40" max="95" step="5" value="75" aria-label="batch quality">
-              <input data-field="api.batch.quality" type="number" min="40" max="95" step="5" value="75" aria-label="batch quality">
-            </div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.concurrency.ctl" data-i18n-cn="并发数">concurrency</span><span class="tag">batch.concurrency</span></div>
-            <div class="num-pair"><input data-field="api.batch.concurrency" type="number" min="1" max="8" step="1" value="2" aria-label="batch concurrency"></div>
-            <div class="hintline" data-i18n="api.batch.concurrency.hint" data-i18n-cn="前端队列同时处理几个文件（1..8）">how many files the front-end queue runs at once</div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.autoSplit.ctl" data-i18n-cn="先自动切分">auto split first</span><span class="tag">batch.autoSplit</span></div>
-            <label class="switch"><input id="batch-auto-split" data-field="api.batch.autoSplit" type="checkbox" checked><span data-i18n="fs.pick.multi.on" data-i18n-cn="多文件">multi</span></label>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.splitMode.ctl" data-i18n-cn="切分方式">split mode</span><span class="tag">batch.splitMode</span></div>
-            <select id="batch-split-mode" data-field="api.batch.splitMode" aria-label="batch split mode">
-              <option value="auto" selected>auto</option>
-              <option value="rows-cols">rows-cols</option>
-            </select>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.rows.ctl" data-i18n-cn="行数">rows</span><span class="tag">batch.rows</span></div>
-            <div class="num-pair"><input id="batch-rows" data-field="api.batch.rows" type="number" min="2" max="6" step="1" value="2" aria-label="batch rows"></div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.cols.ctl" data-i18n-cn="列数">cols</span><span class="tag">batch.cols</span></div>
-            <div class="num-pair"><input id="batch-cols" data-field="api.batch.cols" type="number" min="1" max="3" step="1" value="2" aria-label="batch cols"></div>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.crossPage.ctl" data-i18n-cn="骑缝章">cross-page seal</span><span class="tag">batch.crossPage</span></div>
-            <label class="switch"><input id="batch-cross-page" data-field="api.batch.crossPage" type="checkbox"><span data-i18n="fs.pick.multi.on" data-i18n-cn="多文件">multi</span></label>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.binding.ctl" data-i18n-cn="装订边">binding edge</span><span class="tag">batch.binding</span></div>
-            <select id="batch-binding" data-field="api.batch.binding" aria-label="batch binding">
-              <option value="right" selected>right</option>
-              <option value="alternate">alternate</option>
-            </select>
-          </div>
-          <div class="field">
-            <div class="flabel"><span data-i18n="api.batch.startOffset.ctl" data-i18n-cn="起始位置">start offset</span><span class="tag">batch.startOffset</span></div>
-            <div class="num-pair">
-              <input id="batch-start-offset" data-field="api.batch.startOffset" type="range" min="0" max="200" step="1" value="0" aria-label="batch startOffset">
-              <input id="batch-start-offset-num" data-field="api.batch.startOffset" type="number" min="0" max="200" step="1" value="0" aria-label="batch startOffset">
-            </div>
-          </div>
-          <div class="row">
-            <button type="button" id="batch-start" class="btn primary" data-i18n="batch.start" data-i18n-cn="开始批处理">Run batch</button>
-            <button type="button" id="batch-cancel" class="btn" data-i18n="batch.cancel" data-i18n-cn="取消">Cancel</button>
-            <span class="chip" id="batch-progress" data-i18n="batch.progress.idle" data-i18n-cn="空闲">idle</span>
-          </div>
-          <div id="batch-report">
-            <div class="flabel"><span data-i18n="batch.report.title" data-i18n-cn="报表">Report</span></div>
-            <ul id="batch-queue"></ul>
-            <div class="hintline" data-i18n="batch.queue.hint" data-i18n-cn="每个文件一行，按顺序">one row per file, in order</div>
-            <div class="hintline" data-i18n="batch.skip.encrypted.hint" data-i18n-cn="加密 PDF 直接跳过并在报表列出，不弹密码框">encrypted PDFs are skipped and listed in the report, no password prompt</div>
-            <div class="row">
-              <button type="button" id="batch-export-csv" class="btn" data-i18n="batch.export.csv" data-i18n-cn="CSV">CSV</button>
-              <button type="button" id="batch-export-json" class="btn" data-i18n="batch.export.json" data-i18n-cn="JSON">JSON</button>
-            </div>
-            <div class="hintline" data-i18n="batch.report.hint" data-i18n-cn="每文件一行；下方可下载 CSV/JSON">one row per file; CSV/JSON download below</div>
-            <div class="hintline" data-i18n="batch.out.hint" data-i18n-cn="写进 <目录>\_batch，文件名带 dpi 与质量（BM2）">writes into &lt;folder&gt;\_batch, dpi/quality in the file name</div>
-          </div>
-        </div>
-      </details>
-
-      <div class="section" id="panel-actions">
-        <div class="hintline">
-          <span data-i18n="ui.lang.ctl" data-i18n-cn="语言">language</span>
-          <span data-i18n="ui.lang.hint" data-i18n-cn="界面语言；每个标签都有 i18n key">interface language</span> ·
-          <span data-i18n="ui.theme.ctl" data-i18n-cn="主题">theme</span>
-          <span data-i18n="ui.theme.hint" data-i18n-cn="配色令牌（UI_SPEC §6）一并切换">colour tokens switch together</span> ·
-          <span data-i18n="shortcuts.hint" data-i18n-cn="快捷键列表">shortcut list</span>
-        </div>
-        <div class="body">
-          <div class="row">
-            <button type="button" id="save-open" class="btn primary" data-i18n="save.open.btn" data-i18n-cn="保存到文件">Save to file</button>
-          </div>
-        </div>
-      </div>
-    </form>
-  </aside>
+  <!-- SP5 (2026-11-06): the right sidebar is gone entirely. The export
+       vocabulary (#panel-export below) moved into the save dialog the topbar
+       保存 button opens; the language/theme hints and the duplicate
+       "Save to file" button (#save-open) are dead and were deleted. -->
 </section>
 
 
@@ -569,6 +276,57 @@
   <div class="modal" id="save-modal" role="dialog" aria-modal="true">
     <h2 data-i18n="save.title" data-i18n-cn="保存 PDF">Save PDF</h2>
     <div class="hintline" id="save-source" data-i18n="top.file.hint" data-i18n-cn="未打开文件">no file open</div>
+    <!-- SP5 (2026-11-06): the export section moved here from the deleted right
+         sidebar (ids and data-field names unchanged - the §2 vocabulary, the
+         P5/W5 save chain and probe('estimate') all keep working through the
+         modal). -->
+    <div class="section" id="panel-export">
+      <div class="sec-title"><span data-i18n="panel.export.title" data-i18n-cn="导出设置">Export settings</span></div>
+      <div class="field">
+        <div class="flabel"><span data-i18n="api.export.mode.ctl" data-i18n-cn="导出方式（D1）">export.mode</span><span class="tag">export.mode</span></div>
+        <div class="seg" id="export-mode" data-field="api.export.mode">
+          <button type="button" data-value="vector" aria-pressed="true">vector</button>
+          <button type="button" data-value="raster">raster</button>
+        </div>
+        <div class="hintline" data-i18n="api.export.mode.hint" data-i18n-cn="vector 保留文字/矢量（默认可搜索）；raster 整页位图，抗篡改、便于扫描件。">vector keeps text/vectors (searchable); raster flattens each page to a bitmap.</div>
+      </div>
+      <div class="field">
+        <div class="flabel"><span data-i18n="api.export.dpi.ctl" data-i18n-cn="分辨率 DPI">export.dpi</span><span class="tag">export.dpi</span></div>
+        <div class="seg sm" id="export-dpi" data-field="api.export.dpi">
+          <button type="button" data-value="72">72</button>
+          <button type="button" data-value="150" aria-pressed="true">150</button>
+          <button type="button" data-value="300">300</button>
+          <button type="button" data-value="custom" data-i18n="export.dpi.custom" data-i18n-cn="自定义">Custom</button>
+        </div>
+        <div class="hintline" data-i18n="api.export.dpi.hint" data-i18n-cn="raster 模式生效；custom 时取 customDpi。">Effective in raster mode; custom uses customDpi.</div>
+      </div>
+      <div class="field">
+        <div class="flabel"><span data-i18n="api.export.customDpi.ctl" data-i18n-cn="自定义 DPI">export.customDpi</span><span class="tag">export.customDpi</span></div>
+        <div class="num-pair"><input data-field="api.export.customDpi" data-i18n-placeholder="export.customDpi.placeholder" data-i18n-cn-placeholder="96..600" type="number" min="96" max="600" step="1" value="150" aria-label="customDpi"></div>
+        <div class="hintline" data-i18n="api.export.customDpi.hint" data-i18n-cn="96..600，仅 raster 且 dpi=custom 时读取。">96..600, raster + custom only.</div>
+      </div>
+      <div class="field">
+        <div class="flabel"><span data-i18n="api.export.quality.ctl" data-i18n-cn="JPEG 质量">export.quality 40..95</span><span class="tag">export.quality 40..95</span></div>
+        <div class="num-pair">
+          <input data-field="api.export.quality" type="range" min="40" max="95" step="5" value="75" aria-label="quality">
+          <input data-field="api.export.quality" type="number" min="40" max="95" step="5" value="75" aria-label="quality">
+        </div>
+        <div class="hintline" data-i18n="api.export.quality.hint" data-i18n-cn="40..95；仅 raster。落盘用 stdlib DCTDecode（FACTS §4）。">40..95, raster only.</div>
+      </div>
+      <div class="field">
+        <div class="flabel"><span data-i18n="api.export.pages.ctl" data-i18n-cn="导出页">export.pages</span><span class="tag">export.pages</span></div>
+        <div class="row">
+          <input data-field="api.export.pages" type="text" size="16" value="all" aria-label="export pages">
+          <button type="button" class="btn" data-value="all" data-i18n="pages.all.btn" data-i18n-cn="全部">All</button>
+        </div>
+        <div class="hintline" data-i18n="api.export.pages.hint" data-i18n-cn="与 apply.pages 同一词表。">Same vocabulary as apply.pages.</div>
+      </div>
+      <div id="estimate">
+        <div class="row"><span data-i18n="export.estimate.label" data-i18n-cn="体积预估">Estimate</span><output id="estimate-total">-</output></div>
+        <div class="hintline"><output id="estimate-per-page" data-i18n="export.estimate.hint" data-i18n-cn="每页约 124 KB（150dpi q75，A4 单页）。">-</output></div>
+        <div class="hintline" data-i18n="export.estimate.note" data-i18n-cn="预估值由 FACTS §4 实测表按页面积与页数缩放；raster 才受 DPI/质量影响。">Estimate scales the FACTS 4 measured table by page area and count.</div>
+      </div>
+    </div>
     <div class="row">
       <button type="button" id="save-pick" class="btn" data-i18n="save.pick.btn" data-i18n-cn="系统文件选择器">System file picker</button>
       <span class="chip" data-field="api.fs.pick.pathGrantId" data-field-role="display">-</span>
@@ -627,7 +385,14 @@
 <script src="app-pager.js" defer></script>
 <script src="app-seal.js" defer></script>
 <script src="app-overlay.js" defer></script>
-<script src="app-batch.js" defer></script>
-<script src="app-shell.js" defer></script>
+<!-- app-shell-*: the shell module group (kernel first, boot trigger is
+     app-shell-chrome.js, the §7 probes attach last — all defer, order kept). -->
+<script src="app-shell-kernel.js" defer></script>
+<script src="app-shell-instances.js" defer></script>
+<script src="app-shell-seals.js" defer></script>
+<script src="app-shell-export.js" defer></script>
+<script src="app-shell-docops.js" defer></script>
+<script src="app-shell-chrome.js" defer></script>
+<script src="app-shell-verify.js" defer></script>
 </body>
 </html>

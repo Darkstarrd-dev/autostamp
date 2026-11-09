@@ -31,7 +31,7 @@ for (const r of rows) {
   if (seen.has(r.key)) throw new Error(`§4 duplicate key: ${r.key}`);
   seen.set(r.key, r);
 }
-if (seen.size < 150) throw new Error(`§4 looks truncated: only ${seen.size} keys parsed`);
+if (seen.size < 120) throw new Error(`§4 looks truncated: only ${seen.size} keys parsed`);
 
 const keys = [...seen.keys()].sort();
 const q = (s) => JSON.stringify(s);

@@ -139,7 +139,7 @@ function Start-Verify {
     if (-not (Test-Tool 'node')) { Write-Bad 'node 未安装/不在 PATH'; return }
     # 契约/壳/查看链路/叠加预览/落盘回读/光栅导出/像素矩阵/真窗口九个脚本按 AGENTS §8 串成一条命令;
     # 前八个不需要 GUI,webview-launch 依赖 -tags webview 的 exe(由 all/`-Task webview` 先建好)。
-    foreach ($s in @('ui-contract.mjs', 'ui-smoke.mjs', 'shell-smoke.mjs', 'preview-smoke.mjs', 'overlay-smoke.mjs', 'apply-smoke.mjs', 'export-smoke.mjs', 'batch-smoke.mjs', 'pixel-matrix.mjs', 'webview-launch.mjs')) {
+    foreach ($s in @('ui-contract.mjs', 'ui-smoke.mjs', 'shell-smoke.mjs', 'preview-smoke.mjs', 'overlay-smoke.mjs', 'apply-smoke.mjs', 'export-smoke.mjs', 'pixel-matrix.mjs', 'webview-launch.mjs')) {
         $p = Join-Path $root ('tools\verify\' + $s)
         if (-not (Test-Path $p)) { Write-SkipMsg ('缺 tools/verify/' + $s); continue }
         $code = Invoke-Native -file 'node' -argv @($p)

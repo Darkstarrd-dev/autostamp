@@ -99,6 +99,14 @@ func Sanitize(s *Settings) error {
 		fail("ui.crosspage.binding=none while apply.crossPage=true")
 		a.Binding = "right"
 	}
+	if a.SliceMode != "even" && a.SliceMode != "random" {
+		fail("ui.crosspage.sliceMode %q not in even|random", a.SliceMode)
+		a.SliceMode = "even"
+	}
+	if a.Cover < 0 || a.Cover > 100 {
+		fail("ui.crosspage.cover %d out of 0..100", a.Cover)
+	}
+	a.Cover = clampInt(a.Cover, 0, 100)
 
 	sp := &s.Split
 	if sp.Mode != "off" && sp.Mode != "v2" && sp.Mode != "h2" && sp.Mode != "grid" {

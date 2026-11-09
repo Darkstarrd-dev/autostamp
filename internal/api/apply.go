@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -38,18 +39,19 @@ type applyBody struct {
 // absent field falls back to the UI_SPEC default while an explicit 0 is
 // honoured.
 type applyInstanceBody struct {
-	SealID      string   `json:"sealId"`
-	Blend       string   `json:"blend"`
-	Opacity     *float64 `json:"opacity"`
-	Scale       *float64 `json:"scale"`
-	Pos         string   `json:"pos"`
-	Anchor      string   `json:"anchor"`
-	Offset      string   `json:"offset"`
-	Rotation    *float64 `json:"rotation"`
-	Pages       string   `json:"pages"`
-	CrossPage   bool     `json:"crossPage"`
-	Binding     string   `json:"binding"`
-	StartOffset *float64 `json:"startOffset"`
+	SealID      string    `json:"sealId"`
+	Blend       string    `json:"blend"`
+	Opacity     *float64  `json:"opacity"`
+	Scale       *float64  `json:"scale"`
+	Pos         string    `json:"pos"`
+	Anchor      string    `json:"anchor"`
+	Offset      string    `json:"offset"`
+	Rotation    *float64  `json:"rotation"`
+	Pages       string    `json:"pages"`
+	CrossPage   bool      `json:"crossPage"`
+	Binding     string    `json:"binding"`
+	StartOffset *float64  `json:"startOffset"`
+	Slices      []float64 `json:"slices"` // Z5 uneven shares; empty = even split
 }
 
 // The UI_SPEC §2 declared defaults, so a request that leaves a slider out
@@ -308,6 +310,34 @@ func resolveInstance(store *tmpstore.Store, owner string, doc *pdfcore.Doc, i in
 		}
 		geom.Binding = bs
 	}
+	// Z5: explicit per-slot shares of the whole-seal width (平均|随机 panel
+	// switch). The front end draws the random sequence and sends it verbatim,
+	// so preview and disk cannot drift apart; the server only answers 400 for
+	// impossible shapes: wrong length, out-of-range values, or a total that
+	// exceeds the seal (a total below 1 just leaves part of the seal unprinted,
+	// which is exactly what a real binding gap looks like).
+	if len(in.Slices) > 0 {
+		if !in.CrossPage {
+			return pdfcore.StampInstance{}, "bad_body", label + " slices 只能用于骑缝实例"
+		}
+		if len(in.Slices) != len(list) {
+			return pdfcore.StampInstance{}, "bad_body", label +
+				fmt.Sprintf(" slices 长度 %d 与作用页数 %d 不一致", len(in.Slices), len(list))
+		}
+		sum := 0.0
+		for _, v := range in.Slices {
+			if v < 0 || v > 1 {
+				return pdfcore.StampInstance{}, "bad_body", label + " slice 必须在 0..1 之内"
+			}
+			sum += v
+		}
+		if sum > 1.001 {
+			return pdfcore.StampInstance{}, "bad_body", fmt.Sprintf("%s slices 合计 %g 超过 1", label, sum)
+		}
+		if sum < 0.05 {
+			return pdfcore.StampInstance{}, "bad_body", label + " slices 全为 0，没有可盖章的页"
+		}
+	}
 	return pdfcore.StampInstance{
 		SealID:  in.SealID,
 		PNG:     png,
@@ -316,6 +346,7 @@ func resolveInstance(store *tmpstore.Store, owner string, doc *pdfcore.Doc, i in
 		Opacity: opacity,
 		Blend:   b,
 		Pages:   list,
+		Slices:  in.Slices,
 	}, "", ""
 }
 

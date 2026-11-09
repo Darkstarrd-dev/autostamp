@@ -72,6 +72,8 @@ type Apply struct {
 	CrossPage   bool    `json:"crossPage"`
 	Binding     string  `json:"binding"` // right|alternate|none (UI_SPEC §8 D2)
 	StartOffset float64 `json:"startOffset"`
+	SliceMode   string  `json:"sliceMode"` // even|random (UI_SPEC §8 Z5)
+	Cover       int     `json:"cover"`     // 0..100: share of middle pages that get a strip (Z5)
 }
 
 // Split maps api.split.* plus ui.split.mode.

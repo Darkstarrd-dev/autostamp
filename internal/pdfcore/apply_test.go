@@ -295,6 +295,68 @@ func TestStampCrossPageStripsPerPage(t *testing.T) {
 	}
 }
 
+// TestStampUnevenSlicesPerPage (Z5): the disk honours the preview's slice list
+// — the gap slot (fraction 0) produces no artifact at all, and the surviving
+// strips keep their per-slot width (the cm matrix scale = box width in points)
+// and binding-edge pin.
+func TestStampUnevenSlicesPerPage(t *testing.T) {
+	pngBytes := sealPNG(t, 48, 24)
+	out := stampBytes(t, buildTestPDF(t), []StampInstance{
+		{
+			SealID: "cross", PNG: pngBytes, Opacity: 0.6, Blend: BlendMultiply,
+			Geom:   StampGeom{Scale: 0.2, Aspect: 1, CrossPage: true, Binding: BindingRight, StartOffset: 40},
+			Pages:  []int{1, 2, 3},
+			Slices: []float64{0.7, 0.3, 0},
+		},
+	})
+	path := writeStamped(t, out)
+	ctx, err := api.ReadContextFile(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const pageW = 595.0 // buildTestPDF's MediaBox
+	fullW := 0.2 * pageW
+	// buildTestPDF's pages *share* one content stream object, so page 1's
+	// stream carries every stamped slot — convenient: the two uneven slots
+	// must be side by side at their own pinned x offsets (only true if the
+	// per-slot fractions drove Box()), and the gap slot contributes nothing:
+	// exactly two artifacts, never three. (Strip *width* is pinned by
+	// TestBoxHonoursUnevenSlotFrac and the StripsFractions tests above.)
+	pageDict, _, _, err := ctx.PageDict(context.Background(), 1, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, err := pageContentBytes(ctx, pageDict, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr := artifactTranslations(t, content)
+	if len(tr) != 2 {
+		t.Fatalf("gap slot contributed an artifact (want exactly 2 stamped slots, got %d: %v)", len(tr), tr)
+	}
+	for _, want := range []struct {
+		frac float64
+		x    float64
+	}{{0.7, pageW - 0.7*fullW}, {0.3, pageW - 0.3*fullW}} {
+		hit := false
+		for _, m := range tr {
+			if math.Abs(m[4]-want.x) < 0.05 {
+				hit = true
+			}
+		}
+		if !hit {
+			t.Errorf("slot frac %g: no artifact pinned at x %g (cm list %v)", want.frac, want.x, tr)
+		}
+	}
+	// The classic even-split x must NOT appear: that would mean the fractions
+	// were ignored and the old 1/count path ran.
+	for _, m := range tr {
+		if math.Abs(m[4]-(pageW-fullW/2)) < 0.05 {
+			t.Errorf("even-split placement appeared in an uneven-slice stamp: %v", m)
+		}
+	}
+}
+
 // The UI invariant the plan promises: re-adjusting a seal re-bakes it from the
 // clean base asset, so the base never carries a second copy of the artifact
 // (pdfcpu's Update flag is deliberately false — see Stamp's comment).
@@ -332,6 +394,7 @@ func TestStampRejectsBadRequests(t *testing.T) {
 		{"page beyond the document", []StampInstance{{SealID: "x", PNG: pngBytes, Geom: StampGeom{Scale: .2, Aspect: 1}, Pages: []int{7}}}},
 		{"strip slot count mismatch", []StampInstance{{SealID: "x", PNG: pngBytes, Geom: StampGeom{Scale: .2, Aspect: 1, CrossPage: true, Binding: BindingRight, SlotCount: 2}, Pages: []int{1}}}},
 		{"binding none with crossPage", []StampInstance{{SealID: "x", PNG: pngBytes, Geom: StampGeom{Scale: .2, Aspect: 1, CrossPage: true, Binding: BindingNone, SlotCount: 1}, Pages: []int{1}}}},
+		{"slices length mismatch", []StampInstance{{SealID: "x", PNG: pngBytes, Geom: StampGeom{Scale: .2, Aspect: 1, CrossPage: true, Binding: BindingRight}, Pages: []int{1, 2, 3}, Slices: []float64{0.5, 0.5}}}},
 	}
 	for _, c := range cases {
 		if _, err := Stamp(context.Background(), f, doc, c.inst); err == nil {

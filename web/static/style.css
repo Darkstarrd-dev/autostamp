@@ -47,12 +47,13 @@ body, button, input, select { font: inherit; }
 button { cursor: pointer; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* layout: two columns is fixed (UI_SPEC §8 HD3; L1 retired 2026-11-03) */
+/* layout: single column, bleeding to the window edge (SP5, 2026-11-06; the
+   380 px sidebar died with HD3's fixed two-col, UI_SPEC §8 HD3 retired) */
 #app-main {
   display: grid; height: 100vh;
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
-  grid-template-areas: "topbar topbar" "preview panel";
+  grid-template-areas: "topbar" "preview";
 }
 
 /* topbar */
@@ -98,15 +99,22 @@ input[type="text"] { width: 100%; }
 #preview { grid-area: preview; min-width: 0; position: relative; display: flex; flex-direction: column; background: var(--stage-bg); }
 /* HD7 (2026-11-04): the empty card bleeds into the whole left column - no margin,
    no radius; the dashed border stays as the drop-target affordance. */
+/* HD19 (2026-11-06): the empty state is ONE centered control - a large
+   rounded-square button that opens the native picker - plus the paste/drag
+   hint below. The path box / multi-filter chip row is gone (openByPath is a
+   §7 drive channel now, no UI input). */
 #empty-state {
   flex: 1; display: none; border: 2px dashed var(--border);
   background: var(--surface); padding: 28px; text-align: center;
+  flex-direction: column; align-items: center; justify-content: center; gap: 18px;
 }
-#empty-state .msg { font-size: 16px; margin-bottom: 6px; }
-#empty-state .hint { color: var(--muted); margin-bottom: 16px; }
-#empty-state .btnrow { display: flex; gap: var(--gap); justify-content: center; flex-wrap: wrap; }
-#empty-state .pathrow { display: flex; gap: var(--gap-sm); margin-top: 16px; align-items: center; }
-#empty-state .pathrow input[type="text"] { flex: 1; }
+#empty-pick {
+  width: 156px; height: 156px; border-radius: 16px; font-size: 16px;
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 12px;
+}
+#empty-pick .ic { width: 44px; height: 44px; display: block; }
+#empty-state .hint { color: var(--muted); max-width: 560px; }
 
 #preview-stage {
   position: relative; flex: 1; min-height: 0; overflow: hidden;
@@ -144,7 +152,11 @@ input[type="text"] { width: 100%; }
 .instance[data-selected="true"] .sel-box { position: absolute; inset: 0; border: 1px solid var(--accent); background: transparent; }
 .instance[data-selected="false"] .sel-box { border-color: transparent; }
 .instance[data-selected="false"] .handle { display: none; }
-.instance[data-mode="crosspage"] .sel-box { display: none; }
+/* Z3 (2026-11-09): the old `data-mode="crosspage"` hide rule is GONE. A cross-page
+   instance is a selectable instance like any other - click shows the box, press
+   drags immediately (the strip rides startOffset, SP4), and the #stamp-layer
+   rules below paint its green ns-resize box. The hide rule was the bug the user
+   reported ("click does not show options like a normal stamp"). */
 .sel-box .handle {
   position: absolute; width: 11px; height: 11px; margin: -6px 0 0 -6px;
   background: var(--surface); border: 1px solid var(--accent); border-radius: 2px;
@@ -155,9 +167,14 @@ input[type="text"] { width: 100%; }
 .sel-box .handle[data-handle="se"] { left: 100%; top: 100%; cursor: se-resize; }
 .sel-box .handle[data-handle="rot"] { left: 50%; top: -22px; cursor: grab; border-radius: 50%; }
 
+/* SP2 (2026-11-05): the rail is a bare thumbnail strip - no pill behind the
+   preview, no per-chip number, 2 px gaps, and the thumb height fills the rail
+   (the rail's fixed height is the source of truth; width follows the page
+   aspect from the viewport, app-pager.js). The leftmost counter chip keeps the
+   default pill styling; the pressed state outlines the thumbnail itself. */
 #page-pager {
-  display: flex; align-items: center; gap: var(--gap-sm);
-  padding: 7px 12px; border-top: 1px solid var(--border); background: var(--surface-2);
+  display: flex; align-items: stretch; gap: 2px;
+  height: 76px; padding: 6px 12px; border-top: 1px solid var(--border); background: var(--surface-2);
   overflow-x: auto;
 }
 .chip { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 3px 9px; font: var(--mono); white-space: nowrap; }
@@ -165,7 +182,7 @@ input[type="text"] { width: 100%; }
 .chip.warn { color: var(--warning); }
 .chip.err { color: var(--error); border-color: var(--error); }
 
-/* P1: the pager chips are buttons now (click = jump), and a drag over the
+/* P1 pager: the chips are buttons now (click = jump), and a drag over the
    preview has to be visible or the drop target would be invisible. */
 button.chip { cursor: pointer; color: inherit; }
 #preview[data-drag="on"] #empty-state { border-color: var(--accent); background: var(--surface-2); }
@@ -183,26 +200,22 @@ button.chip { cursor: pointer; color: inherit; }
 }
 html:not([data-state="empty"]) #preview[data-drag="on"] .page-frame { outline: 2px dashed var(--accent); }
 
-/* P1 pager: one chip per page, number + downscaled thumbnail inside it. The
-   rail is a horizontal strip, so the thumb keeps a fixed height and follows the
-   page aspect (app-pager.js sets the canvas width from the viewport). */
-#page-pager button.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px 2px 3px; }
-#page-pager .pg-no { font: var(--mono); }
-#page-pager canvas.pg-thumb { display: block; height: 56px; background: #fff; border: 1px solid var(--border); border-radius: 2px; }
-#page-pager span.chip { font: var(--mono); }
+/* SP2: the chip is the bare button wrapper (no pill, no padding, no number);
+   the canvas fills the rail height and its width follows the page aspect
+   (app-pager.js sets the backing store + CSS width from the viewport). The
+   selected page outlines the thumbnail instead of tinting a background. */
+#page-pager button.chip { display: inline-flex; align-items: center; gap: 0; padding: 0; border: 0; background: transparent; border-radius: 0; }
+#page-pager button.chip[aria-pressed="true"] { background: transparent; }
+/* outline (not border) so the laid-out height == the rail content box exactly;
+   renderThumb measures that rect for the backing store and any border would
+   skew the device-pixel scale. */
+#page-pager canvas.pg-thumb { display: block; height: 100%; width: auto; background: #fff; outline: 1px solid var(--border); }
+#page-pager button.chip[aria-pressed="true"] canvas.pg-thumb { outline: 2px solid var(--accent); }
+#page-pager span.chip { font: var(--mono); align-self: center; }
 
-/* panel */
-#right-sidebar { grid-area: panel; border-left: 1px solid var(--border); background: var(--surface); overflow-y: auto; min-width: 0; }
-#panel { display: flex; flex-direction: column; }
-#panel .section { border-bottom: 1px solid var(--border); }
-#panel .section > summary {
-  display: flex; align-items: center; gap: var(--gap-sm);
-  padding: 9px 12px; background: var(--surface-2); cursor: pointer;
-  font-weight: 600; list-style: none;
-}
-#panel .section > summary::before { content: "\25B8"; color: var(--muted); }
-#panel .section[open] > summary::before { content: "\25BE"; }
-#panel .body { padding: 10px 12px; display: flex; flex-direction: column; gap: var(--gap); }
+/* SP5 (2026-11-06): the right sidebar is gone; #preview bleeds to both window
+   edges. The shared control vocabulary (.field/.row/.num-pair/.hintline) lives
+   on - the instance panel, the empty state and the save modal all use it. */
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field > .flabel { display: flex; align-items: center; gap: 8px; color: var(--fg); }
 .field > .flabel .tag { font: var(--mono); color: var(--muted); }
@@ -210,28 +223,19 @@ html:not([data-state="empty"]) #preview[data-drag="on"] .page-frame { outline: 2
 .opt-label { color: var(--muted); font-size: 12px; margin-right: 6px; }
 .row { display: flex; align-items: center; gap: var(--gap-sm); flex-wrap: wrap; }
 .num-pair { display: flex; align-items: center; gap: var(--gap-sm); }
-#seal-instances { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--gap-sm); }
-#seal-instances li { display: flex; align-items: center; gap: var(--gap-sm); border: 1px solid var(--border); border-radius: var(--radius); padding: 5px 7px; }
-#seal-instances li[aria-current="true"] { border-color: var(--accent); background: var(--surface-2); }
-#seal-instances li input[type="text"] { width: 110px; }
-#strip-previews { display: flex; gap: var(--gap-sm); flex-wrap: wrap; }
-#strip-previews .strip { display: flex; flex-direction: column; gap: 3px; align-items: center; }
-#strip-previews canvas { border: 1px solid var(--border); background: #fff; }
-#strip-previews .cap { font: var(--mono); color: var(--muted); }
-#asset-hooks { display: flex; gap: var(--gap-sm); flex-wrap: wrap; }
 #estimate { display: flex; flex-direction: column; gap: var(--gap-sm); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; background: var(--surface-2); }
 #estimate .row { justify-content: space-between; }
 #estimate output { font: var(--mono); }
 
 /* state-driven surface visibility (UI_SPEC §1) */
-html[data-state="empty"] #empty-state { display: block; }
+/* HD19: flex so the single button + hint center in the column (the old
+   display:block left them stuck at the top-left). */
+html[data-state="empty"] #empty-state { display: flex; }
 html[data-state="empty"] #preview-stage, html[data-state="empty"] #page-pager { display: none; }
 html[data-state="empty"] #preview-ruler, html[data-state="empty"] #pixel-readout { visibility: hidden; }
 html:not([data-state="stamp-selected"]) .instance .sel-box { display: none; }
 html[data-state="stamp-dragging"] .instance .sel-box,
 html[data-state="stamp-resizing"] .instance .sel-box { display: block; }
-html:not([data-state="crosspage"]) #strip-previews { display: none; }
-html:not([data-state="crosspage"]) #panel-crosspage summary { color: var(--muted); }
 html[data-state="stamp-dragging"] #preview-stage, html[data-state="stamp-resizing"] #preview-stage { cursor: grabbing; }
 html:not([data-state="empty"]) #empty-state { display: none; }
 
@@ -247,6 +251,10 @@ html:not([data-state="empty"]) #empty-state { display: none; }
 .modal[data-open="true"] { display: block; }
 .modal h2 { margin: 0 0 8px; font-size: 16px; }
 .modal .actions { display: flex; gap: var(--gap-sm); justify-content: flex-end; margin-top: 12px; }
+/* SP5: the save dialog hosts the export section; boxed subsections keep the
+   moved fields readable without a sidebar chrome. */
+.modal .section { display: flex; flex-direction: column; gap: var(--gap); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; margin: 10px 0; background: var(--surface-2); }
+.modal .sec-title { font-weight: 600; }
 #shortcuts-table { width: 100%; border-collapse: collapse; font: var(--mono); }
 #shortcuts-table th, #shortcuts-table td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); }
 #error-toast {
@@ -260,7 +268,9 @@ html:not([data-state="empty"]) #empty-state { display: none; }
 #error-toast.ok { border-color: var(--success); border-left-color: var(--success); }
 #error-toast.warn { border-color: var(--warning); border-left-color: var(--warning); }
 #confirm-modal { top: 22%; }
-#save-modal { top: 10%; }
+/* SP5: the save dialog grew with the export section; it scrolls inside the
+   viewport instead of pushing the actions out of reach. */
+#save-modal { top: 8vh; max-height: 84vh; overflow-y: auto; }
 
 
 [hidden] { display: none !important; }
@@ -282,11 +292,12 @@ html:not([data-state="empty"]) #empty-state { display: none; }
   cursor: grab; background: var(--accent); color: var(--surface); font-size: 10px;
   line-height: 14px; text-align: center; }
 /* the mock's gating: the box only shows for the selected instance while a
-   stamp state is live, and a cross-page instance shows no handles (CP1) */
+   stamp state is live. SP4 (2026-11-05): the cross-page strip is selectable
+   too — its box carries the corner + rotation handles, and the move drag is
+   the vertical startOffset channel (ns-resize cursor). */
 html:not([data-state="stamp-selected"]):not([data-state="stamp-dragging"]):not([data-state="stamp-resizing"]) #stamp-layer .instance .sel-box,
-#stamp-layer .instance[data-selected="false"] .sel-box,
-#stamp-layer .instance[data-mode="crosspage"] .handle { display: none; }
-#stamp-layer .instance[data-mode="crosspage"] .sel-box { border-color: var(--success); cursor: default; }
+#stamp-layer .instance[data-selected="false"] .sel-box { display: none; }
+#stamp-layer .instance[data-mode="crosspage"] .sel-box { border-color: var(--success); cursor: ns-resize; }
 html[data-state="stamp-dragging"] #stamp-layer .instance[data-selected="true"] .sel-box {
   border-color: var(--accent); box-shadow: var(--shadow); }
 html[data-state="stamp-resizing"] #stamp-layer .instance[data-selected="true"] .sel-box {
@@ -296,22 +307,31 @@ html[data-state="stamp-resizing"] #stamp-layer .instance[data-selected="true"] .
 /* A stamp instance is not clickable in the empty state (no document to place it on). */
 html[data-state="empty"] #stamp-layer { display: none; }
 
-/* HD12: the floating per-instance parameter panel. app-shell sets left/top from
-   the selected instance's box (flip left when it does not fit; both axes are
-   clamped inside #preview). */
+/* IP1 (2026-11-09): the per-instance parameter panel is DOCKED at the right
+   edge of the preview area (right-side sidebar form) — it no longer floats
+   beside the selected instance box (HD12's anchor/flip chain deleted from
+   app-shell-instances.js; only show/hide semantics remain). The gear fab
+   docks at the same corner.
+   IP2: full-height docking + `overflow-y: auto` — the scrollbar appears
+   whenever the group contents exceed the preview height. */
 #instance-panel {
-  position: absolute; z-index: 6; width: 236px;
+  position: absolute; z-index: 8; right: 10px; top: 10px; bottom: 10px; width: 236px;
+  overflow-y: auto; overscroll-behavior: contain;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); box-shadow: var(--shadow);
   padding: 8px; display: flex; flex-direction: column; gap: 6px;
 }
+/* IP2: flex children must keep their natural height (flex-shrink:0), or they
+   silently compress instead of producing the overflow the scrollbar rides. */
+#instance-panel > * { flex: none; }
 #instance-panel[hidden] { display: none; }
 /* HD18: title row = label + minimize button (the panel's own corner). */
 #instance-panel .ip-title { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-weight: 600; }
 #instance-collapse.ip-min { padding: 0; width: 22px; height: 22px; flex: none; }
-/* HD18: the collapsed panel is one square rounded gear button, same anchor. */
+/* HD18: the collapsed panel is one square rounded gear button, docked at the
+   same top-right corner (IP1). */
 #instance-fab {
-  position: absolute; z-index: 6; width: 36px; height: 36px;
+  position: absolute; z-index: 8; right: 10px; top: 10px; width: 36px; height: 36px;
   display: flex; align-items: center; justify-content: center;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 10px; box-shadow: var(--shadow); cursor: pointer; color: var(--fg);
@@ -319,21 +339,33 @@ html[data-state="empty"] #stamp-layer { display: none; }
 #instance-fab[hidden] { display: none; }
 #instance-fab:hover { border-color: var(--accent); }
 #instance-panel .flabel { font: var(--mono); font-size: 11px; color: var(--muted); }
+/* SP5: single-col full-bleed made the cp-group tag rows reach the viewport
+   edge (the mono tag is 148 px wide and never fit the 236 px row - two-col
+   hid the spillover behind the sidebar). The label wraps instead of growing
+   the document: the tag never paints outside the panel. */
+#instance-panel .flabel { flex-wrap: wrap; row-gap: 2px; }
 #instance-panel .num-pair input[type="range"] { flex: 1; min-width: 0; }
 #instance-panel .num-pair input[type="number"] { width: 56px; }
 #instance-panel .ip-actions { display: flex; gap: var(--gap-sm); }
+/* SP4: the binding segment carries three long bilingual labels; inside the
+   236 px panel it stacks vertically instead of overflowing the 34 px row. */
+#instance-panel .cp-group .seg.sm { flex-direction: column; height: auto; }
+#instance-panel .cp-group .seg.sm button { width: 100%; padding: 6px 10px; }
 
-/* HD13 (2026-11-05): the current-seal preview is an overlay card at the
-   bottom-left of the main page — it no longer reserves its own strip. */
+/* SP3 (2026-11-05): z-order contract — the preview card sits **above** the
+   page surface (stamp-layer z 4, page canvas, ruler) and **below** the
+   floating parameter panel / gear fab (z 8) and the backend terminal (z 7):
+   it never covers the panel contents. `#instance-panel` has z-index 8 so a
+   card at z 5 is always under it, regardless of DOM order. */
 #seal-preview {
-  position: absolute; left: 10px; bottom: 10px; z-index: 6; max-width: 190px;
+  position: absolute; left: 10px; bottom: 10px; z-index: 5; max-width: 190px;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); box-shadow: var(--shadow); padding: 8px;
   display: flex; flex-direction: column; gap: 6px;
 }
-/* The pager rail (border 1 + padding 14 + thumb 56 = 71) sits under the card
-   when a document is open; the overlay floats above it. */
-html:not([data-state="empty"]) #seal-preview { bottom: 77px; }
+/* The pager rail (border 1 + 76px height = 77) sits under the card when a
+   document is open; the overlay floats above it. */
+html:not([data-state="empty"]) #seal-preview { bottom: 84px; }
 #seal-preview[hidden] { display: none; }
 #seal-preview .sp-head { display: flex; gap: 6px; align-items: baseline; font-size: 12px; }
 #seal-preview-name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; }
@@ -342,6 +374,10 @@ html:not([data-state="empty"]) #seal-preview { bottom: 77px; }
   repeating-conic-gradient(var(--surface-3) 0% 25%, var(--surface) 0% 50%) 0 0 / 14px 14px;
   border: 1px solid var(--border);
 }
+
+/* SP4 (2026-11-05): the cross-page placement toggle follows the same pattern:
+   pressed = accent, and the stage hook arms the copy cursor. */
+#btn-crosspage-add[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 
 /* HD10: add-seal mode toggle + the placement cursor it arms. */
 #btn-seal-add[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
@@ -353,7 +389,7 @@ html:not([data-state="empty"]) #seal-preview { bottom: 77px; }
 /* HD16 (2026-11-05): the backend-terminal overlay across the bottom of the
    left column; the topbar toggle (HD16) flips settings.ui.consoleVisible. */
 #log-console {
-  position: absolute; left: 10px; right: 10px; bottom: 77px; z-index: 7;
+  position: absolute; left: 10px; right: 10px; bottom: 84px; z-index: 7;
   height: 180px; overflow: auto; background: var(--surface);
   border: 1px solid var(--border); border-radius: var(--radius);
   box-shadow: var(--shadow); padding: 8px;

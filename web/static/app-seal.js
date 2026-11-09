@@ -20,6 +20,11 @@
   // The raw upload kept in memory so the 撤销 button can re-prepare from it.
   let lastFile = null;
 
+  // prepareOptions resolves the seal/prepare options. SP1 (2026-11-05): the
+  // seal panel is gone, so the fields() registry simply no longer carries the
+  // seal.prepare keys - the defaults below (despill on, trim on, dpi 0 = let
+  // the server's own default through) are what every channel now runs on,
+  // matching the Go config defaults.
   function prepareOptions(override) {
     const f = shell().fields();
     const opts = {
@@ -138,10 +143,10 @@
   // shape of the same route (HD8): same options, same registration - only the
   // bytes' origin differs (the server read them from disk). The name is the
   // picked path so the recent-seals list and the preview card agree.
-  async function prepareFromGrant(pathGrantId, path) {
+  async function prepareFromGrant(pathGrantId, path, override) {
     const a = api();
     if (!a) throw new Error("api unavailable");
-    const opts = prepareOptions();
+    const opts = prepareOptions(override);
     const meta = await a.sealPrepareGrant(pathGrantId, opts);
     if (!meta || !meta.sealId) throw Object.assign(new Error("seal/prepare returned no sealId"), { code: "bad_envelope" });
     seals.set(meta.sealId, {
@@ -228,6 +233,7 @@
     renderPreview,
     metaLine,
     lastSource: () => lastFile,
+    revert,
     probe,
   };
 })();

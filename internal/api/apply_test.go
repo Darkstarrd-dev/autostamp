@@ -189,6 +189,10 @@ func TestApplyRouteRejectsVocabulary(t *testing.T) {
 		{"rotation out of range", map[string]any{"rotation": 540}},
 		{"binding none with crossPage", map[string]any{"crossPage": true, "binding": "none"}},
 		{"unknown anchor", map[string]any{"anchor": "middle"}},
+		{"slices on a plain instance", map[string]any{"slices": []float64{0.5, 0.5}}},
+		{"slices length mismatch", map[string]any{"crossPage": true, "binding": "right", "pages": "all", "slices": []float64{0.5, 0.5}}},
+		{"slices over the seal width", map[string]any{"crossPage": true, "binding": "right", "pages": "all", "slices": []float64{0.6, 0.6, 0.6}}},
+		{"slices all zero", map[string]any{"crossPage": true, "binding": "right", "pages": "all", "slices": []float64{0, 0, 0}}},
 		{"unknown field (brightness is preview-only)", nil},
 	}
 	mux, _, _ := newTestMux(t)
@@ -285,5 +289,19 @@ func TestApplyRouteCrossPageOnSplitAsset(t *testing.T) {
 	stamped := rawAsset(t, mux, session, dataOf(t, rec)["assetId"].(string))
 	if !bytes.Contains(stamped, []byte("/SMask")) {
 		t.Error("a cross-page seal of a transparent PNG lost its /SMask in the stamped file")
+	}
+
+	// Z5: the 平均|随机 panel hands the route an explicit slice list; the route
+	// accepts a legal one (length = page list, total <= the seal width) and the
+	// stamped file stays valid.
+	rec = applyOne(t, mux, session, cut, seal, map[string]any{
+		"crossPage":   true,
+		"binding":     "right",
+		"startOffset": 0,
+		"pages":       "all",
+		"slices":      []float64{0.4, 0, 0.3, 0, 0.05, 0.25},
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("uneven-slice apply = %d, want 201: %s", rec.Code, rec.Body.String())
 	}
 }

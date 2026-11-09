@@ -3,6 +3,125 @@
 > `docs/UI_SPEC.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
 
+## 2026-11-09 — §8 新增 IP1/IP2：印章参数面板停靠右缘 + 超高滚动条
+
+- 头「最后核对」= IP1/IP2 摘要；Z5 降为「同日前一轮」。
+- §8：新增 **IP1/IP2** 两行决策（来源 = 用户 2026-11-09 对话指令，两项一批）：IP1 面板
+  停靠 `#preview` 右缘（`right/top/bottom:10px`，宽 236、z 8 不变，`#instance-fab` 同角），
+  HD12 悬浮锚点链作废；IP2 全高 + `overflow-y:auto`，内容超高出滚动条。
+- §2：六个「浮动参数面板」行换义为「实例参数面板（右缘停靠）」（字段/控件/请求列不变）。
+- §6 布局注记：`#instance-panel` 描述改为停靠右缘全高（含 z 序说明不变）。
+- 契约面零变化：无新 id、无新键（§6 = 58、§4 = 141 不变），`probe('instancePanel')`
+  读数面不变（left/top 现由停靠 CSS 决定）。
+
+## 2026-11-09 — §8 新增 Z5：骑缝切片模拟（平均|随机 + 覆盖率滑杆 + 重新随机）
+
+- 头「最后核对」= Z5 摘要；Z1–Z4 降为「同日前一轮」。
+- §2：新增 3 行词表 —— `ui.crosspage.sliceMode`（切档 平均|随机，settings 组字段对
+  `apply.sliceMode`，默认平均）、`ui.crosspage.cover`（滑杆+数值，settings `apply.cover`，
+  0..100 默认 75，仅随机档可见）、`api.apply.slices`（请求字段，ctl=no，由随机取值写入实例
+  参数并随 apply 原样发送）。决策列 = Z5。
+- §3 绑定表：cp 组两行（切档/滑杆对），retry 按钮 = 动作行。
+- §4：132 → 141（新增 `ui.crosspage.sliceMode.ctl/hint`、`ui.crosspage.cover.ctl/hint`、
+  `sliceMode.even`、`sliceMode.random`、`crosspage.retry.btn/hint/noRandom` 共 9 键），
+  `gen-i18n.mjs` 重跑 = 141。
+- §6：ui-ids 56 → 58（`crosspage-slicemode`、`crosspage-retry`；滑杆对不新增 id）。
+- §7：驱动接口新增 `drawCrossSlices`/`retryCrossSlices`/`randomCrossFractions(count, cover,
+  rng)`（纯函数 + 注入 rng 供确定性校验）；probe 词表行补 `strips` 的 `frac/cum` 读数。
+- §8：新增 Z5 决策行（来源 = 用户 2026-11-09 对话指令；滑条语义经 ask 轮用户自定义输入补全：
+  覆盖率 = 首页末页外页面拿到骑缝章的占比，四舍五入）。
+- `docs/ui/mockup.html` 同步 cp 组形态（切档/滑杆/重试按钮 + cp-rand 显隐）。
+
+## 2026-11-09 — §8 新增 Z1–Z4：盖章默认值（multiply + 42 mm 自动缩放）与骑缝旋转/可选性修复
+
+- 头「最后核对」= 2026-11-09 的 Z1–Z4 摘要；HD19 降级为「上一轮」，SP5 为「再上一轮」。
+- §2：`api.apply.blend` 行 `decision=Z1`（default 已是 multiply，本轮把界面/回退对齐）；
+  `api.apply.scale` 行 `decision=HD12,Z2`；scale 语义要点补 Z2 公式（新放置/复位实例 =
+  42 mm 章宽 ÷ 页显示宽；竖版宽=短边 A4 竖版 0.2008，横版按 42 mm 目标除以长边；settings
+  字段默认仍 0.202）。
+- §4：`api.apply.scale.hint` 换文本（en/cn 补 42 mm Z2 自动缩放语义），**132 键不变**
+  （`gen-i18n.mjs` 重跑）。
+- §7：真实壳驱动清单补 `autoScale()`（Z2 放置缩放；`addInstanceAt`/`addCrossInstanceAt` /
+  `#instance-reset` 都取它）。
+- §8：新增 **Z1–Z4** 四行决策（来源 = 用户 2026-11-09 对话指令，4 项一批）：
+  Z1 默认混合模式 multiply 对齐（`selected` 预置 + 前端回退 multiply）；Z2 默认章 42 mm
+  自动缩放（自动判竖版/横版、默认纸张 A4）；Z3 骑缝实例单击可选/按下即拖（删除
+  `[data-mode="crosspage"]` 的 sel-box/handle 隐藏 CSS —— 用户报的「必须长按」现象根因）；
+  Z4 骑缝旋转先整枚后切竖条（`RotatePNG` bake + `Strips` 切旋转位图 + 预览
+  `rotatedBitmapCanvas`/`effectiveBitmap` 同源；`RectFor` 纵横比 = 旋转 bbox）。
+- 本轮无新 ui-ids / 新路由 / 新字段 / 新键；ui-ids 仍 56。
+
+## 2026-11-06 — §8 新增 HD19：空态只剩「打开文件」大按钮（作废 HD6 的路径框半边）
+
+- 头「最后核对」= 2026-11-06 的 HD19 摘要；SP5 降级为「上一轮」、SP1–SP4 降级为「更早一轮」，
+  历史计数链改为 266 → 267 → 151 → 144 → **132**。
+- §1 状态表：`empty` 描述去掉「路径输入」→「拖拽 / 选择 / 粘贴」。
+- §3：删「空态 · 路径输入」行；新增「空态 · 「打开文件」大按钮」行（`#empty-pick` 156 px
+  大方圆角 button → `fs/pick{filter:pdf,multi:true}`；下方 `.hint` = 粘贴/拖拽提示走
+  `submitFiles`）；表后段落补一句「空态只有大按钮 + 一行 hint，`#empty-path` /
+  `#empty-pick-multi` / `#empty-pick-filter` 已删」。
+- §6 布局段补 `#empty-state` 形状：flex 列居中（`gap: 18px`、`html[data-state="empty"]` 下
+  `display: flex`）、`#empty-pick` 156×156 + `border-radius: 16px`（`.ic` 44 px）、
+  `.hint` `max-width: 560px`。
+- §7.1 真实壳驱动清单：补 `pickAndOpen()` / `openByPath(path)` / `handleFiles(file)` 三条，
+  注明 HD19 起 `openByPath(path)` 只是 §7 驱动 API（参数给路径、空/空白 → 错误 toast、不读 DOM）。
+- §8：新增 **HD19** 决策行（来源 = 用户 2026-11-06 对话指令）+ 表后 HD19 说明段；HD6 行挂
+  「（路径框半边已于 2026-11-06 被 HD19 作废…）」注记，行本身保留。
+- §4：144 → **132** 键（删 12 个失去控件面的键 = `empty.msg`、`empty.path.placeholder`、
+  `api.fs.pick.filePath.ctl`/`.hint`、`api.fs.pick.multi.ctl`/`.hint`、
+  `api.fs.pick.filter.ctl`/`.hint`、`fs.pick.multi.on`、`fs.pick.filter.pdf`、
+  `fs.pick.filter.all`、`api.fs.pick.pathGrantId.hint`；`api.fs.pick.pathGrantId.ctl` 保留
+  = 保存弹窗 chip 的 `t()` 标题）；`empty.hint` 换文本（拖进来/粘贴打开 PDF、图片装载为印章）；
+  §2 fence 的 `filePath`/`filter`/`multi` 三行改 `ctl=no`、`pathGrantId` 行 `i18nkey=-`；
+  ui-ids fence 59 → **56**。
+
+## 2026-11-06 — §8 新增 SP5：右侧边栏整块删除，导出设置段迁入 `#save-modal`
+
+- 头「最后核对」换 2026-11-06，SP1–SP4 降级为「上一轮」；§8 的 SP1 段落挂「**SP5 再修订**」标记。
+- §8 新增 **SP5** 决策行（来源 = 用户 2026-11-06 对话指令）+ 表后收尾说明段；SP2 行补
+  「SP5 起这个导出段位于保存对话框内」。
+- §6 布局段：`#app-main` = **单列 full-bleed**（`minmax(0, 1fr)` + `"topbar" "preview"`，
+  HD3 的固定 two-col 作废）；「侧栏只剩导出设置 + 动作段」改成「`#panel-export` = 保存
+  对话框内的导出设置段（modal 内滚动：`top: 8vh` + `max-height: 84vh` + `overflow-y: auto`）」；
+  顶栏段注明「保存」是对话框唯一按钮入口。
+- §3 绑定表：五个导出行宿主列改「保存对话框 · 导出设置段」；语言/主题行注明 SP5 后仍在顶栏。
+- §5 `Ctrl+S` 行注明顶栏「保存」= 唯一按钮入口（侧栏「保存到文件」按钮已删）。
+- §1 状态表 `export`/`save-confirm` 描述换宿主；§7 落盘链句子改「sidebar buttons removed in
+  SP1, whole sidebar gone in SP5」。
+- §4：151 → **144** 键（删 `save.open.btn` + `ui.lang.ctl`/`ui.lang.hint`/`ui.theme.ctl`/
+  `ui.theme.hint` + `split.undo.btn`/`apply.write.hint`（唯一绑定面 = 已删侧栏 `#chain-hint`））；
+  §2 的 `ui.lang`/`ui.theme` 行 `i18nkey=` 改挂切档自身文案键（`lang.en`/`theme.light`，
+  `decision=SP5`）并在 §4 规则段写明例外；ui-ids fence 63 → 59。
+
+## 2026-11-05 — §8 新增 SP1–SP4：右侧边栏收尾（删面板 + 分页条瘦身 + z 序 + 骑缝章模式按钮）
+
+- **SP1**：§2 字段表把失去控件的行改 `ctl=no`（切分组、`seal.prepare.*`、assetId 组）
+  或删除（`api.batch.*` 14 行、`decision.assetIds`）；§6 ui-ids 96 → 63（删
+  `panel-seal/instances/split/batch/crosspage`、`asset-hooks`、`strip-preview`、
+  `instance-*` 按钮行、`batch-*`、`split-apply/veto/undo`、`seal-preset-*`…）；§7 驱动 API
+  增 `setCrosspageAdd/addCrossInstanceAt/runSplit(opts)` 并注明落盘链键盘入口。
+- **SP2**：§6 分页条描述改「纯缩略图条（栏高定死、宽度随页比、间距 2px、无 All）」。
+- **SP3**：§6 预览卡 z 序段（stamp-layer 4 < seal-preview 5 < log-console 7 < 面板/齿轮 8）。
+- **SP4**：§2 `ui.seal.crosspageAddMode` + `ui.seal.crosspageAdd` 行、顶栏描述、
+  §7.1 探针 `crosspageAdd`/`strips`（叠加层条带盒读数）。
+- §4：267 → 151 键（随面板删除批量移除死键，含 `app.sealAddMode.hint`；再回补
+  `binding.none`/`ui.crosspage.binding.*`/`seal.upload.btn`/`save.replace.on`/
+  `seal.despill.revert` 等活键，并新增 `app.sealCrossAddMode.btn`/
+  `crosspage.binding.fixed`）；`crosspage.binding.fixed` 文案「先选中骑缝实例」。
+- 决策表新增 SP1–SP4 行（用户 2026-11-05 对话指令）+ 收尾说明段。
+
+## 2026-11-05 — §8 新增 V7：Ctrl+滚轮恒为整页缩放（取代 V3 的实例缩放通道）
+
+- V3 行标注「2026-11-05 被 V7 取代」；V7 行登记用户修正指令（滚轮缩放针对全局、
+  印章与文件相对比例不变）。
+- §3 绑定表：选中实例行的 `apply.scale` 通道 = 四角手柄 + `+/−`（滚轮退出）；
+  §5 快捷键表 `Ctrl+滚轮` 行换义为整页视图缩放。
+- §4 增 `view.zoom.hint`（266 → 267）；§7 叠加层接口清单删 `consumeWheel(ev)`。
+
+## 2026-11-05 — §7.1 标题 + §4 跨模块事件句改到 `app-shell-*.js` 模块组（壳拆分，AGENTS §5.35）
+
+- 纯文件名引用更新；探针/事件/字段契约零变化，§8 决策表不动（非 UI 语义）。
+
 ## 2026-11-05 — §8 新增 HD17/HD18：装载只设当前印章（实例可全删、boot 无预置）+ 参数面板默认收起齿轮按钮
 
 - 头「最后核对」重写为本轮摘要（HD13–HD18）；§4 换一键（删 `instances.err.last`、增

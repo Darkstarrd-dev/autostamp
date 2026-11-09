@@ -283,6 +283,15 @@
   （= `595 - 119/2`、`842 - 40 - 119*0.5`）；若按切片的比算，框高变成 119，写入变成
   `535.5 683`（低了一整个条带高）—— 断言 `TestStampStripBoxUsesWholeSealAspect` 钉死，
   变异试验（把切片比塞回去）实测 FAIL。
+- **Z4 重跑（2026-11-09）骑缝旋转 = 先旋转整枚、再切竖条**：`RotatePNG`（屏幕顺时针，
+  画布 = 旋转 bbox，最近邻）把 48x24 双色印章转成 24x48（精确 90° 宽高互换），再
+  `Strips(2)` 切出两条**竖列**：每页一条竖带，上半色 = 印章左半 (24,190,70)、下半 =
+  右半 (210,40,90)，落盘回读 Δ 0；条带 59.50 × **237.98** pt（高 = 旋转 bbox 高），
+  y ∈ [40, 278.0]。旧「先切后转」的错误落盘（每页放旋转后的单片、页 1 全左半页 2 全
+  右半）被上下沿色 + 页间同带断言拒绝。反向（−90°）由 `TestRotatePNGCounter90MirrorDirection`
+  对照钉死。断言：`rotate_test.go` 5 测试（含 `TestRotatedStripsAreVerticalColumnsOfRotatedSeal`）+
+  `apply-smoke --only=strip`（同 seal 旋转 90 双跑）+ `overlay-smoke --only=strip`
+  旋转渐变三取样（上沿 = 左端点、中 = 渐变中、下沿 = 右端点）。
 - `OnTop: true` + `Mode: WMImage`：印章在页面内容之上；pdfcpu 会把整页内容
   （含印章的 Artifact 块）包进 `/Rotate` 归一包装（`model.Watermark.PageRot` +
   `ContentBytesForPageRotation`，源码实测），所以 `Dx/Dy` 说的是**显示空间**的数，

@@ -410,9 +410,11 @@
   async function next() { return goTo(state.page + 1); }
   async function prev() { return goTo(state.page - 1); }
 
-  // Zooming is a view property: UI_SPEC §5's Ctrl+wheel row names apply.scale
-  // as its field, which is only true once an instance owns the wheel (P2). In
-  // P1 nothing is selected, so the wheel zooms the view.
+  // Zooming is a view property (V7, 2026-11-05): Ctrl+wheel always sets the
+  // view zoom, over a selected instance or not - the seal rects live in page
+  // space, so the seal scales with the page and the seal/page ratio never
+  // changes. apply.scale (instance scale) stays on corner drags, the slider
+  // and the +/- keys.
   async function zoomBy(step) {
     if (!state.doc) return null;
     const pageObj = await state.doc.getPage(state.page);
@@ -549,7 +551,8 @@
     stage.addEventListener("pointercancel", stopPan);
 
     // Plain wheel pans the view (the old native scroll kept working without a
-    // visible scrollbar); Ctrl+wheel stays the zoom gesture (V3, app-shell).
+    // visible scrollbar); Ctrl+wheel stays the whole-page zoom gesture (V7,
+    // app-shell-chrome).
     stage.addEventListener(
       "wheel",
       (e) => {

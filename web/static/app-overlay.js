@@ -21,9 +21,11 @@
 // because a second layer would dilute the blend - so the wrapper carries the
 // affordance only, and the per-instance canvas stays offscreen as the probe-only
 // backing surface for probe('instancePixels').
-// Box visibility is state-gated (css: html[data-state=stamp-*]); cross-page instances
-// hide it, because their strip is positioned by the panel's startOffset (UI_SPEC §8
-// CP1), not by dragging.
+// Box visibility is state-gated (css: html[data-state=stamp-*]); SP4
+// (2026-11-05) gives cross-page instances the same affordance - the strip is
+// selectable, its move drag is the vertical startOffset channel, and the
+// corner/rotation handles scale and rotate the whole seal (every page's strip
+// repaints from the one instance's parameters).
 (() => {
   "use strict";
 
@@ -77,6 +79,10 @@
     nodes: new Map(), // instanceId -> { wrap, canvas, box, handles }
     rects: new Map(), // instanceId -> page-space rect of the painted box
     strips: new Map(), // instanceId -> strip context of the current page
+    // Z4: rotated whole-seal canvases for cross-page instances, keyed
+    // "<sealId>|<deg>" (drag slider hands are integers, so the cache is small
+    // and stable); the bitmapOf for an instance comes from here when set.
+    rotCache: new Map(),
     drag: null,
   };
 
@@ -115,34 +121,86 @@
     return out.length ? out : all;
   }
 
+  // rotatedBitmapCanvas bakes the whole-seal rotation into a canvas sized to
+  // the rotated bbox (Z4, 2026-11-09: 骑缝章 rotates the WHOLE seal first, the
+  // slice columns come out of the turned bitmap, upright on every page). The
+  // dims formula is the exact mirror of pdfcore.RotatePNG - both sides derive
+  // the strip-box aspect from these px dims so preview and disk cannot drift.
+  // ctx.rotate(+deg) turns screen-clockwise (display space, y down), which is
+  // also the direction the plain stamp path uses and what RotatePNG samples.
+  function rotatedBitmapCanvas(img, deg) {
+    const rad = (deg * Math.PI) / 180;
+    const sin = Math.abs(Math.sin(rad));
+    const cos = Math.abs(Math.cos(rad));
+    const wR = Math.max(1, Math.round(img.width * cos + img.height * sin));
+    const hR = Math.max(1, Math.round(img.width * sin + img.height * cos));
+    const c = doc.createElement("canvas");
+    c.width = wR;
+    c.height = hR;
+    const ctx = c.getContext("2d");
+    ctx.translate(wR / 2, hR / 2);
+    ctx.rotate(rad);
+    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+    return c;
+  }
+
+  // effectiveBitmap is the seal the geometry and the paint code work against:
+  // a cross-page instance with a rotation paints the ROTATED whole bitmap (the
+  // strips slice it column-wise), everything else paints the raw one. The disk
+  // mirror is pdfcore addInstance -> RotatePNG -> Strips.
+  function effectiveBitmap(inst) {
+    const raw = sealModule() ? sealModule().bitmapOf(inst.sealId) : null;
+    if (!raw) return null;
+    const p = inst.params || {};
+    if (!p["api.apply.crossPage"]) return raw;
+    const deg = num(p["api.apply.rotation"], 0);
+    if (!deg) return raw;
+    const key = `${inst.sealId}|${deg}`;
+    let c = state.rotCache.get(key);
+    if (!c) {
+      c = rotatedBitmapCanvas(raw, deg);
+      state.rotCache.set(key, c);
+      if (state.rotCache.size > 8) {
+        // keep the cache bounded: one entry per (seal, angle) is plenty for
+        // live drags; oldest entries fall out.
+        const oldest = state.rotCache.keys().next().value;
+        state.rotCache.delete(oldest);
+      }
+    }
+    return c;
+  }
+
   // rectFor computes the seal rect in *page* points (display space, origin at
   // top-left, y down - the UI_SPEC §2 convention). `strip` narrows the rect to
   // the i-th slice of the seal at the binding edge.
   function rectFor(inst, meta, opts) {
     if (!inst || !meta) return null;
-    const img = sealModule() && sealModule().bitmapOf(inst.sealId);
+    const img = effectiveBitmap(inst);
     if (!img) return null;
     const p = inst.params || {};
     const pageW = meta.width;
 
-    // HD12: 10% floor as before, but the ceiling moved 0.9 -> 5: corner drags,
-    // wheel and keyboard can pass the slider's 200% (the slider stretches to
-    // show the overshoot, the server vocabulary accepts up to 5).
+    // HD12: 10% floor as before, but the ceiling moved 0.9 -> 5: corner drags
+    // and the +/- keys can pass the slider's 200% (the slider stretches to
+    // show the overshoot, the server vocabulary accepts up to 5). V7 (2026-11-05)
+    // removed the wheel from this list: Ctrl+wheel is the whole-page zoom now.
     const clamp = (v) => Math.max(0.05, Math.min(5, v));
     const scale = clamp(num(p["api.apply.scale"], 0.202));
     const aspect = img.height && img.width ? img.height / img.width : 1;
 
     const strip = opts && opts.strip ? opts.strip : null;
     const fullW = scale * pageW;
-    const w = strip ? fullW / strip.count : fullW;
+    const frac = strip && strip.frac !== undefined ? strip.frac : 1 / (strip ? strip.count : 1);
+    const w = strip ? fullW * frac : fullW;
     const h = fullW * aspect;
     const off = parsePair(p["api.apply.offset"], 0, 0);
 
     if (strip) {
-      // Cross-page (UI_SPEC §2/§8, decision D2 + CP1): the band hugs the
-      // binding edge and only startOffset moves it down the page; the plain
-      // offset field is deliberately ignored, because the strip is never
-      // draggable and the disk side writes position:r / offset:0 -startOffset.
+      // Cross-page (UI_SPEC §2/§8, decision D2 + SP4): the band hugs the
+      // binding edge and only startOffset moves it down the page (the vertical
+      // drag writes it). The plain offset channel is deliberately ignored here
+      // too - the strip has no horizontal position to drag, and the disk side
+      // writes position:r / offset:0 -startOffset.
       const start = num(p["api.apply.startOffset"], 0);
       const x = strip.edge === "left" ? 0 : pageW - w;
       const y = start;
@@ -163,14 +221,29 @@
   }
 
   // stripContext picks the strip this page shows: D2 keeps single-sided strips
-  // on the right edge, duplex alternates odd=right / even=left.
+  // on the right edge, duplex alternates odd=right / even=left. Z5 adds the
+  // per-slot share: an instance with explicit api.apply.slices (the 随机 draw
+  // in app-shell-instances) gets that fraction and the cumulative start; a
+  // fraction of 0 means this page sits in a binding gap and shows nothing.
+  // Without slices the classic even split runs (frac = 1/count).
   function stripContext(inst, pages) {
     const index = pages.indexOf(state.page);
     if (index < 0) return null;
-    const binding = (inst.params || {})["ui.crosspage.binding"] || "right";
+    const p = (inst.params || {});
+    const binding = p["ui.crosspage.binding"] || "right";
     if (binding === "none") return null;
     const useLeft = binding === "alternate" && pages[index] % 2 === 0;
-    return { index, count: pages.length, binding, edge: useLeft ? "left" : "right" };
+    const count = pages.length;
+    const slices = Array.isArray(p["api.apply.slices"]) && p["api.apply.slices"].length
+      ? p["api.apply.slices"] : null;
+    let frac = 1 / count;
+    let cum = index / count;
+    if (slices) {
+      frac = Math.max(0, Math.min(1, Number(slices[index]) || 0));
+      cum = 0;
+      for (let i = 0; i < index; i += 1) cum += Math.max(0, Number(slices[i]) || 0);
+    }
+    return { index, count, binding, edge: useLeft ? "left" : "right", frac, cum };
   }
 
   // paint is app-preview's hook: the canvas is the freshly rendered page here,
@@ -230,7 +303,7 @@
 
     for (const inst of s.state.instances) {
       if (!inst.sealId) continue;
-      const img = sealModule() && sealModule().bitmapOf(inst.sealId);
+      const img = effectiveBitmap(inst);
       if (!img) continue;
       const params = inst.params || {};
       const pages = parsePages(params["api.apply.pages"], pageCount);
@@ -240,6 +313,13 @@
       if (params["api.apply.crossPage"]) {
         strip = stripContext(inst, pages);
         if (!strip) continue;
+        // Z5 gap page: a fraction of 0 means the binding left this page
+        // unsealable. The probe entry stays (count stays honest); no rect,
+        // no affordance, no pixels.
+        if (strip.frac <= 0) {
+          state.strips.set(inst.id, strip);
+          continue;
+        }
       }
 
       const rect = rectFor(inst, state.meta, { strip });
@@ -257,11 +337,16 @@
 
   function drawSeal(ctx, img, rect, params, strip, scale) {
     const p = params || {};
-    const blend = BLEND_GCO[p["api.apply.blend"]] ? p["api.apply.blend"] : "normal";
+    // UI_SPEC §2: multiply / 正片叠底 is the shipped default (AGENTS §5.39 Z1);
+    // an unset or unknown blend name lands there, never on source-over.
+    const blend = BLEND_GCO[p["api.apply.blend"]] ? p["api.apply.blend"] : "multiply";
     const opacity = Math.max(0, Math.min(1, num(p["api.apply.opacity"], 1)));
     const brightness = Math.max(0, num(p["api.apply.brightness"], 1));
     const saturate = Math.max(0, num(p["api.apply.saturate"], 1));
-    const rotation = num(p["api.apply.rotation"], 0);
+    // Z4: a strip's rotation is already BAKED into the whole-seal bitmap
+    // (effectiveBitmap), so the slot itself draws upright; only the plain
+    // instance rotates live around the box centre.
+    const rotation = strip ? 0 : num(p["api.apply.rotation"], 0);
 
     ctx.save();
     // FACTS §1.4: filter is context state. Everything is set explicitly and
@@ -273,8 +358,14 @@
       ctx.filter = `brightness(${brightness}) saturate(${saturate})`;
     }
 
-    const sx = strip ? (img.width * strip.index) / strip.count : 0;
-    const sw = strip ? img.width / strip.count : img.width;
+    // Z5: the source slice starts at the slot's cumulative share (content
+    // continuity across the binding gutter) and spans that slot's fraction;
+    // the classic even split uses exactly the same math (frac = 1/count,
+    // cum = index/count).
+    const cum = strip ? (strip.cum !== undefined ? strip.cum : strip.index / strip.count) : 0;
+    const fr = strip ? (strip.frac !== undefined ? strip.frac : 1 / strip.count) : 1;
+    const sx = img.width * cum;
+    const sw = img.width * fr;
     ctx.translate(rect.cx * scale, rect.cy * scale);
     if (rotation) ctx.rotate((rotation * Math.PI) / 180);
     // The destination box is the page slot (strip width / full box); the source
@@ -386,7 +477,7 @@
   function drawInstanceCanvas(canvas, id) {
     const s = shell();
     const inst = s && s.instanceById(id);
-    const img = inst && sealModule() ? sealModule().bitmapOf(inst.sealId) : null;
+    const img = inst ? effectiveBitmap(inst) : null;
     const rect = state.rects.get(id);
     if (!img || !rect) return;
     const ctx = canvas.getContext("2d");
@@ -406,8 +497,9 @@
   }
 
   // syncAffordance keeps the selected/hidden state honest: only the selected
-  // instance gets data-selected="true" (css shows its box), and a cross-page
-  // instance is flagged so css can hide its handles (CP1: no per-page drag).
+  // instance gets data-selected="true" (css shows its box), and the mode flag
+  // (crosspage vs normal) is what css paints the green strip box + ns-resize
+  // cursor with (SP4: cross-page keeps its handles).
   function syncAffordance() {
     ensureNodes();
     layoutNodes();
@@ -430,6 +522,9 @@
   }
 
   // hitTest returns the topmost instance whose box contains a page point.
+  // Z4: a cross-page instance's rotation is baked into the bitmap, so its
+  // strip box is axis-aligned in page space - the rotation undo below is only
+  // for plain instances (where the image turns live inside the box).
   function hitTest(pt) {
     if (!pt) return null;
     const s = shell();
@@ -439,8 +534,10 @@
       const inst = s.instanceById(id);
       if (!inst) continue;
       const rect = state.rects.get(id);
-      const rot = num((inst.params || {})["api.apply.rotation"], 0);
-      if (!rot) {
+      const params = inst.params || {};
+      const rot = num(params["api.apply.rotation"], 0);
+      const baked = Boolean(params["api.apply.crossPage"]);
+      if (!rot || baked) {
         if (pt.x >= rect.x && pt.x <= rect.x + rect.w && pt.y >= rect.y && pt.y <= rect.y + rect.h) return inst;
         continue;
       }
@@ -469,9 +566,10 @@
     shell().setParam("api.apply.offset", `${Math.round(dx)},${Math.round(dy)}`);
   }
 
-  // beginDrag starts a move / corner-scale / rotate drag. A cross-page instance
-  // refuses the move drag: its strip is positioned by the panel's startOffset
-  // (UI_SPEC §8 CP1), so dragging it around would contradict the frozen design.
+  // beginDrag starts a move / corner-scale / rotate drag. SP4: a cross-page
+  // instance takes the move drag too - but it rides the vertical startOffset
+  // channel (the strip's horizontal slot is the binding edge, UI_SPEC D2), so
+  // the drag never touches the plain offset field.
   function beginDrag(ev, mode, handle) {
     const s = shell();
     const inst = s.selectedInstance();
@@ -481,7 +579,6 @@
     const rect = state.rects.get(inst.id);
     if (!rect) return false;
     const p = inst.params || {};
-    if (mode === "move" && p["api.apply.crossPage"]) return false;
     const [ox, oy] = parsePair(p["api.apply.offset"], 0, 0);
     state.drag = {
       mode,
@@ -490,6 +587,7 @@
       startX: pt.x,
       startY: pt.y,
       baseOffset: [ox, oy],
+      baseStart: num(p["api.apply.startOffset"], 0),
       baseScale: num(p["api.apply.scale"], 0.202),
       rect,
     };
@@ -509,9 +607,14 @@
     const p = inst.params || {};
     switch (d.mode) {
       case "move":
-        // The selected instance moves by offset (pt, y down). A cross-page
-        // instance never reaches this branch: beginDrag refuses it.
-        writeOffset(d.baseOffset[0] + dx, d.baseOffset[1] + dy);
+        if (p["api.apply.crossPage"]) {
+          // SP4: the vertical drag is the startOffset channel (pt.y - the
+          // strip's slot is the binding edge, so dx has nothing to do).
+          shell().setParam("api.apply.startOffset", +(d.baseStart + dy).toFixed(1));
+        } else {
+          // The plain instance moves by offset (pt, y down).
+          writeOffset(d.baseOffset[0] + dx, d.baseOffset[1] + dy);
+        }
         break;
       case "scale": {
         // A corner drag resizes around the same anchor: the new scale is the
@@ -575,30 +678,14 @@
     box.addEventListener("pointercancel", endDrag);
   }
 
-  // consumeWheel implements UI_SPEC §5 (decision V3): Ctrl+wheel over the
-  // selected instance scales it; anywhere else the shell zooms the view.
-  function consumeWheel(ev) {
-    const s = shell();
-    const inst = s && s.selectedInstance();
-    if (!inst) return false;
-    const pt = pagePoint(ev);
-    const rect = state.rects.get(inst.id);
-    if (!pt || !rect) return false;
-    if (!(pt.x >= rect.x && pt.x <= rect.x + rect.w && pt.y >= rect.y && pt.y <= rect.y + rect.h)) return false;
-    ev.preventDefault();
-    const cur = num((inst.params || {})["api.apply.scale"], 0.202);
-    const next = Math.max(0.05, Math.min(5, +(cur + (ev.deltaY < 0 ? 0.01 : -0.01).toFixed(4))));
-    s.setParam("api.apply.scale", next);
-    repaint();
-    layoutNodes();
-    return true;
-  }
-
   // bindStage owns the canvas-side press: hit-test selects (and starts the
   // move drag), and a press on empty page background clears the selection.
   // HD10: with add-seal mode on, the same empty-page press *places* a copy of
   // the current seal centered on the click instead - on the page being shown
-  // (HD11), which is the whole point of the mode.
+  // (HD11), which is the whole point of the mode. SP4: with the cross-page
+  // add mode on, the press places a cross-page *strip* instance - the click's
+  // height becomes the startOffset, and the strip anchors on the binding edge
+  // of every page (the same instance answers on all of them).
   function bindStage() {
     const stage = q("#preview-stage");
     if (!stage) return;
@@ -607,9 +694,14 @@
       const s = shell();
       const picked = selectAt(ev);
       if (!picked) {
-        if (s && s.state && s.state.addMode && s.state.file && state.canvas && state.meta) {
+        if (s && s.state && s.state.file && state.canvas && state.meta) {
           const pt = pagePoint(ev);
-          if (pt) {
+          if (pt && s.state.crosspageAdd) {
+            ev.preventDefault();
+            s.addCrossInstanceAt(pt);
+            return;
+          }
+          if (pt && s.state.addMode) {
             ev.preventDefault();
             s.addInstanceAt(pt);
             return;
@@ -674,6 +766,8 @@
           count: strip.count,
           edge: strip.edge,
           binding: strip.binding,
+          frac: strip.frac, // Z5: this page's share of the whole seal width
+          cum: strip.cum, // and its cumulative start (uneven slices)
         }));
       case "view":
         return { scale: state.scale, dpr: state.dpr, page: state.page };
@@ -751,7 +845,6 @@
     syncAffordance,
     selectAt,
     hitTest,
-    consumeWheel,
     parsePages,
     sample,
     rectFor: (inst) => rectFor(inst, state.meta, {}),

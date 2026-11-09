@@ -59,7 +59,8 @@ AutoStamp/
   host_console.go              //go:build !windows 或无 webview tag：仅控制台 + 打开浏览器
   web/embed.go                 //go:embed all:static
   web/static/
-    index.html  app-shell.js  app-api.js  app-preview.js  app-seal.js  app-overlay.js  app-textlayer.js  app-pager.js  app-i18n.js  style.css  favicon.svg
+    index.html  app-api.js  app-preview.js  app-seal.js  app-overlay.js  app-textlayer.js  app-pager.js  app-i18n.js  style.css  favicon.svg
+    app-shell-{kernel,instances,seals,export,docops,chrome,verify}.js   7 文件模块组（§5.35；加载顺序固定）
     vendor/pdfjs/build/{pdf.min.mjs,pdf.worker.min.mjs}      (P1 起)
     vendor/pdfjs/{cmaps,wasm,image_decoders,standard_fonts,iccs}/  见 FACTS §3 体积 (P1 起)
     vendor/pdfjs/web/pdf_viewer.css                          (P1 起：文本层 CSS，README 记录裁剪)
@@ -184,8 +185,10 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
    `round(a*r/255)` 预乘后再 `source-over`，否则出暗环。预览与落盘的同点像素由
    FACTS §1.3 公式钉死（`overlay-smoke` 的 16 模式 × 3 透明度矩阵 absdiff ≤ 1）。
 14. **坐标一律左上原点、y 向下（PDF pt）**：`pos`/`offset`/手柄/标尺/条带同一坐标系
-   （C1 未评审默认，`UI_SPEC §8` C1）；P4 落盘换算有单测钉死。滚轮缩放只在**光标位于
-   选中实例内**时改 `apply.scale`，且事件必须 `stopPropagation`（FACTS §1.8 V3）。
+   （C1 未评审默认，`UI_SPEC §8` C1）；P4 落盘换算有单测钉死。**V7（2026-11-05）取代
+   V3**：Ctrl+滚轮**恒为**整页视图缩放（印章按页空间矩形随页缩放，seal/page 比例不变），
+   永不改 `apply.scale`（`consumeWheel` 已删除；实例缩放 = 四角手柄 + `+/−` 快捷键 +
+   浮层滑杆；FACTS §1.8 V3 为历史实测记录）。无 Ctrl 滚轮 = 平移（V5）。
 15. **导出体积预估是前端派生值，不发请求**：按 FACTS §4 实测表 × MediaBox 面积/A4 面积
    缩放，离表 DPI 按对数插值（E1：导出段内联显示 `#estimate-total` / `#estimate-per-page`）。
 16. **落盘按实例数组 + ExtGState 归属判定**。`POST /api/pdf/apply` 一次写完所有实例：
@@ -213,7 +216,7 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
     （不重编码，否则质量二次损失）；页 pt = `px*72/dpi`（两位小数）、**不加旋转量**
     （pdf.js 输出的就是显示方向，同 §5.17）；单页 >90 MiB ⇒ 400 `page_too_large`，前端按
     体积预估在发请求前拦下（`UI_SPEC` W6）。vector 走 JSON、只裁页。**保存幂等**：当前文档
-    已是光栅化资产且 `dpi/质量/pages` 没变 ⇒ 第二次保存不再光栅化（`app-shell` 的
+    已是光栅化资产且 `dpi/质量/pages` 没变 ⇒ 第二次保存不再光栅化（`app-shell-export.js` 的
     `lastExport`），否则就是多一代 JPEG 画质损失；改了参数才重光栅化一次。
 20. **预设库 = 索引 + 图片文件**：`seals/presets.json`（数组索引，原子写）+ `seals/<slug>.png`。
     图片**复制**自 tmpstore 的 seal 资产（前端已上传过一次，不再二次上传），参数组 =
@@ -236,13 +239,14 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
     `recentFiles` 继续有值。RF1 当年接的两个入口（启动页列表 + 顶栏下拉，点了走 `fs/pick{filePath}`
     直开授权，与手输路径同一条链）在顶栏收尾（`UI_SPEC §8` HD1）时删掉，前端不再读回展示；
     没有新路由、没有新字段；记录的都是真在 `pdf/open` 里成功开过的路径，不编造条目。
-23. **粘贴/拖拽装载同一 gate（PD1/PD2，2026-11-03）**：前端 `app-shell.js` 的
+23. **粘贴/拖拽装载同一 gate（PD1/PD2，2026-11-03）**：前端 `app-shell-docops.js`（gate 函数）+ `app-shell-chrome.js`（窗口级接线）的
     `submitFiles(files, via)` 是唯一装载漏斗 —— 接受条件只有两种：
     **单个 PDF**（`handleFiles` → multipart `pdf/open` → `adopt`，与窗口级拖放同一条链；启动页的
     「打开文件」走 `fs/pick` grant，见 §5.25）或
     **一张/多张图片**（逐个 `seal/prepare`，只设置当前印章——2026-11-05 HD17 起作废
     「设给选中实例 / 其余新增实例」语义，见 §5.33；空态同样只 prepare 不指派）。多个 PDF、PDF+图片混拼、
-    其它类型一律 toast 告警不装载。粘贴：焦点在输入框且含 `text/plain` 时放行（路径框语义）；
+    其它类型一律 toast 告警不装载。粘贴：焦点在输入框（口令框 / 保存目标路径框 —— 旧的路径框
+    `#empty-path` 已于 HD19 删除，见 §5.38）且含 `text/plain` 时放行；
     拖拽：`dataTransfer` 不含 `Files` 不 `preventDefault`（文本拖拽不被劫持）。无新路由、无新字段。
 24. **顶栏契约（HD1/HD2/HD3 + HD5，用户 2026-11-03/11-04 对话指令）**：顶栏**没有任何文本**，
     只有图标控件（内嵌 SVG + `data-i18n-title`，cn 孪生 `data-i18n-title-cn`，`applyLang` 写
@@ -251,7 +255,8 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
     密度切档、版本 chip、`#top-file` 标题文本 **都已删除**（HD5 作废 HD2 的顶栏承载半边）。
     版本 + 打开后的文件名只写在**窗口标题**：前端 `setDocTitle()` 写 `document.title` =
     `AutoStamp <版本> [文件名]`，与 Go 原生标题栏 `windowTitle` 同一个串；`#top-file` 的
-    `title` 属性（完整路径 · 体积）随元素一起消失。版式**固定 two-col**：
+    `title` 属性（完整路径 · 体积）随元素一起消失。版式**固定 two-col**（当时的形态；
+    **SP5/2026-11-06 起改单列 full-bleed，见 §5.37**）：
     `ui.density` 契约字段（Go `config.UI.Density` / `PatchUI.Density` / `sanitize` 校验）与 CSS
     `[data-density=…]` 规则整条删除，settings 的 patch 不再接受该字段。驱动面：`probe('version')`
     返回纯版本串、新增 `probe('docTitle')` 读标题，`setDensity()` 与 `probe('density')` 删除。
@@ -264,6 +269,8 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
     去掉 `top-file`、`empty-upload`、`empty-open`、`file-input`（93 → 89），§4 删 `empty.open.btn`、
     `empty.upload.btn` 两键（270 → 268；`top.file.hint` 保留，仍用于 `#save-source`/`#confirm-path`）。
     没有新路由、没有新字段。
+    （**2026-11-06 起 HD19 再修订**：入口 ② 的路径框 `#empty-path` 已从界面删除，
+    `openByPath(path)` 退化为 §7 驱动 API；见 §5.38。）
 26. **左列预览出血（HD7，用户 2026-11-04 对话指令）**：左列不再卡片式内缩 —— `#empty-state` 去
     `margin: 24px` + `border-radius: 8px`（占满左列，虚线框保留）、`#preview-stage` 内边距 `18px` →
     `0`、`.page-frame` 圆角 `2px` → `0`；拖放反馈不变（`#preview[data-drag]` + `#drop-hint`）。
@@ -298,11 +305,14 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
     `autostamp:param/page/lang/theme` 事件 + ResizeObserver；右侧放不下翻转左侧，两向 clamp）。
     成员 = `api.apply.blend/opacity/brightness/saturate/scale/rotation` 六控件（`data-field`
     契约名不变）+ `#instance-reset`（实例参数回 settings 默认组）+ `#instance-remove`。缩放滑杆
-    **0.1..2.0（10%..200%）**，拖边角/滚轮/键盘可超出且回显滑杆（落盘词表上限放宽到 0.05..5.0，
+    **0.1..2.0（10%..200%）**，拖边角与 `+/−` 快捷键可超出且回显滑杆（V7 后滚轮不再参与实例
+    缩放；落盘词表上限放宽到 0.05..5.0，
     `sanitize` 同步）；旋转滑杆 −180..180。实例几何恒走 `anchor`(center)+`offset`（`geomMode`
     双通道与 `pos` 控件删除，方向键步进改 `offset`）。默认参数与 `#instance-reset` 同源 =
     `DEFAULT_PARAMS` 快照（boot 播种、每次 `applySettings` 与 `apply` 组 `persist` 成功后刷新）；
     面板控件镜像的是选中实例，读实时控件会回显现值 → 复位必须回快照，不能读控件。
+    （**2026-11-09 起 IP1 作废其「贴框右侧 + 翻转 + 跟随」悬浮半边**：面板停靠 `#preview`
+    右缘全高，见 §5.44。）
 31. **预览卡 overlay + 下拉当前选项同步（HD13/HD14，用户 2026-11-05 对话指令）**：
     `#seal-preview` 是 `#preview` 内的绝对定位 overlay（左下距底 10px；分页条可见时上移
     77px 贴其上沿），不再占布局高度；`#seal-recent-select` 每次渲染后 value = 当前印章的
@@ -318,8 +328,9 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
     「图片设给选中实例 / 其余新增实例」半边）**：所有装载通道（顶栏上传 / 最近下拉 /
     粘贴 / 拖拽图片）只跑 `seal/prepare` 并设置**当前印章**（预览卡 + 下拉同步），
     不新增、不改写任何实例——`setSealForSelected` 只作为 verify 脚本的驱动 API 存在，
-    UI 侧不再自动调用。实例创建唯一通道 = 加章模式点击（§5.29）与侧栏「新增实例」
-    按钮：两者都在创建时**快照 `state.currentSeal`**（无当前印章则 `sealId=null`），
+    UI 侧不再自动调用。实例创建通道 = 加章模式点击（§5.29）与「新增实例」按钮（SP1 起随
+    侧栏退场，SP5 后侧栏本身不存在 → 通道 = 加章模式 + 骑缝放置 SP4）：两者都在创建时
+    **快照 `state.currentSeal`**（无当前印章则 `sealId=null`），
     `pages` = 当前页。删除保护废除（`instances.err.last` i18n 键删除）：`deleteSelected`
     可删到零 = `selected:null` + 状态 `opened`；boot 不再预置「Seal 1」默认实例。
 34. **实例参数面板默认收起成齿轮按钮（HD18，用户 2026-11-05 对话指令）**：面板标题栏
@@ -328,7 +339,130 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
     按钮与面板走同一条 `posInstancePanel` 锚点链（选中实例框右侧、翻转/clamp 不变）。
     probe `instancePanel` 返回 `{visible, collapsed, fabVisible, left, top, w, h}`
     （尺寸 = 当前可见面的读数）。
+   （**IP1 2026-11-09**：收起/展开语义不变，但 fab 与面板都停靠预览区右上角，不再按选中实例
+   框锚位，见 §5.44。）
+35. **壳模块拆分（2026-11-05，可维护性；无 UI 语义/契约变化，不占 `UI_SPEC §8` 决策表）**：
+    `app-shell.js`（2439 行单文件）拆成 7 个 `app-shell-*.js`（加载顺序固定：
+    kernel→instances→seals→export→docops→chrome→verify，`index.html` 七个 `<script defer>`）：
+    `kernel` = 共享状态/12 态状态机/i18n `t()`/toast/`fields`+`setParams`+`persist`/DEFAULT_PARAMS
+    快照/纯工具（`pairFor`/`baseName`…），并创建门面单例 `window.__autoStampShell`（后续模块
+    IIFE 参数 + `Object.assign(S, …)` 登记，**唯一跨模块通道**）；`instances` = 实例列表 +
+    浮动参数面板（`posInstancePanel` 双面锚点/复位/删除/条带预览）；`seals` = HD8–HD16 顶栏印章
+    通道 + `CURRENT_MARK`；`export` = 导出体积预估 + 光栅保存链（`lastExport`/`lastExportBody`）；
+    `docops` = open/`adopt`/split/apply/save + PD 装载 gate（`submitFiles`/`classifyLoad`/
+    `handleFiles`）；`chrome` = 键盘与全部事件接线 + 后端终端（`setConsoleVisible`/`pollLogs`）+
+    `boot()`；`verify` = §7 `probe()` + `i18nPairs`。跨模块调用一律 `S.<name>(…)`（裸引用处
+    `S.x`）；模块内部局部 helper 不进门面。`probe()` 词表、`data-field`、ui-ids=96、i18n=266（拆分轮
+    当时；V7 起 267）、
+    门面成员（109 个）全部零变化 —— verify/tools 零改动。拆分用区界生成器 `tmp/split-shell.mjs`
+    （留档），此后改壳 = 直接改对应文件，不重跑生成器（旧 app-shell.js 已不存在）。
+36. **侧栏收尾 SP1–SP4（2026-11-05，用户对话指令；`UI_SPEC §8` SP1–SP4）**：右侧边栏
+    只剩「导出设置 + 动作」两段。删除的面板/容器：`#panel-seal`（去背选项/重采样/元数据
+    读数）、`#panel-instances`（实例列表 + 新增/复制/删除按钮行）、`#panel-split`（切分
+    全部控件）、`#panel-crosspage`（含 CP1 逐页条带放大 `#strip-previews`）、
+    `#panel-batch`（批处理 + PR2 预设子控件）、`#asset-hooks`（assetId 只读行）。
+    代码通道变化：`app-batch.js` + `app-api.js` 的 `preset*`/`rawBytes`/`fsPickDir` 帮助器
+    整体删除（后端路由、`presetstore` 与 Go 测试原样保留，UI 无入口）；切分/去背/预设
+    词表退回后端默认 + §7 驱动（`S.runSplit(opts)` 每次调用带 API 词表、
+    `seal/prepare` 走默认组或调用 override、预设走 `GET /api/seal/preset*`）；
+    「盖到 PDF / 撤销盖章」按钮入口删除，键盘 **Ctrl+Enter / Ctrl+Z** 是唯一 UI 入口
+    （快捷键表已登记）。`#split-veto` chips → `S.vetoPage(n)` 驱动。**SP2** 分页条
+    `app-pager.js` 重写为纯缩略图条（无 pill/`.pg-no`/All chip；栏高定死、宽度随页面
+    纵横比、间距 2px）。**SP3** z 序：`stamp-layer(4) < #seal-preview(5) < #log-console(7)
+    < #instance-panel/#instance-fab(8)`，预览卡盖不住面板。**SP4** 顶栏
+    `#btn-crosspage-add`（`#btn-seal-add` 右侧，与加章模式互斥；`state.crosspageAdd`
+    会话态）：点击页面 = `S.addCrossInstanceAt(pt)` 生成跨页实例（装订边锚定，
+    点击高度 → `api.apply.startOffset`，`pages:all`）；骑缝实例可选中，纵拖 =
+    `startOffset`（水平通道就是装订边槽位，不给 offset 拖拽），四角 = `scale`、顶部手柄 =
+    `rotation`，逐页条带随同一实例参数同步重绘/落盘；参数面板新增 cp 组（binding seg 三档
+    + startOffset 对；仅骑缝实例可见；`none` = 该实例降级回单页印章），面板照常可最小化。
+    `probe('crosspageAdd')`/`probe('strips')` 为新增读数；ui-ids 96 → 63、§4 267 → 151。
+    （**2026-11-06 起 SP5 再修订**：侧栏整块删除，本段描述的「只剩导出段 + 动作段」形态
+    已不存在，见 §5.37。）
 
+37. **右侧边栏退场 SP5（2026-11-06，用户对话指令；`UI_SPEC §8` SP5）**：右侧边栏**整块删除** ——
+    SP1 之后的「侧栏只剩导出设置 + 动作段」形态就此终结。删除对象：`<aside id="right-sidebar">`
+    整块、`form#panel`、动作段 `#panel-actions`（含「保存到文件」按钮 `#save-open` 与
+    `app-shell-chrome.js` 的 `#save-open` 绑定行）；`style.css` 的 `#right-sidebar`/`#panel*`
+    规则同批删除。**「导出设置」段整体迁入保存对话框**：`index.html` 的
+    `<div class="section" id="panel-export">`（sec-title + 五个 `.field` =
+    `api.export.mode/dpi/customDpi/quality/pages`（segs `#export-mode`/`#export-dpi`）+
+    `#estimate`/`#estimate-total`/`#estimate-per-page`）搬进 `#save-modal`，位置 =
+    `#save-source` 之后、`#save-pick` 之前；**id 与 `data-field` 名全部不变**（词表面零变化），
+    样式只新增 `.modal .section` + `.modal .sec-title` 两条外壳规则，`#save-modal` 加
+    `top: 8vh` + `max-height: 84vh` + `overflow-y: auto`（导出段在 modal 内滚动）。
+    布局：`#app-main` grid 改**单列 full-bleed**（`grid-template-columns: minmax(0, 1fr)` +
+    `grid-template-areas: "topbar" "preview"`）—— HD3 的固定 two-col 到 SP5 结束，仓库内
+    不再有 380 px 面板或任何两栏形态。契约面：ui-ids 63 → 59（−`right-sidebar`/`panel`/
+    `panel-actions`/`save-open`，永久不再复活）；§4 151 → 144（−`save.open.btn` − 语言/主题
+    四条 hintline `ui.lang.ctl`/`ui.lang.hint`/`ui.theme.ctl`/`ui.theme.hint` −
+    `split.undo.btn`/`apply.write.hint`（两条的死绑定面 = 已删的侧栏 `#chain-hint` 提示行），
+    `gen-i18n.mjs` 同步重跑 = 144 条）；`ui.lang`/`ui.theme` 的 §2 行改挂切档自身文案键
+    （`lang.en`/`theme.light`，`decision=SP5`）—— 切档控件与字段本身不变。驱动面：
+    `app-shell-kernel.js` 的 `setState("export")` 不再开 `details`（**12 态状态机不变**，
+    `export` 状态名保留）；保存对话框唯一入口 = 顶栏 `#btn-save` + Ctrl+S。
+
+38. **空态只剩一枚大按钮（HD19，2026-11-06，用户对话指令；`UI_SPEC §8` HD19）**：`#empty-state`
+    只有**一枚居中的大方圆角按钮** `#empty-pick`（156×156、`border-radius: 16px`、上传图标 44 px +
+    `empty.pick.btn` = Open file / 打开文件）+ 一行 `.hint`（`empty.hint` = 拖进来 / 粘贴打开 PDF、
+    图片装载为印章）。删除面 = 路径框 `#empty-path`、「多文件」切档 `#empty-pick-multi`、
+    「过滤」切档 `#empty-pick-filter`、pathGrantId chip 与两条选项提示行，加 `style.css` 的
+    `.msg`/`.btnrow`/`.pathrow` 三条规则；`#empty-state` 改 flex 列居中（`gap: 18px`、文本居中，
+    `html[data-state="empty"]` 下 `display: block` → `flex`）。JS 通道：`pickAndOpen()` 不再读任何
+    控件字段，固定调 `api.pick({filter:"pdf", multi:true})`，`pick_unsupported` 只回错误 toast
+    （没有路径框可聚焦）；**`openByPath(path)` 退化为 §7 驱动通道**（同 SP1 的切分词表语义）——
+    路径由调用方参数给出，空/空白参数 → 错误 toast、不弹对话框、不读 DOM，`app-shell-chrome.js`
+    的 `#empty-path` keydown 接线删除。契约面：`UI_SPEC §6` ui-ids 59 → **56**（永久删
+    `empty-path`/`empty-pick-multi`/`empty-pick-filter`）、`UI_SPEC §4` 144 → **132**（删 12 个
+    失去控件面的键，`api.fs.pick.pathGrantId.ctl` 保留 = 保存弹窗 chip 的 `t()` 标题）；
+    `api.fs.pick.filePath`/`filter`/`multi` 三行 §2 词表改 `ctl=no`。没有新路由、没有新字段。
+39. **盖章默认叠加模式 = 正片叠底（Z1，2026-11-09；`UI_SPEC §8` Z1）**：Go 默认
+   （`config.Apply.Blend` = `multiply`）与 UI 对齐 —— `index.html`/`mockup.html` 的
+   `#apply-blend` multiply 选项预置 `selected`（settings 灌入前的初始可见值不再短暂闪 normal）；
+   画布侧收到空/未知 blend 名的回退也改 `multiply`（`app-overlay.drawSeal`：`BLEND_GCO` 查不到
+   不落 `source-over`）。没有新字段、没有新路由。
+40. **放置印章的默认尺寸自动算（Z2，2026-11-09；`UI_SPEC §8` Z2）**：新放置与 `#instance-reset`
+   复位的实例 scale = **42 mm 章宽 ÷ 页显示宽**（kernel `autoScale()`，§7 驱动；显示宽走
+   `displayDims` 判 /Rotate 与竖横版 —— 竖版页宽就是短边，A4 竖版 = 0.2008；横版页 42 mm 目标
+   除以长边，章保持 42 mm；未打开文档按 A4 短边 595.28 回退；clamp 0.05..5）。
+   `addInstanceAt`/`addCrossInstanceAt`/复位都覆写这个值；settings 字段 `apply.scale` 默认仍
+   0.202（`probe('defaults')` 镜像不变）。没有新字段、没有新路由。
+41. **骑缝实例单击可选（Z3，2026-11-09；`UI_SPEC §8` Z3）**：`style.css` 里
+   `[data-mode="crosspage"] .sel-box`/`.handle` 的隐藏规则删除（用户报的「点击不显示可选项、
+   必须长按才拖」就是这两条）：选中即见绿框 + 四角 + 旋转手柄，按下即拖（纵拖 = `startOffset`，
+   SP4 语义不变）；`hitTest` 对骑缝实例跳过旋转反变换帧（旋转已烘进位图，条带框轴对齐）。
+   没有新字段、没有新路由。
+42. **骑缝章先旋转后切（Z4，2026-11-09；`UI_SPEC §8` Z4；修订 §5.7/§5.17 的条带语义）**：
+   crossPage 实例 `rotation` ≠ 0 时先 `pdfcore.RotatePNG`（`internal/pdfcore/rotate.go`，屏幕
+   顺时针、画布扩到旋转 bbox，精确 90° 即宽高互换）把整枚印章烘进位图，再由 `Strips` 按旋转
+   后的位图切成 N 条**竖列**进页槽 —— 每页拿到的就是竖条；`StampGeom.Aspect` 用旋转 bbox 的比
+   （§5.17 的「纵横比取自整枚印章」现在取的是旋转后的）。预览侧 `app-overlay.js` 用
+   `rotatedBitmapCanvas`（`rotCache` 按 sealId×deg 缓存）+ `effectiveBitmap` 同源，实例不再经
+   `ctx.rotate` 单独旋转。Go 断言 `TestRotatedStripsAreVerticalColumnsOfRotatedSeal` +
+   `TestRotatePNGClockwise90GrowsCanvas`；预览侧 `overlay-smoke` strip 旋转渐变三取样与
+   `apply-smoke` strip 旋转竖条（每页上沿=印章左半色、下沿=右半色）钉死同一对语义。
+43. **骑缝章不匀切片模拟（Z5，2026-11-09；`UI_SPEC §8` Z5；修订 §5.16/§5.42 的切片语义）**：
+   cp 组新增「平均|随机」切档（settings `apply.sliceMode`，默认平均）+「覆盖率」滑杆
+   （settings `apply.cover`，0..100%，默认 75；仅随机可见）+「重新随机」按钮。随机机制：
+   **首页必得 25~50%、末页必得 20~30%、中间页按覆盖率四舍五入决定哪些页有章**（未入选页 =
+   切片 0 = 该页盖不到），拿到的占比沿页序一条**平滑趋势**（单段缓变，不逐页剧烈波动）。
+   取值写实例参数 `api.apply.slices`（长度 = 页数、Σ=1），apply 请求逐实例原样发送 ——
+   预览 `stripContext` 与落盘 `pdfcore.StripsFractions` 用同一份分布按**累计列**切条
+   （`Box` 的 `SlotFrac` 回显；0 槽不盖章），不重掷 RNG。§7 驱动 `randomCrossFractions
+   (count, cover, rng)` 供 verify 注入 rng 复现；`probe('strips')` 每条目带 `frac/cum`。
+   「重试」= 对选中实例重掷一次；切回平均删除数组恢复等宽。`overlay-smoke` 不匀四页
+   frac/cum/宽/渐变中心 + `apply-smoke` `[0.7,0.3]`/`[1,0]` 落盘（0 槽无墨）钉死。
+44. **印章参数面板固定到右缘（IP1/IP2，2026-11-09；`UI_SPEC §8` IP1/IP2；作废 §5.30 的
+   HD12 悬浮锚点半边 + §5.34 的 HD18 锚位）**：`#instance-panel` 绝对定位 `#preview` 右缘
+   （`right:10px` + `top:10px` + `bottom:10px`，宽 236 不变、z 8 不变）全高停靠 +
+   `overflow-y:auto`（`overscroll-behavior:contain`）—— 内容（含 Z5 cp 组）超出预览高度时
+   滚动条出现；`#instance-fab` 齿轮按钮同角（右上）停靠。`app-shell-instances.js` 的
+   `posInstancePanel` 锚点链（贴选中实例框 + 翻转 + clamp + 按实例框跟随）**整体删除**，
+   函数只留 show/hide 语义（§7 名字不变）；面板出现条件 = 有选中实例 + 有文档，与实例位置
+   无关（旧「实例框未绘制就不显示面板」的 box 语义作废）。`probe('instancePanel')` 读数不变
+   （left/top 现来自停靠 CSS）。`shell-smoke`：IP1 停靠几何（右/上/下 gap=10 + 宽 236）+
+   IP2 短视口（430 px）强制溢出后 `scrollHeight > clientHeight`、`scrollTop` 滚到底为正值、
+   `overflow-y == auto`。没有新字段、没有新路由。
 
 ## 6. HTTP 契约（`/api/*`，全部 JSON；字段在 **P0.5 与用户确认后**才冻结，改动必须同步本文、`docs/UI_SPEC.md` 与前端）
 
@@ -340,7 +474,7 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
 |`GET /api/pdf/raw?id=`|原始 PDF 字节（支持 Range/ETag），供 pdf.js 直接取|
 |`POST /api/pdf/split`|**已实现**:切分词表 `{assetId, splitMode, rows, cols, customCuts[], splitVeto, vetoPages[], splitPages}`（词表 = `UI_SPEC §2.2`；`splitVeto` 是指针,`false` 是真答案；`vetoPages` = D3 逐页否决；`splitPages` 用 pages 词表限定可切页）→ 新 `assetId`（kind `split`）+ 同形状页元数据;原资产保留即「撤销切分」的实现|
 |`POST /api/pdf/seal/prepare`|**已实现**：两形态靠 `Content-Type` 协商（HD8）。`multipart/form-data` = 上传印章 PNG（粘贴/拖拽/预设重喂走这条，不记路径）；`application/json` = `{pathGrantId, despill, alphaTrim, resampleDpi}`（顶栏「上传印章」/ 最近印章下拉；成功后 `config.SetRecentSeal(path)` 记录）。两形态共用 `pdfcore.PrepareSeal` → `sealId` + alpha 元数据（词表见 `UI_SPEC §2`，去背规则见 §5.12 与 FACTS §1.8）。配套 `GET /api/pdf/seal/raw?id=` 只回印章字节给合成/预览|
-|`POST /api/pdf/apply`|**已实现**:矢量落盘词表 `{assetId, instances[]}`，实例字段 `sealId/blend/opacity/scale/pos/anchor/offset/rotation/pages/crossPage/binding/startOffset`（`brightness/saturate` 仅预览，**不发送**；发送即 400）→ 新 `assetId`（kind `applied`）。实例数组是关键：一条请求写完全部实例，同一 `(blend,opacity)` 组走一次 pdfcpu pass|
+|`POST /api/pdf/apply`|**已实现**:矢量落盘词表 `{assetId, instances[]}`，实例字段 `sealId/blend/opacity/scale/pos/anchor/offset/rotation/pages/crossPage/binding/startOffset/slices`（`brightness/saturate` 仅预览，**不发送**；发送即 400；`slices` 只随骑缝实例发送 = Z5 不匀切片比例数组，Σ≤1、0 槽 = 该页盖不到）→ 新 `assetId`（kind `applied`）。实例数组是关键：一条请求写完全部实例，同一 `(blend,opacity)` 组走一次 pdfcpu pass|
 |`POST /api/pdf/export`|**已实现（P5）**：两形态靠 `Content-Type` 协商。`application/json` = vector：`{assetId, mode:"vector", pages}`，只按 pages 词表**裁页**（`all` 时原样克隆），不重编码；带 `dpi/quality` 即 400。`multipart/form-data` = raster：表单字段 `spec` 是 JSON（`{assetId, mode:"raster", dpi, quality, pages}`），每页一个文件 `page-<n>`（JPEG/PNG 字节，**页位图由前端 pdf.js 渲染回传**，服务端不 rasterize、不重编码 JPEG）→ 新 `assetId`（kind `exported`）+ `bytesPerPage`。单页图像 > 90 MiB ⇒ 400 `page_too_large`；前端按体积预估**提交前拦截**（`UI_SPEC` W6）|
 |`POST /api/pdf/save`|**已实现**:`{assetId, targetPath|pathGrantId|replaceOriginal}`（三选一，必须且只能给一个）→ `fsx.AtomicWriteFunc` 原子写盘；`replaceOriginal` 用 `tmpstore.Asset.Origin`（open/split/apply 都向前继承）；`{mkdirs:true}` 才允许创建 targetPath 的父目录（批处理 `_batch` 输出），不开时目标目录不存在仍是 400 `bad_body`，防止把文件写进一个拼错的新目录|
 |`GET /api/settings` / `PATCH /api/settings`|读全量设置；`PATCH` 走 `{"patch":{...}}` 信封（嵌套指针字段按需合并）；`recentSeals: []RecentRef` = 最近打开的印章路径（HD8，24 条去重截断，`PATCH` 该字段整组替换 = 兜底删除记录的唯一通道）|
@@ -419,13 +553,15 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
     默认快照、删除实例后选中顺延且面板跟随、打开印章自动成为下拉当前选项、顶栏控件同高
     34px、后端终端开关开面板 + 日志非空 + `ui.consoleVisible` 持久化、**HD17 装载不动实例
     （上传 / 下拉 / 拖拽只设当前印章）+ 实例可全删到零 + boot 无预置实例 + 新建实例快照
-    当前印章 + HD18 齿轮 `#instance-fab` ↔ `#instance-collapse` 收起/展开往返**）、
+    当前印章 + HD18 齿轮 `#instance-fab` ↔ `#instance-collapse` 收起/展开往返 + **HD19 空态形态
+    守卫（`#empty-state` = 一枚 `#empty-pick` + 一行 hint；`#empty-path`/`#empty-pick-multi`/
+    `#empty-pick-filter` 不在 DOM）**）、
     实例增删选中复制、`/api` 往返与 `{"patch":…}` 合并。
   8. 窗口通道：`node tools/verify/webview-launch.mjs`（真窗口 + 页内 `/api` 请求）与
        `go run ./tools/verify/comprobe`（COM 返回值实测，FACTS §1.6）。
   9. P1 查看链路（P1 起常驻）：`node tools/verify/preview-smoke.mjs` — 用 CDP
      `Page.printToPDF` 现场生成四类样本（英文多页文字 / 中文 CID / 混合型 / 图片型无文字），
-     真 exe + 真 UI（`#empty-path` 回车通道，HD6）跑一遍：断言画布有真实像素、
+     真 exe + 真 UI（打开通道 = `S.openByPath(path)` 的 §7 驱动 API，HD19；无路径框）跑一遍：断言画布有真实像素、
      `getTextContent` 条数（图片型必须为 0）、`.textLayer` span 计数与层框宽度 == 画布 CSS 宽、
      翻页与分页条 chip 数、缩放后 backing store 尺寸变化、**fit = 整页（两向不超出容器，
      fitZoom == probe('fitZoom')）**、**V5 平移：Space+方向键 / Space+左键拖动移动滚动偏移且
@@ -435,7 +571,7 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
       分段令牌 `--only=<open|geometry|despill|matrix|drag|strip|filter|export>`（缺省全跑）。
       断言：上传印章 → 16 模式 ×{1.0,0.6,0.3}（脚本页内独立重算再与真实画布比，absdiff ≤ 1）、
       alpha 预乘规则、去背 alpha/bbox 计数、几何（fit 缩放、四角→`scale`、拖拽→`offset`、
-      旋转手柄→`rotation`、滚轮只在光标位于选中实例内时改 `scale`）、骑缝条带
+      旋转手柄→`rotation`；**V7：滚轮经过印章 = 视图 zoom 变、`apply.scale` 不变**）、骑缝条带
       （宽 = 页宽 10%、`startOffset` 位移误差 0、`alternate` 条带数 == 页数、逐页列对齐 ≤1 px）、
       `ctx.filter` 复位读数、**filter 语义：`brightness` 与 `saturate` 的 CSS filter 独立生效
       （两滑杆分别改像素、公式与滤镜矩阵手算比对，且 `#stamp-layer` 内无挂 DOM 的实例画布
@@ -465,13 +601,11 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
       （`save` 回显同一 assetId，拿 probe 的 asset id 变化等会一直超时 —— 踩过的坑）。
   14. 以上全部由 `build.ps1` 串成一条命令（`-Task verify` / `go vet` / `go test`），
       任一失败退出码 1。
-  15. P6 预设 + 批处理（P6 起常驻）：`node tools/verify/batch-smoke.mjs`
-      （分段令牌 `--only=<preset|batch>`）—— 真 exe + 真 UI：预设 保存→列表→载入→删除
-      往返（存进去的字节与 `GET /api/seal/preset/raw` 回读的字节一致、参数填回面板），
-      批处理 `fs/pick{dir:true,filePath}` 列目录 → `#batch-start` 跑 BM1 前端链 → 断言
-      `_batch\原名.dpi<数字>.q<数字>.pdf` 存在、产物再 `fs/pick`+`open` 页数正确、
-      源文件字节没变、加密件在报表里记 `password_required` 且不弹密码、CSV 下载含表头与
-      每文件一行。批处理没有 SSE/作业路由（BM1 作废 BC1），队列状态就是前端 DOM 的读数。
+  15. P6 预设后端（SP1 起，UI/`batch-smoke.mjs` 已随批处理面板删除）：预设的索引/图片
+      读写与四个 HTTP 路由由 Go 测试常驻覆盖（`internal/presetstore/store_test.go` +
+      `internal/api/seal_preset_test.go`：保存→raw 回读字节一致→同名覆盖→删除删图）；
+      没有前端跑链、没有 SSE、没有报表 UI（批处理 BM1–BM4 的用户入口已于 SP1 移除，
+      后端 `fs/pick{dir}`/`{mkdirs}` 路由保留）。
 - `go test ./...` 全绿；`go vet ./...` 无输出。
 - UI 阶段用真实窗口（WebView2）+ headless 各跑一次，console 必须 0 error。
 - **UI 语义门槛：**任何 UI 语义/字段改动必须能在 `UI_SPEC` 决策表找到用户确认记录
@@ -504,22 +638,29 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
 
 |任务|先读|涉及文件|
 |---|---|---|
-|改切分/骑缝几何|`docs/FACTS.md` §2.3 + §1.8|`internal/pdfcore/split.go`（词表含 `vetoPages`/`splitPages`）、`sealimg.go`（落盘条带）、`web/static/app-preview.js`（`drawSplitMarks` 切点预览）、`web/static/app-overlay.js`（`stripGeometryFor/stripRectsFor` 条带）、`web/static/app-shell.js`（`#split-veto` 逐页否决、`#split-undo`）|
-|改叠加层/印章通道|`docs/FACTS.md` §1.8 + §1.3 + §1.9|`web/static/app-overlay.js`（合成/affordance/滚轮/快照 `state.surface`；实例画布只作 probe 背板、不挂 DOM——单绘制契约 §5.27；加章模式点击 `addInstanceAt` §5.29）、`web/static/app-seal.js`（multipart 上传 / `prepareFromGrant` pathGrantId 形态 / 去背撤销 / 左列预览 `renderPreview`）、`web/static/app-shell.js`（`currentSeal`/最近印章下拉/浮动面板 `#instance-panel`）、`internal/api/seal.go`（两形态 + `SetRecentSeal`）|
-|改印章顶栏通道 / 实例面板（HD8–HD12）|`docs/UI_SPEC.md` §2/§4/§6/§8 HD8–HD12|`web/static/index.html`（顶栏 `#btn-seal-upload`+`#seal-recent-select`+`#btn-seal-add`、`#seal-preview`、`#instance-panel`）、`web/static/app-shell.js`、`internal/config/{types,store,patch,sanitize}.go`（`recentSeals`、scale 0.05..5）、`internal/api/seal.go`（JSON 形态）、`internal/fsx/pick.go`（`image` 过滤词）|
-|改落盘/撤销/保存|`UI_SPEC §8` W1-W4 + 本文件 §5.16/§5.17 + FACTS §1.9 §2.6|`internal/api/apply.go`、`internal/api/save.go`、`internal/pdfcore/{apply,stamp,blend,validate,pxdims,pages}.go`、`web/static/app-shell.js`（`stampIntoPDF`/`undoRoute`/`submitSave`）、`tools/verify/apply-smoke.mjs`|
-|改导出体积预估|`docs/FACTS.md` §4|`web/static/app-shell.js`（`computeEstimate/refreshEstimate`、`probe('estimate')`）|
+|改切分/骑缝几何|`docs/FACTS.md` §2.3 + §1.8|`internal/pdfcore/split.go`（词表含 `vetoPages`/`splitPages`）、`sealimg.go`（落盘条带）、`web/static/app-preview.js`（`drawSplitMarks` 切点预览）、`web/static/app-overlay.js`（`stripGeometryFor/stripRectsFor` 条带）、`web/static/app-shell-docops.js`（`#split-veto` 逐页否决、`#split-undo`）|
+|改叠加层/印章通道|`docs/FACTS.md` §1.8 + §1.3 + §1.9|`web/static/app-overlay.js`（合成/affordance/快照 `state.surface`；实例画布只作 probe 背板、不挂 DOM——单绘制契约 §5.27；加章模式点击 `addInstanceAt` §5.29；滚轮已归 chrome 的全局缩放 §5.14 V7）、`web/static/app-seal.js`（multipart 上传 / `prepareFromGrant` pathGrantId 形态 / 去背撤销 / 左列预览 `renderPreview`）、`web/static/app-shell-seals.js` + `app-shell-instances.js`（`currentSeal`/最近印章下拉/浮动面板 `#instance-panel`）、`internal/api/seal.go`（两形态 + `SetRecentSeal`）|
+|改印章顶栏通道 / 实例面板（HD8–HD12）|`docs/UI_SPEC.md` §2/§4/§6/§8 HD8–HD12|`web/static/index.html`（顶栏 `#btn-seal-upload`+`#seal-recent-select`+`#btn-seal-add`、`#seal-preview`、`#instance-panel`）、`web/static/app-shell-{seals,instances,chrome,verify}.js`、`internal/config/{types,store,patch,sanitize}.go`（`recentSeals`、scale 0.05..5）、`internal/api/seal.go`（JSON 形态）、`internal/fsx/pick.go`（`image` 过滤词）|
+|改落盘/撤销/保存|`UI_SPEC §8` W1-W4 + 本文件 §5.16/§5.17 + FACTS §1.9 §2.6|`internal/api/apply.go`、`internal/api/save.go`、`internal/pdfcore/{apply,stamp,blend,validate,pxdims,pages}.go`、`web/static/app-shell-docops.js`（`stampIntoPDF`/`undoRoute`/`submitSave`）、`web/static/index.html`（`#save-modal`：目标路径/选择器/替换开关 + **SP5 起的导出设置段**；入口 = `#btn-save` + Ctrl+S）、`tools/verify/apply-smoke.mjs`|
+|改导出体积预估|`docs/FACTS.md` §4 + `UI_SPEC §8` E1|`web/static/app-shell-export.js`（`computeEstimate/refreshEstimate`、`probe('estimate')` 在 `app-shell-verify.js`）；控件面 = `web/static/index.html` 的 `#estimate`/`#estimate-total`/`#estimate-per-page`，**SP5 起在 `#save-modal` 的 `#panel-export` 段里**（与五个导出 `.field` 同段）|
 |改混合模式/透明度|`docs/FACTS.md` §1.2/§1.3/§2.2|`internal/pdfcore/blend.go`、`web/static/app-overlay.js`|
-|改导出 DPI/质量|`docs/FACTS.md` §4 + `UI_SPEC §8` W5/W6|`internal/pdfcore/raster.go`（writer 字节结构）、`internal/api/export.go`（协商两形态 + 硬限）、`web/static/app-shell.js`（保存内的 raster 通道 + `MAX_EXPORT_PAGE_BYTES` 拦截 + `exportDpiOf/exportQualityOf` + `lastExport` 幂等）、`tools/verify/export-smoke.mjs`|
-|改预设库|`UI_SPEC §8` PR1/PR2 + 本文件 §5.20/§6|`internal/presetstore/store.go`（索引 `presets.json` + `p-<hash>.png`，原子写）、`internal/api/seal_preset.go`（四路由 + `validatePresetParams`）、`web/static/app-batch.js`（预设 存/载/删/列表）、`web/static/app-api.js`（`preset*` 通道）、`tools/verify/batch-smoke.mjs --only=preset|
-|改批处理|`UI_SPEC §8` BM1-BM5 + 本文件 §5.21（**没有后端作业路由、没有 SSE**）|`web/static/app-batch.js`（`runOne` 跑链 + `batchTarget` + `pagesForDoc` + 报表下载）、`web/static/index.html`（批处理段字段）、`web/static/app-api.js`（`fsPickDir`/`exportUpload`）、`internal/api/pdf.go`（`fs/pick` 的 `dir` 分支）、`internal/api/save.go`（`{mkdirs}`）、`internal/fsx/list.go`（`ListPDFs`）、`tools/verify/batch-smoke.mjs --only=batch|
+|改导出 DPI/质量|`docs/FACTS.md` §4 + `UI_SPEC §8` W5/W6|`internal/pdfcore/raster.go`（writer 字节结构）、`internal/api/export.go`（协商两形态 + 硬限）、`web/static/index.html`（**SP5：导出设置段 = `#save-modal` 内的 `#panel-export`**，五个 `.field` + `#estimate` 都在保存对话框里）、`web/static/app-shell-export.js`（保存内的 raster 通道 + `MAX_EXPORT_PAGE_BYTES` 拦截 + `exportDpiOf/exportQualityOf` + `lastExport` 幂等；`submitSave` 在 `app-shell-docops.js`）+ `app-shell-chrome.js`（`#save-modal` 打开/关闭接线）、`tools/verify/export-smoke.mjs`|
+|改预设库（后端 only，SP1 后无 UI）|`UI_SPEC §8` PR1/PR2 + 本文件 §5.20/§5.36/§6|`internal/presetstore/store.go`（索引 `presets.json` + `p-<hash>.png`，原子写）、`internal/api/seal_preset.go`（四路由 + `validatePresetParams`）、`internal/api/seal_preset_test.go`（路由往返钉死）。`app-batch.js` 已删；要回 UI 先补 §8 记录|
+|改切分/落盘/批处理后端词表（UI 已删，SP1）|`UI_SPEC §8` BM1-BM5（历史）+ 本文件 §5.21/§5.36|`internal/api/pdf.go`（`fs/pick` 的 `dir` 分支）、`internal/api/save.go`（`{mkdirs}`）、`internal/fsx/list.go`（`ListPDFs`）、`web/static/app-shell-docops.js`（`runSplit(opts)`/`splitBodyOf` 默认组）、`internal/api/split_test.go`（词表回归）。批处理跑链脚本已随面板删除|
+|改盖章默认值（混合模式 Z1 / 42 mm 自动缩放 Z2）|`UI_SPEC §8` Z1/Z2 + 本文件 §5.39/§5.40|`internal/config/defaults.go`（`Blend: "multiply"`）、`web/static/index.html` + `docs/ui/mockup.html`（`#apply-blend` 的 multiply 选项 `selected`）、`web/static/app-shell-kernel.js`（`autoScale`/`SEAL_DEFAULT_MM`/`MM_TO_PT`）、`web/static/app-shell-seals.js` + `app-shell-instances.js`（创建/复位覆写 scale）、`web/static/app-overlay.js`（blend 回退 multiply）、`tools/verify/shell-smoke.mjs`（Z2 断言：scale×页显示宽 = 119.06 pt）|
+|改骑缝条带旋转 / 可选中性（Z3/Z4）|`UI_SPEC §8` Z3/Z4 + 本文件 §5.41/§5.42（修订 §5.7/§5.17 条带语义）|`internal/pdfcore/rotate.go`（`RotatePNG` 先旋转整枚）、`stamp.go`（`Strips` 切旋转位图、`StampGeom.Aspect` = 旋转 bbox）、`apply.go`（bake-then-slice）、`web/static/app-overlay.js`（`rotatedBitmapCanvas`/`effectiveBitmap`/`rectFor`/`hitTest` 骑缝跳过旋转帧）、`web/static/style.css`（删 crosspage sel-box/handle 隐藏规则）、`internal/pdfcore/rotate_test.go`、`tools/verify/{overlay-smoke,apply-smoke}.mjs`（strip 旋转断言）|
+|改骑缝不匀切片模拟（Z5）|`UI_SPEC §8` Z5 + 本文件 §5.43/§6（apply `slices` 字段）|`internal/pdfcore/stamp.go`（`StripsFractions` 累计列 + `Box` 的 `SlotFrac`）、`apply.go`（实例词表 `slices`）、`apply_test.go`/`stamp_test.go`（分数切片字节）、`internal/config/{types,defaults,patch,sanitize}.go`（`apply.sliceMode`/`apply.cover`）、`web/static/index.html`（cp 组切档/滑杆/重试）、`app-shell-instances.js`（`randomCrossFractions`/`drawCrossSlices`/`retryCrossSlices`）、`app-overlay.js`（`stripContext` frac/cum）、`app-shell-chrome.js`（seg/cover/retry 接线）、`probe('strips')` 读数、`tools/verify/{shell-smoke,overlay-smoke,apply-smoke}.mjs`（Z5 断言）|
+|改实例参数面板停靠/滚动（IP1/IP2）|`UI_SPEC §8` IP1/IP2 + 本文件 §5.44（作废 §5.30/§5.34 的锚点半边）|`web/static/style.css`（`#instance-panel` = `right/top/bottom:10px` + `overflow-y:auto`；`#instance-fab` 右上角停靠）、`web/static/app-shell-instances.js`（`posInstancePanel` 只留 show/hide）、`docs/ui/mockup.html`（同形镜像）、`tools/verify/shell-smoke.mjs`（IP1 停靠几何 + IP2 短视口滚动断言）|
+|改骑缝章放置/面板组（SP4）|`UI_SPEC §8` SP4 + 本文件 §5.36|`web/static/index.html`（`#btn-crosspage-add`、面板 cp 组）、`web/static/app-shell-seals.js`（`setCrosspageAdd` 互斥）、`web/static/app-shell-instances.js`（`addCrossInstanceAt`/`syncCpGroup`）、`web/static/app-overlay.js`（strip 几何/纵拖 startOffset/手柄）、`web/static/app-shell-chrome.js`（binding seg 实例语义、放置模式按钮接线）、`tools/verify/shell-smoke.mjs`（SP4 断言）与 `overlay-smoke`/`apply-smoke`（条带）|
 |改打包/发布物|本文件 §4（PC1）|`build.ps1`（`Start-Package`：`autostamp-<rev>-win64.zip` = strip 窗口版重命名 `autostamp.exe` + `README.md`，25 MB 体积门）、`README.md`（随 zip 一起出货，必须保持准确）、`build1.ps1`/`buildm.ps1`（单 exe 出口 `dist\autostamp.exe`；极限压缩走 UPX，见 FACTS §4.3）|
-|改粘贴/拖拽装载|`UI_SPEC §8` PD1/PD2 + 本文件 §5.23/§5.25（无新路由/新字段）|`web/static/app-shell.js`（`submitFiles`/`classifyLoad`/paste/dragover/drop/`state.loadLog`）、`web/static/index.html`（`#drop-hint`；装载入口 = `#empty-pick` + `#empty-path` 回车，无隐藏 `file-input`）、`web/static/style.css`（`[data-drag]`+`#drop-hint`）、`web/static/app-seal.js`（图片经 `seal/prepare`）、`tools/verify/shell-smoke.mjs`（装载断言）|
+|改粘贴/拖拽装载|`UI_SPEC §8` PD1/PD2 + 本文件 §5.23/§5.25/§5.38（无新路由/新字段）|`web/static/app-shell-docops.js`（`submitFiles`/`classifyLoad`/`state.loadLog`）+ `app-shell-chrome.js`（paste/dragover/drop 接线）、`web/static/index.html`（`#drop-hint`；装载入口 = `#empty-pick` 一枚大按钮，HD19 起无路径框、无隐藏 `file-input`）、`web/static/style.css`（`[data-drag]`+`#drop-hint`）、`web/static/app-seal.js`（图片经 `seal/prepare`）、`tools/verify/shell-smoke.mjs`（装载断言）|
 |改预览渲染/视口（fit、平移、fit 复位）|`UI_SPEC §8` V4–V6 + 本文件 §5.27 + `docs/FACTS.md` §1|`web/static/app-preview.js`（`fitZoom/stageHeight`、`bindPan`、`probe('pan')`、`panStage`）、`web/static/style.css`（`#preview-stage` `overflow: hidden` + `[data-pan]` cursor）、`tools/verify/preview-smoke.mjs`（fit/平移/fit 复位断言）、`web/static/vendor/pdfjs/`|
-|预览卡 overlay / 下拉当前选项 / 顶栏高度 / 后端终端|`UI_SPEC §8` HD13–HD16 + 本文件 §5.31/§5.32|`web/static/style.css`（`#seal-preview`/`#log-console` overlay 定位 + 顶栏 34px 高度组）、`web/static/index.html`（`#btn-console` + `#log-console`）、`web/static/app-shell.js`（`renderRecentSeals` 当前选项 + `CURRENT_MARK`、`setConsoleVisible`/`pollLogs`、`probe('console')`）、`internal/console/ring.go`（`LogRing` + `WithRing`）、`internal/api/logs.go`、`main.go`（ring 播种）、`internal/config/{types,patch}.go`（`ui.consoleVisible`）、`tools/verify/shell-smoke.mjs`（HD13–HD16 断言）|
-|装载只设当前印章 / 实例全删 / 面板收起（HD17/HD18）|`UI_SPEC §8` HD17/HD18 + 本文件 §5.33/§5.34|`web/static/app-shell.js`（`loadSeals` 只 prepare、`addInstance` 快照 `currentSeal`、`deleteSelected` 删到零、boot 无预置、`panelCollapsed` + `posInstancePanel` 双面锚点、probe `instancePanel`）、`web/static/index.html`（`ip-title` 行 + `#instance-collapse` + `#instance-fab`）、`web/static/style.css`（fab 组）、`web/static/app-seal.js`（upload/revert 不指派）、`docs/ui/mockup.html`（同形镜像）、`tools/verify/shell-smoke.mjs`（HD17/HD18 断言）|
+|预览卡 overlay / 下拉当前选项 / 顶栏高度 / 后端终端|`UI_SPEC §8` HD13–HD16 + 本文件 §5.31/§5.32|`web/static/style.css`（`#seal-preview`/`#log-console` overlay 定位 + 顶栏 34px 高度组）、`web/static/index.html`（`#btn-console` + `#log-console`）、`web/static/app-shell-seals.js`（`renderRecentSeals` 当前选项 + `CURRENT_MARK`）+ `app-shell-chrome.js`（`setConsoleVisible`/`pollLogs`）+ `app-shell-verify.js`（`probe('console')`）、`internal/console/ring.go`（`LogRing` + `WithRing`）、`internal/api/logs.go`、`main.go`（ring 播种）、`internal/config/{types,patch}.go`（`ui.consoleVisible`）、`tools/verify/shell-smoke.mjs`（HD13–HD16 断言）|
+|改滚轮/视口手势|`UI_SPEC §8` V4–V7（V7 = Ctrl+滚轮恒为整页缩放）+ 本文件 §5.14|`app-shell-chrome.js`（Ctrl+wheel → `preview.zoomBy`；无 Ctrl 滚轮 = `bindPan` 平移）、`app-preview.js`（`zoomBy`/`bindPan`/`fit`）、`app-overlay.js`（无滚轮通道——V7 后仅四角/`+/−` 缩放实例）|
+|装载只设当前印章 / 实例全删 / 面板收起（HD17/HD18）|`UI_SPEC §8` HD17/HD18 + 本文件 §5.33/§5.34|`web/static/app-shell-docops.js`（`loadSeals` 只 prepare）+ `app-shell-instances.js`（`addInstance` 快照 `currentSeal`、`deleteSelected` 删到零、boot 无预置、`panelCollapsed` + `posInstancePanel` 双面锚点、probe `instancePanel` 在 `app-shell-verify.js`）、`web/static/index.html`（`ip-title` 行 + `#instance-collapse` + `#instance-fab`）、`web/static/style.css`（fab 组）、`web/static/app-seal.js`（upload/revert 不指派）、`docs/ui/mockup.html`（同形镜像）、`tools/verify/shell-smoke.mjs`（HD17/HD18 断言）|
 |新增路由|本文件 §6|`internal/api/register.go`、`web/static/app-api.js`|
 |窗口/端口/浏览器回退|本文件 §5|`host_webview_windows.go`、`internal/app/`|
-|改 UI 契约 / 参数词表 / 顶栏形态|`docs/UI_SPEC.md`（§2 词表、§4 i18n 键表、§6 契约 id、§7 驱动接口、§8 决策表含 HD1–HD16）+ 本文件 §6 + `IMPLEMENTATION_PLAN.md` P0.5|`docs/ui/mockup.html`、`web/static/index.html`（面板标记 + `data-field` + 图标按钮的 `data-i18n-title`；顶栏无文本，启动页入口 = `#empty-pick` + `#empty-path`）、`web/static/app-shell.js`（字段读写/实例/窗口标题 `setDocTitle()` + `probe('docTitle')`/路径框 Enter → `openByPath`）、`web/static/app-i18n.js`（由 §4 生成）、`web/static/style.css`（版式固定 two-col、无密度切档；左列出血 = `#empty-state` 无 margin/radius + `#preview-stage` padding 0 + `.page-frame` 无 radius）、`internal/config/{types,sanitize,patch}.go`（`ui.*` 词表：`lang`/`theme`/`consoleVisible`，已无 `density`）、`main.go`（`windowTitle` = `AutoStamp <版本>`）、`internal/api/{pdf,seal,export}.go`|
+|改 UI 契约 / 参数词表 / 顶栏形态|`docs/UI_SPEC.md`（§2 词表、§4 i18n 键表、§6 契约 id、§7 驱动接口、§8 决策表含 HD1–HD19 + SP1–SP5）+ 本文件 §6 + `IMPLEMENTATION_PLAN.md` P0.5|`docs/ui/mockup.html`、`web/static/index.html`（字段标记 + `data-field` + 图标按钮的 `data-i18n-title`；**导出设置段在 `#save-modal` 内**（SP5），顶栏无文本，启动页入口 = `#empty-pick` 一枚大按钮（HD19，无 `#empty-path`））、`web/static/app-shell-*.js`（kernel 字段读写；instances 实例；docops/chrome 窗口标题 `setDocTitle()`；`openByPath(path)` = §7 驱动通道（HD19：界面里已无路径框）；verify `probe('docTitle')`）、`web/static/app-i18n.js`（由 §4 生成）、`web/static/style.css`（版式**单列 full-bleed**（SP5）= `#app-main` 一栏 `minmax(0, 1fr)`，无 two-col、无 `#right-sidebar`/`#panel*`；`.modal .section`/`.modal .sec-title` 给导出段做外壳；左列出血 = `#empty-state` 无 margin/radius + 空态 flex 列居中（HD19）+ `#preview-stage` padding 0 + `.page-frame` 无 radius）、`internal/config/{types,sanitize,patch}.go`（`ui.*` 词表：`lang`/`theme`/`consoleVisible`，已无 `density`）、`main.go`（`windowTitle` = `AutoStamp <版本>`）、`internal/api/{pdf,seal,export}.go`|
 |改编译/测试流程|本文件 §4|`build.ps1`（任务分派 `Start-Dispatch`）、`tools/verify/*`|
-|改 UI 文案（i18n）|`UI_SPEC §4` 的 i18n 键表是**唯一来源**（`app-i18n.js` 由 `node tools/verify/gen-i18n.mjs` 生成，勿手改）|`docs/UI_SPEC.md` §4/§7、`web/static/app-shell.js` 的 `t()`、`web/static/app-i18n.js`|
+|改 UI 文案（i18n）|`UI_SPEC §4` 的 i18n 键表是**唯一来源**（`app-i18n.js` 由 `node tools/verify/gen-i18n.mjs` 生成，勿手改）|`docs/UI_SPEC.md` §4/§7、`web/static/app-shell-kernel.js` 的 `t()`、`web/static/app-i18n.js`|
+|改壳模块（拆分后面板/实例/装载/终端）|本文件 §5.35 + PROJECT_MAP「壳模块拆分」行|`app-shell-kernel.js`（状态机/i18n/persist/DEFAULT_PARAMS/门面）、`app-shell-instances.js`、`app-shell-seals.js`、`app-shell-export.js`、`app-shell-docops.js`、`app-shell-chrome.js`、`app-shell-verify.js`——跨模块引用一律 `S.` 门面；新增成员 = 登记进本模块的 `Object.assign(S, …)`|

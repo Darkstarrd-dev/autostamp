@@ -374,7 +374,6 @@ func TestSealPrepareJSONFormRecordsRecent(t *testing.T) {
 		t.Errorf("echo.despill = %v, want false (the option came through)", echo["despill"])
 	}
 
-
 	// HD8: the path lands in the settings record the dropdown reads.
 	setData := dataOf(t, getJSON(t, mux))
 	settings, _ := setData["settings"].(map[string]any)

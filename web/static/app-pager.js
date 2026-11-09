@@ -1,17 +1,19 @@
 // Copyright 2026 AutoStamp Authors. SPDX-License-Identifier: Apache-2.0
 // app-pager.js — P1: the #page-pager rail (page counter + one chip per page).
 //
-// The chip shape is the P0.5 frozen form (docs/ui/mockup.html buildPager(): a
-// counter chip plus a chip per page), and #page-pager is the contract id
-// (UI_SPEC §6). Keys 1..9 / PgUp / PgDn jump (UI_SPEC §5); the rail's title
+// SP2 (2026-11-05): the rail is a bare thumbnail strip — no number span, no
+// pill background behind the thumbnail, 2 px gaps (style.css), and the "All"
+// pages chip was removed. The thumb height follows the rail (the rail's fixed
+// CSS height is the source of truth; the backing store is measured from the
+// laid-out canvas, width follows the page aspect).
+//
+// Keys 1..9 / PgUp / PgDn jump (UI_SPEC §5); the rail's title
 // carries the page.hint key.
 //
-// Confirmed 2026-10-29 (P0.5 protocol, round 3): the rail shows a *downscaled
-// thumbnail inside the existing chip* — no new container id, no layout change.
 // Thumbnails are rendered lazily through IntersectionObserver, because a 60-page
 // document would otherwise queue 60 full page parses on open.
 //
-// The chips carry numbers, not words: the counter and the page buttons are
+// The chips carry no visible text: the counter and the page buttons are
 // rewritten on every page turn, so an i18n twin would fight with applyLang()
 // (which reads an element's own text as the en value). What is localised is the
 // accessible name — t("pager.count") / t("page.hint") — where a translated label
@@ -25,7 +27,9 @@
   const preview = () => window.__autoStampPreview;
   const t = (key) => (shell() && shell().t(key)) || key;
 
-  const THUMB_PX = 56; // CSS height of the thumbnail; width follows the aspect
+  // SP2: no fixed thumb height — CSS pins `.pg-thumb` to 100% of the rail;
+  // renderThumb measures the laid-out canvas for the backing store.
+  const FALLBACK_H = 64; // only used when the rail is not laid out yet
 
   // state of one rail generation: every build() bumps the generation, and the
   // observer + render tasks of an old rail are dropped instead of leaking.
@@ -70,16 +74,12 @@
       b.type = "button";
       b.className = "chip";
       b.dataset.page = String(n);
-      const no = doc.createElement("span");
-      no.className = "pg-no";
-      no.textContent = String(n);
       const canvas = doc.createElement("canvas");
       canvas.className = "pg-thumb";
       // The observer callback reads el.dataset.page (the observed target is the
       // canvas, not the button), so the canvas itself has to carry the page
       // number or the lazy render would skip every chip.
       canvas.dataset.page = String(n);
-      b.appendChild(no);
       b.appendChild(canvas);
       b.setAttribute("aria-pressed", String(n === p.state.page));
       label(b, `${t("page.hint")} ${n}`);
@@ -90,19 +90,6 @@
       } else {
         renderThumb(canvas, n); // no IO support: render everything
       }
-    }
-
-    if (count > 1) {
-      const all = doc.createElement("button");
-      all.type = "button";
-      all.className = "chip";
-      all.dataset.i18n = "pages.all.btn"; // static label: the catalog owns it
-      all.setAttribute("data-i18n-cn", "全部");
-      all.textContent = "All";
-      all.addEventListener("click", () => {
-        shell().setParams({ "api.apply.pages": "all", "api.export.pages": "all" });
-      });
-      nav.appendChild(all);
     }
 
     label(nav, t("page.hint"));
@@ -147,9 +134,10 @@
       });
   }
 
-  // renderThumb paints one page into one canvas at a fixed height; the aspect
-  // comes from the page's own viewport so portrait and landscape pages both fit
-  // the rail without guessing.
+  // renderThumb paints one page into one canvas; the CSS pins the canvas
+  // height to the rail (style.css), so the backing store is measured from the
+  // laid-out box, and the width follows the page's own viewport aspect so
+  // portrait and landscape pages both fit the rail without guessing.
   async function renderThumb(canvas, page) {
     const p = preview();
     const myGen = gen;
@@ -169,14 +157,13 @@
       return; // rail rebuilt (document closed / page changed)
     }
     if (myGen !== gen || !canvas.isConnected) return;
+    const cssH = Math.round(canvas.getBoundingClientRect().height) || FALLBACK_H;
     const vp1 = pageObj.getViewport({ scale: 1 });
-    const scale = THUMB_PX / (vp1.height || 1);
+    const scale = cssH / (vp1.height || 1);
     const vp = pageObj.getViewport({ scale });
     const dpr = window.devicePixelRatio || 1;
-    canvas.style.height = `${THUMB_PX}px`;
-    canvas.style.width = `${Math.max(1, Math.round(vp.width))}px`;
     canvas.width = Math.round(vp.width * dpr);
-    canvas.height = Math.round(THUMB_PX * dpr);
+    canvas.height = Math.round(cssH * dpr);
     const ctx = canvas.getContext("2d");
     const task = pageObj.render({
       canvasContext: ctx,
