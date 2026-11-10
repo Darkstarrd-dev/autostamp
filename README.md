@@ -1,69 +1,91 @@
 # AutoStamp
 
-独立桌面 App：在 PDF 上盖印章 / 加骑缝章，带实时预览与混合模式，纯本地单二进制。
+Local PDF stamping app: stamp seals on PDFs, cross-page (riding) seals included, with
+live preview and blend modes. Single Windows executable, no installer, no network,
+no cloud upload.
 
-- 形态：Go 单 exe + WebView2 窗口（内嵌原生 JS 前端），监听 `127.0.0.1`，无鉴权、无云上传、无数据库。
-  窗口标题栏与浏览器标签页都显示 `AutoStamp <版本>`，打开文档后追加文件名。
-- 依赖：`pdfcpu`（PDF 解析/切分/合并/印章落盘）、`pdfjs-dist`（页面渲染/文本层/缩略图）、
-  自写 ExtGState `/BM` 注入层与 stdlib PDF writer。
+独立本地 PDF 印章工具：在 PDF 上盖印章（含骑缝章），实时预览 + 混合模式；
+单个 Windows 可执行文件，无需安装、不联网、不上传。
 
-## 功能（P0–P7 全部实现）
+---
 
-1. 读取并显示文本型 / 图片型 / 混合型 PDF（渲染 + 文本层 + 底部纯缩略图分页条）。
-2. 叠加带透明通道的印章图片：尺寸 / 位置 / 旋转 / 明度 / 饱和度 / 透明度，实时预览；
-   印章可一键去白底（despill）与透明边裁切。**新放置/复位的印章默认 42 mm 宽**（缩放值按
-   页显示宽自动计算：自动判竖版/横版，A4 竖版即 42/210 = 20%；Z2，2026-11-09）。
-3. 给多页 PDF 加**骑缝章**：顶栏「添加骑缝章」模式下左键点击任意页，以点击处高度为
-   起点放置；每页装订边各一条带（右缘连续 / 双面奇偶交替），**选中与普通章一样：单击
-   即见选择框与手柄、按下即拖**（Z3，2026-11-09）——纵向拖动高度、四角缩放、旋转，
-   逐页同步更新；旋转 = **先旋转整枚印章、再切竖条**，每页放下的都是旋转结果的竖条
-   （Z4，2026-11-09）；参数随「印章参数」浮动面板的骑缝组（装订边三档 +
-   起始位置）。自动切分 2 拼扫描页的能力仍由后端与驱动 API 保留（当前无 UI 入口）。
-4. 16 种混合模式（normal / multiply / color-dodge / …）+ 透明度，预览与落盘像素一致；
-   **默认正片叠底（multiply）**（Z1，2026-11-09）。
-5. 保存：矢量（保留文字/矢量）或光栅（整页位图，抗篡改），可调 DPI（72/150/300/自定义）
-   与 JPEG 质量（40-95），并显示导出体积预估 —— **导出设置段 + 体积预估都在保存对话框里**
-   （SP5，2026-11-06）。保存目标 = **原生另存为对话框**（SV1，2026-11-10：「保存」一次点击即弹出系统保存文件浏览器，默认名 = 同名 `.stamp.pdf`、起始目录 = 文档所在目录；取消则什么都不写；手输路径框 / 「系统文件选择器」/「替换原文件」开关整组删除，`replaceOriginal` 只剩 §7 驱动 API）。印章先落盘（键盘 **Ctrl+Enter** = 盖到 PDF，Ctrl+Z 撤销落盘）再
-   「保存到文件」= 顶栏「保存」或 **Ctrl+S**（侧栏的「保存到文件」按钮已随右侧边栏删除）。
-6. 印章**预设库**与**批处理**的后端能力保留（路由、`seals\` 预设与 settings 字段），
-   但当前 UI 无入口（2026-11-05 侧栏收尾 `UI_SPEC §8` SP1，2026-11-06 侧栏整块退场 SP5）。
-7. 界面是**单列 full-bleed**（SP5：右侧参数面板整块删除，导出设置段并入保存对话框），预览
-   占满整列（无内缩、无卡片边框）。顶栏**没有任何
-   文本**，只有图标控件（左簇 = 打开 → 上传印章 → 最近印章下拉 → 加章模式 → **添加骑缝章** → 保存（保存对话框的唯一按钮入口，SP5 起导出设置段就在对话框里）；右簇 =
-   语言 / 主题 / 后端终端 / 快捷键，快捷键在最右，悬停即见提示）；版本号与打开后的文件名只写在**窗口标题栏**
-   （浏览器标签页同源）。印章参数（混合模式 / 透明度 / 明度饱和度 / 缩放 / 旋转 + 复位 / 删除；
-   骑缝实例多一组装订边 + 起始位置）在
-   选中实例右侧的**浮动面板**（默认收起成**齿轮按钮**，点齿轮展开、面板右上角最小化收回）；印章预览卡浮在
-   **预览区左下角**（不占布局、不挡页面操作，层级低于参数面板），当前印章有路径时最近印章下拉自动选中该项。「后端终端」开关 =
-   日志面板浮在左列底部（默认隐藏，可见性存设置）。装载印章（上传/下拉/粘贴/拖拽）**只设置当前印章、
-   绝不自动放章**：放置唯一通道 = 加章模式点击或「添加骑缝章」点击；实例只作用于放置页（不同页可盖不同章），
-   实例可以全部删除。
-   打开文档的入口 = 顶栏「打开」、启动页「打开文件」大按钮、拖放/粘贴（同一 gate；
-   路径框已随 HD19 删除）。
+## What it does
 
-## 构建
+- Read and display any PDF: text-layer pages, scanned image pages, or mixed.
+- Place a transparent PNG seal on the page and see it live: size, position, rotation,
+  brightness, saturation, opacity. New seals are auto-sized to a 42 mm-wide stamp.
+- Cross-page (骑缝 / riding) seals across a multi-page PDF: one seal is sliced into
+  per-page strips on the binding edge (right / left / alternating), draggable vertically,
+  rotate-then-slice, randomized uneven slicing that keeps a smooth per-page trend.
+- 16 blend modes (`multiply`, `normal`, `color-dodge`, …) + opacity percentage; the
+  preview and the saved file are pixel-identical (default = multiply).
+- Save as vector (keeps text and vectors) or raster (whole-page bitmap, tamper-evident)
+  with DPI (72 / 150 / 300 / custom) and JPEG quality, plus an inline size estimate
+  before you commit.
+- One-click "remove white background" (despill) of scan-style seal images, and transparent
+  edge trimming.
+- Everything stays on your machine: the app listens on `127.0.0.1` only, no auth,
+  no telemetry, no database, no OCR/upload service.
+
+## 这个 App 是做什么用的
+
+- 读取并显示 PDF：文字型、扫描图片型、混合型都可以（页面渲染 + 文本层 + 缩略图分页条）。
+- 在页面上盖透明 PNG 印章，实时预览：尺寸、位置、旋转、明度、饱和度、透明度；
+  新放置的印章按 **42 mm 章宽**自动计算缩放。
+- 给多页 PDF 加**骑缝章**：一枚印章切成逐页竖条贴在装订边（右缘连续 / 左缘 / 双面奇偶交替），
+  纵向拖动位置、先旋转再切条、不匀切片（覆盖率 + 重掷）。
+- **16 种混合模式**（正片叠底 / normal / color-dodge …）+ 透明度百分比；预览与落盘像素一致
+  （默认正片叠底）。
+- 保存为**矢量**（保留文字/矢量）或**光栅**（整页位图，抗篡改），可调 DPI（72/150/300/自定义）
+  与 JPEG 质量，保存前显示导出体积预估。
+- 一键**去白底**（扫描式淡章）与透明边裁切。
+- 全程只在 `127.0.0.1` 监听，不联网、无鉴权、无遥测、无数据库、无 OCR 上传。
+
+## Download / Run
+
+GitHub Releases 里的 `autostamp.exe`（Windows x64，单文件，绿色版）：
+download `autostamp.exe` from the GitHub Release and double-click it — a WebView2 window
+opens (WebView2 runtime is part of Windows 10/11). No installer, no admin rights.
+
+- 首次运行会在 `%APPDATA%\AutoStamp\` 生成 `settings.json` 与 `seals\`（印章预设），
+  临时会话资产在 `%LOCALAPPDATA%\AutoStamp\session\`。所有写盘都是临时文件 + rename。
+- 用法：顶栏「打开」/ 启动页大按钮 / 拖进来 / 粘贴 = 装载 PDF；「上传印章」或粘贴图片 =
+  装载印章（只设当前印章，不自动放章）；**F1** = 加章模式（点击页面放置）、**F2** =
+  骑缝章模式；**Ctrl+Enter** 盖到 PDF、**Ctrl+Z** 撤销落盘、**Ctrl+S** 保存（原生另存为对话框）。
+
+## Built entirely by AI
+
+本项目从设计、编码、UI、文档到数值化验证脚本，全程由 **Strata + Qwen3.8-Flash-Next-IQ3_S**
+模型完成（无人类编写代码）。
+This project — design, implementation, UI, documentation, and the headless numeric
+verification harness — was produced end to end with the **Strata + Qwen3.8-Flash-Next-IQ3_S**
+model. No hand-written code.
+
+## License
+
+[Unlicense](https://unlicense.org/) — public domain, do anything, see [`UNLICENSE`](UNLICENSE).
+All code and documentation in this repository is dedicated to the public domain.
+
+Third-party components shipped inside the repository and inside the released binary keep
+their own licenses and are not covered by the dedication above: `web/static/vendor/pdfjs/`
+(pdfjs-dist, Apache-2.0), `github.com/pdfcpu/pdfcpu` (Apache-2.0), and the bundled
+standard fonts.
+第三方组件（`web/static/vendor/pdfjs/`、`pdfcpu`、内置标准字体）保留各自的许可证，
+不受上面的公有领域声明约束。
+
+## Repository layout
+
+|Path|What|
+|---|---|
+|`main.go` + `host_*.go`|entry point, port selection, WebView2 window / browser fallback|
+|`internal/`|Go backend: config, session store, path grants, PDF core (split / seal / blend / raster / adjust), HTTP API|
+|`web/static/`|native HTML + vanilla JS front end (embedded with `//go:embed`), vendored `pdfjs-dist`|
+|`AGENTS.md` (root)|the project contract: stack, HTTP API, coding rules, verification requirements|
+|`docs/`|`UI_SPEC.md`, `FACTS.md` (measured facts), `IMPLEMENTATION_PLAN.md`, per-doc changelogs|
+|`tools/verify/`|headless-Chromium numeric verification scripts (pixel matrix, disk re-read, shell smoke)|
+|`build.ps1` / `build1.ps1` / `buildm.ps1`|one-command build + full verify chain; UPX-packed single-exe output|
 
 ```powershell
-go build -tags webview -trimpath -ldflags "-s -w" -o dist/autostamp-webview-stripped.exe .
-powershell -NoProfile -File build.ps1                 # clean+vet+test+3 个 exe+全套校验
-powershell -NoProfile -File build.ps1 -Task stripped,package   # 出货 zip（exe + README）
-powershell -NoProfile -File build.ps1 -Task webview -Run        # 窗口版并直接启动
+go build -tags webview -trimpath -ldflags "-s -w" -o dist/autostamp.exe .
+powershell -NoProfile -File build.ps1            # clean + vet + test + 3 exes + all verify tasks
 ```
-
-一键脚本 `build.ps1`（PowerShell 5.1+，文件必须 UTF-8 **带 BOM**）把编译与全部
-headless 数值校验串成一条命令；任一失败退出码 1。校验脚本见 `tools/verify/`
-（契约、壳、查看链路、叠加预览、落盘回读、光栅导出、像素矩阵、真窗口）。
-
-## 首次运行
-
-在 `%APPDATA%\AutoStamp\` 生成 `settings.json`（印章/切分/导出/批处理默认值）+
-`seals\`（印章预设）；临时会话资产在 `%LOCALAPPDATA%\AutoStamp\session\`
-（TTL 2 小时，单文件上限 256 MiB，总量上限 2 GiB）。所有写盘都是临时文件 + rename。
-
-## 阅读顺序
-
-1. `AGENTS.md` — 技术栈、目录结构、HTTP 契约、编码规范、验证要求、禁止事项。
-2. `docs/IMPLEMENTATION_PLAN.md` — P0–P7 阶段、验收标准、状态跟踪（§10）。
-3. `docs/UI_SPEC.md` — UI 状态机、参数词表、用户确认决策表。
-4. `docs/FACTS.md` — pdfcpu / pdf.js / Chromium 实测事实与体积数据。
-5. `PROJECT_MAP.md` — 代码地图。
