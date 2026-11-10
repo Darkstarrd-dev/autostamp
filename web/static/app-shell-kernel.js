@@ -645,7 +645,26 @@
         const el = e.target;
         const name = el && el.getAttribute ? el.getAttribute("data-field") : null;
         if (!name || !APPLY_FIELDS.has(name) || loadingParams) return;
-        syncInstanceParam(name, readField(name));
+        // UI7 (2026-11-10, color-slider audit): the value comes from the
+        // EDITED element, not readField(name). readField resolves to the
+        // *first* element of the slider/number pair, which still holds the
+        // old value while the number twin is being typed into (the pair sync
+        // and queuePersist run on the target itself, i.e. after this capture
+        // handler). Dragging the range worked; typing/spinning the number
+        // twin stored the previous slider value into the instance.
+        // Segmented controls (div.seg groups with data-field) have no
+        // .value — their value is the pressed button, exactly as readField
+        // resolves it; the verify hook drives input/change on that element.
+        let v;
+        if (el.classList && el.classList.contains("seg")) {
+          const b = el.querySelector("button[aria-pressed='true']");
+          v = b ? b.dataset.value : undefined;
+        } else if (el.type === "checkbox") {
+          v = el.checked;
+        } else {
+          v = NUMERIC.has(name.split(".").pop()) ? Number(el.value) : el.value;
+        }
+        syncInstanceParam(name, v);
       },
       true,
     );

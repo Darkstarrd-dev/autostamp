@@ -563,6 +563,20 @@ async function main() {
       press("?");
       out.shortcutsModal = document.documentElement.getAttribute("data-modal");
       press("Escape");
+      // SM1/SM2 mirror: F1/F2 arms the placement modes (mutual exclusive via
+      // the single tri-state flag), Esc / right-click disarms them.
+      press("F1");
+      out.addMode = m.S.addMode;
+      out.addBtn = document.querySelector("#btn-seal-add").getAttribute("aria-pressed");
+      press("F2");
+      out.crossMode = m.S.addMode;
+      out.crossBtn = document.querySelector("#btn-crosspage-add").getAttribute("aria-pressed");
+      out.addBtnAfter = document.querySelector("#btn-seal-add").getAttribute("aria-pressed");
+      press("Escape");
+      out.escOff = m.S.addMode;
+      press("F2");
+      document.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+      out.rclickOff = m.S.addMode;
       m.setState("opened");
       return out;
     })()`);
@@ -573,6 +587,12 @@ async function main() {
   cmp("Esc closes it", keys.afterEsc, null);
   cmp("? opens the shortcut list", keys.shortcutsModal, "shortcuts");
   truthy("shortcut table rows match the registered keys", keys.rows >= 9);
+  cmp("F1/F2 arms placement modes (SM1 mirror)",
+    { mode: [keys.addMode, keys.crossMode], btns: [keys.addBtn, keys.crossBtn, keys.addBtnAfter] },
+    { mode: ["normal", "crosspage"], btns: ["true", "true", "false"] });
+  cmp("Esc/right-click disarms the placement mode (SM2 mirror)",
+    { esc: keys.escOff, rclick: keys.rclickOff },
+    { esc: "off", rclick: "off" });
 
   if (consoleLines.length) bad("final console errors: " + consoleLines.join(" | "));
   if (netFailures.length) bad("final resource failures: " + netFailures.join(" | "));

@@ -777,6 +777,7 @@
 
   function bindAffordance(box) {
     box.addEventListener("pointerdown", (ev) => {
+      if (ev.button !== 0) return; // SM1: right-button is the cancel-mode gesture
       ev.stopPropagation();
       const handle = ev.target && ev.target.dataset ? ev.target.dataset.handle : null;
       if (handle === "rot") beginDrag(ev, "rotate", handle);
@@ -816,6 +817,10 @@
     const stage = q("#preview-stage");
     if (!stage) return;
     stage.addEventListener("pointerdown", (ev) => {
+      // SM1 (2026-11-10): right-button presses are the "cancel the placement
+      // mode" gesture (chrome's contextmenu binding), not a placement or a
+      // drag — only the primary button drives the canvas.
+      if (ev.button !== 0) return;
       if (ev.target.closest && ev.target.closest(".instance")) return;
       const s = shell();
       const picked = selectAt(ev);

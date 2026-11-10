@@ -79,6 +79,11 @@
     ["Ctrl+D / Del", "instances.duplicate.btn", "instances.delete.btn"],
     ["加章模式: 左键页面点击", "app.sealAddMode.btn"],
     ["骑缝章模式: 左键页面点击", "app.sealCrossAddMode.btn"],
+    // SM1/SM2 (2026-11-10, user dialogue directive): F1/F2 toggle the two
+    // placement modes; right-click (anywhere, while a mode is on) and Esc
+    // cancel it.
+    ["F1 / F2", "app.sealAddMode.btn", "app.sealCrossAddMode.btn"],
+    ["右键 / Esc（模式开启时）", "mode.cancel.hint"],
     ["Ctrl+Enter / Ctrl+Z", "apply.write.btn", "apply.undo.btn"],
     ["←↑↓→", "nudge.hint"],
     ["+ / −", "scale.hint"],
@@ -147,8 +152,28 @@
   function onKey(e) {
     const inField = /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName);
     if (e.key === "Escape") {
+      // SM1 (2026-11-10, user dialogue directive): Esc closes a modal first;
+      // with no modal, an active placement mode (add-seal / cross-page) is
+      // cancelled by Esc too — and by right-click (see the contextmenu
+      // binding in bindControls). The mode-off is the user's "关闭该开启状态".
       if (state.modal) S.setModal(null);
-      else S.clearToast();
+      else if (state.addMode || state.crosspageAdd) {
+        S.setAddMode(false);
+        S.setCrosspageAdd(false);
+      } else S.clearToast();
+      return;
+    }
+    // SM1: F1 / F2 toggle the two placement modes (mutually exclusive — the
+    // setters already turn the other mode off). F-keys are not text keys, so
+    // they answer even while a field has focus.
+    if (e.key === "F1") {
+      e.preventDefault();
+      S.setAddMode(!state.addMode);
+      return;
+    }
+    if (e.key === "F2") {
+      e.preventDefault();
+      S.setCrosspageAdd(!state.crosspageAdd);
       return;
     }
     // Ctrl+O is the native picker, not the upload input: the picker is the
@@ -435,6 +460,16 @@
     // SP4 (2026-11-05): the cross-page placement toggle follows HD10's pattern
     // (session-only state, stage cursor hook, aria-pressed pair).
     S.q("#btn-crosspage-add").addEventListener("click", () => S.setCrosspageAdd(!state.crosspageAdd));
+    // SM1 (2026-11-10, user dialogue directive): right-click cancels an active
+    // placement mode (add-seal or cross-page). The native menu is suppressed
+    // only while a mode is on; right-clicks with no active mode keep the
+    // browser's default behavior untouched.
+    doc.addEventListener("contextmenu", (e) => {
+      if (!(state.addMode || state.crosspageAdd)) return;
+      e.preventDefault();
+      S.setAddMode(false);
+      S.setCrosspageAdd(false);
+    });
     // HD16: the backend-terminal toggle; the initial state rides applySettings.
     S.q("#btn-console").addEventListener("click", () => setConsoleVisible(!state.consoleVisible, true));
 

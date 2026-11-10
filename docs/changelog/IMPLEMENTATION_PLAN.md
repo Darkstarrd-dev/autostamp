@@ -2,6 +2,10 @@
 
 > `docs/IMPLEMENTATION_PLAN.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-10 — §10.1 登记「快捷键 SM1–SM2 + 调色滑杆缺陷 CS1（UI7 轮）」
+
+用户 2026-11-10 三项一批：F1/F2 = 加章/骑缝放置模式键盘切档；开启态右键或 Esc 关闭该态（顺带修右按钮误放置/起拖）；「颜色调节 Debug」审核 → 实测像素链仍绿，真实缺陷 = 滑杆/数值配对 capture 读旧值（number 框落后一步），修复 = 从 `e.target` 取值（seg 按按下按钮 `data-value`、checkbox 按 `checked`；初版直读 `.value` 把 seg 字段覆写成 `undefined`，已由 strip 段钉修回）。钉 = shell-sm SM1/SM2 + overlay-sm `filter` 真实手势段。i18n 139 → 140（`mode.cancel.hint`）。
+
 ## 2026-11-10 — §10.1 登记「T1–T2 UI6 轮」+ 头「最后核对」= UI6 轮摘要
 
 `docs/IMPLEMENTATION_PLAN.md`：§10.1 尾行登记 UI6 轮（安装 ui-ux-pro-max skill → color/typography/ux 三域查询 + pro-rules 对照 → 亮暗两主题重配色、tooltip 引擎、CN 排版；门槛 = `build.ps1 -Task vet,test,verify` 失败 0 + `shell-smoke` 新 tooltip 断言）；头换成 UI6 摘要，B1–B2/N1–N4 明细留本文件历史段与 changelog。

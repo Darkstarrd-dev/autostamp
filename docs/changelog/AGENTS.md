@@ -2,6 +2,10 @@
 
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-10 — §5 新增 49–50（UI7 轮 SM1/SM2 快捷键 + CS1 滑杆配对缺陷）+ §11 一行
+
+§5.49：F1/F2 = 两个放置模式的键盘切档（互斥仍由 setter 承担；F 键在输入框聚焦时也答），Esc 优先级 = modal → 放置模式 → toast，窗口级 `contextmenu` 仅模式开启时抑制原生菜单并关掉两模式（模式关着时右键保持浏览器默认）；顺带缺陷修正 = `app-overlay` stage/affordance `pointerdown` 加 `button !== 0` 守卫（右按钮原本会误放置/起拖）。§5.50：CS1 = UI5-B2 像素链实测仍绿，真实缺陷只在 kernel `bindPlumbing` `input` capture 读 `readField`（配对首个元素 = range 半边，先于 pair sync）→ number 孪生框键入按滑杆旧值写入实例；修复 = 从 `e.target` 取值并保持 seg/checkbox 形态语义（`div.seg` 按按下按钮 `data-value`；初版直读 `.value` 会把 `ui.crosspage.binding` 覆写成 `undefined`、骑缝 alternate/none 坏，strip 段钉已钉住）。§11 新增「改快捷键 / 放置模式取消 / 滑杆配对」速查行。i18n **139 → 140**（`mode.cancel.hint`）。
+
 ## 2026-11-10 — §5 新增 48（UI6 轮 T1/T2：苹果系商务配色 + styled tooltip + CN 排版）+ §11 一行
 
 `AGENTS.md`：§5 新增决策 48（token 名不变值全换、亮/暗 Apple 系色板、两主题正文对比 ≥4.5:1、CJK 字体栈、macOS segmented 药丸、`bindTooltips` 替换原生气泡（title 摘挂语义）、`--tooltip-bg`/`--tooltip-fg` presentation token、i18n 139 / ui-ids 57 零变化）；§11 新增「改主题配色 / tooltip / CN 排版（UI6 T1/T2）」行（含 mock `<style>` 禁嵌套 `@media` 的 ui-sm 校验坑）。

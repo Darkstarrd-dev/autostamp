@@ -536,6 +536,25 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
    title/aria-label 断言仍成立。presentation token 新增 `--tooltip-bg`/`--tooltip-fg`；tooltip 引擎是
    `app-shell-chrome.js` 局部函数（不进门面、无新路由）；i18n 139 / ui-ids 57 / 词表字段 52 零变化。
 
+49. **放置模式快捷键 + 取消手势（SM1/SM2，2026-11-10 用户对话指令；`UI_SPEC §8` SM1/SM2）**：
+   `app-shell-chrome.onKey` = **F1** → `setAddMode(!state.addMode)`、**F2** → `setCrosspageAdd(!state.crosspageAdd)`
+   （F 键不在输入框防护之后：字段聚焦也应答；互斥仍由两个 setter 承担）。窗口级 `contextmenu`：
+   **仅模式开启时** `preventDefault` + 关掉两模式（模式关着时右键 = 浏览器默认，不劫持）；
+   **Esc 优先级 = modal → 放置模式 → toast**。顺带缺陷：右按钮 `pointerdown` 原本会在 stage 上
+   **误放置印章 / 在实例上起拖**，现 `app-overlay` 两处 `button !== 0` 守卫只认左键。SHORTCUTS 表
+   新增 F1/F2 行（复用 `app.sealAddMode.btn`/`app.sealCrossAddMode.btn`）与取消行
+   （新键 `mode.cancel.hint`，i18n **139 → 140**）。钉 = shell-sm SM1/SM2（开/关往返、互斥、
+   Esc/右键取消、`aria-pressed` 回显）。没有新字段、没有新路由。
+50. **调色滑杆配对缺陷（CS1，2026-11-10 用户「颜色调节 Debug」审核；`UI_SPEC §8` CS1；修 §5.47 的 UI 接线面）**：
+   实测 = UI5-B2 像素链（滑杆预览/烘焙落盘、pow→bright→sat、配对双向同步）**全部仍绿**；真实缺陷 =
+   kernel `bindPlumbing` 的 `input` capture handler 用 `readField(name)` 读**配对首个元素**（= range 半边），
+   而它先于 target 自身的 pair sync 触发 → **数值孪生框键入/步进时写进实例的是滑杆半边的旧值**
+   （拖 range 一直正确；表现 = 数值框落后一步）。修复 = capture handler 从 `e.target` 取值并保持控件
+   形态语义（`div.seg` 字段 = 按下按钮的 `data-value`、checkbox = `checked`、其余 NUMERIC 尾巴走
+   `Number`；初版直读 `.value` 踩坑：seg 字段没有 `.value`，`ui.crosspage.binding` 被 `undefined`
+   覆写 → 骑缝 alternate/none 坏，strip 段钉住后补回）。钉 = overlay-sm `filter` 段真实手势：拖 range → `params == el.value` 且
+   复合 == 公式像素；number 框 `value="0.5"` + input/change → param=0.5、range 同步、像素 == 公式。
+
 ## 6. HTTP 契约（`/api/*`，全部 JSON；字段在 **P0.5 与用户确认后**才冻结，改动必须同步本文、`docs/UI_SPEC.md` 与前端）
 
 |路由|用途|
@@ -628,6 +647,7 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
     当前印章 + HD18 齿轮 `#instance-fab` ↔ `#instance-collapse` 收起/展开往返 + **HD19 空态形态
     守卫（`#empty-state` = 一枚 `#empty-pick` + 一行 hint；`#empty-path`/`#empty-pick-multi`/
     `#empty-pick-filter` 不在 DOM）**）、
+    **SM1/SM2 放置模式键盘链（F1/F2 切档互斥 + Esc/右键取消 + `aria-pressed` 回显）**、
     实例增删选中复制、`/api` 往返与 `{"patch":…}` 合并。
   8. 窗口通道：`node tools/verify/webview-launch.mjs`（真窗口 + 页内 `/api` 请求）与
        `go run ./tools/verify/comprobe`（COM 返回值实测，FACTS §1.6）。
@@ -647,7 +667,8 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
       （宽 = 页宽 10%、`startOffset` 位移误差 0、`alternate` 条带数 == 页数、逐页列对齐 ≤1 px）、
       `ctx.filter` 复位读数、**filter 语义：`brightness` 与 `saturate` 的 CSS filter 独立生效
       （两滑杆分别改像素、公式与滤镜矩阵手算比对，且 `#stamp-layer` 内无挂 DOM 的实例画布
-      = ghost 双绘制已根除）**、导出体积预估 == FACTS §4（含 vector 忽略 DPI/质量）。
+      = ghost 双绘制已根除**、**CS1 真实滑杆手势（拖 range → param == 元素值且复合 == 公式
+      像素；number 孪生框键入 → param/滑块/像素同步）**、导出体积预估 == FACTS §4（含 vector 忽略 DPI/质量）。
       **改前端后必须去掉 `--reuse-build`**（该旗标复用 `dist/autostamp-overlay-smoke.exe`，
       旧嵌入副本会让新代码看不到 —— 2026-10-30 实测踩过的坑）。
   11. P2 像素等值性：`node tools/verify/pixel-matrix.mjs`（分段 `--only=matrix|chain`）=
@@ -710,6 +731,7 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
 
 |任务|先读|涉及文件|
 |---|---|---|
+|改快捷键 / 放置模式取消 / 滑杆配对（SM1/SM2 + CS1）|`UI_SPEC §8` SM1/SM2/CS1 + 本文件 §5.49/§5.50|`web/static/app-shell-chrome.js`（onKey F1/F2/Esc、`contextmenu` 绑定、SHORTCUTS 表）、`web/static/app-overlay.js`（stage/affordance `button !== 0` 守卫）、`web/static/app-shell-kernel.js`（`bindPlumbing` capture 从 `e.target` 读）、`web/static/app-i18n.js`（`mode.cancel.hint`）、`docs/ui/mockup.html`（镜像）、`tools/verify/{shell-sm,overlay-sm}`（SM1/SM2、真实手势钉）|
 |改切分/骑缝几何|`docs/FACTS.md` §2.3 + §1.8|`internal/pdfcore/split.go`（词表含 `vetoPages`/`splitPages`）、`sealimg.go`（落盘条带）、`web/static/app-preview.js`（`drawSplitMarks` 切点预览）、`web/static/app-overlay.js`（`stripGeometryFor/stripRectsFor` 条带）、`web/static/app-shell-docops.js`（`#split-veto` 逐页否决、`#split-undo`）|
 |改叠加层/印章通道|`docs/FACTS.md` §1.8 + §1.3 + §1.9|`web/static/app-overlay.js`（合成/affordance/快照 `state.surface`；实例画布只作 probe 背板、不挂 DOM——单绘制契约 §5.27；加章模式点击 `addInstanceAt` §5.29；滚轮已归 chrome 的全局缩放 §5.14 V7）、`web/static/app-seal.js`（multipart 上传 / `prepareFromGrant` pathGrantId 形态 / 去背撤销 / 左列预览 `renderPreview`）、`web/static/app-shell-seals.js` + `app-shell-instances.js`（`currentSeal`/最近印章下拉/浮动面板 `#instance-panel`）、`internal/api/seal.go`（两形态 + `SetRecentSeal`）|
 |改印章顶栏通道 / 实例面板（HD8–HD12）|`docs/UI_SPEC.md` §2/§4/§6/§8 HD8–HD12|`web/static/index.html`（顶栏 `#btn-seal-upload`+`#seal-recent-select`+`#btn-seal-add`、`#seal-preview`、`#instance-panel`）、`web/static/app-shell-{seals,instances,chrome,verify}.js`、`internal/config/{types,store,patch,sanitize}.go`（`recentSeals`、scale 0.05..5）、`internal/api/seal.go`（JSON 形态）、`internal/fsx/pick.go`（`image` 过滤词）|

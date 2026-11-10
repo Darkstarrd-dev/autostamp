@@ -941,6 +941,46 @@ async function main() {
     nearPixel("pow→bright→sat chain matches the formula (UI5-B2)", px3.rgb,
       expectPixel(CB2, fSaturate(fBright(fPow(CS2, 2.6), 0.9), 1.6), 1, "multiply"), 2);
     await setParams(app, { "api.apply.brightness": 1, "api.apply.saturate": 1, "api.apply.ink": 1 });
+
+    // UI7 (2026-11-10, user-reported color-slider audit): every pin above
+    // feeds values through setParams, which cannot see which half of the
+    // slider/number pair (two elements, one data-field) the shell's capture
+    // handler reads. Drive both halves with real gestures:
+    //  (a) a real mouse drag on the range: the instance param must echo the
+    //      element's final value, and the composite must match the formula;
+    //  (b) typing into the number twin: same at the typed value. The old
+    //      capture read (readField = the pair's FIRST element) stored the
+    //      range's previous value here — the slider looked alive, the number
+    //      box was one step behind; these pins are that regression's guard.
+    await app.evaluate(shellEval("(() => { s.state.panelCollapsed = false; s.posInstancePanel(); return true; })()"));
+    const pairRect = await app.evaluate(shellEval(
+      `(() => { const el = document.querySelector('#instance-panel input[data-field="api.apply.brightness"][type="range"]'); const r = el.getBoundingClientRect(); return { x: r.left, y: r.top + r.height / 2, w: r.width }; })()`
+    ));
+    await dragTo(app, { x: pairRect.x + pairRect.w * 0.1, y: pairRect.y }, { x: pairRect.x + pairRect.w * 0.85, y: pairRect.y });
+    const dragEcho = await app.evaluate(shellEval(
+      `(() => { const r = document.querySelector('#instance-panel input[data-field="api.apply.brightness"][type="range"]'); const n = document.querySelector('#instance-panel input[data-field="api.apply.brightness"][type="number"]'); return { slider: Number(r.value), param: Number(s.selectedInstance().params["api.apply.brightness"]), twin: Number(n.value) }; })()`
+    ));
+    truthy(`real drag: slider moved (${dragEcho.slider})`, dragEcho.slider > 1.2);
+    cmp("real drag: the param echoes the element (UI7)", dragEcho.param, dragEcho.slider);
+    cmp("real drag: the number twin follows (UI7)", dragEcho.twin, dragEcho.slider);
+    const pxG = await sampleAt(app, fx, fy, "composite");
+    nearPixel("real slider drag paints the formula pixel (UI7)", pxG.rgb,
+      expectPixel(CB2, fBright(CS2, dragEcho.param), 1, "multiply"), 2);
+    await app.evaluate(shellEval(
+      `(() => { const n = document.querySelector('#instance-panel input[data-field="api.apply.brightness"][type="number"]'); n.value = "0.5"; n.dispatchEvent(new Event("input", { bubbles: true })); n.dispatchEvent(new Event("change", { bubbles: true })); return true; })()`
+    ));
+    await sleep(250);
+    const twinEcho = await app.evaluate(shellEval(
+      `(() => { const r = document.querySelector('#instance-panel input[data-field="api.apply.brightness"][type="range"]'); return { param: Number(s.selectedInstance().params["api.apply.brightness"]), slider: Number(r.value) }; })()`
+    ));
+    cmp("typed number reaches the instance (UI7)", twinEcho.param, 0.5);
+    cmp("typed number syncs the range half (UI7)", twinEcho.slider, 0.5);
+    const pxT = await sampleAt(app, fx, fy, "composite");
+    nearPixel("typed number paints the formula pixel (UI7)", pxT.rgb,
+      expectPixel(CB2, fBright(CS2, 0.5), 1, "multiply"), 2);
+    await setParams(app, { "api.apply.brightness": 1, "api.apply.saturate": 1, "api.apply.ink": 1 });
+    await app.evaluate(shellEval("(() => { document.querySelector('#instance-collapse').click(); return true; })()"));
+
     // one composite surface: the stamp-layer carries affordances only.
     const dom = await app.evaluate(
       `(() => ({ stampCanvases: document.querySelectorAll('#stamp-layer canvas').length, pageCanvases: document.querySelectorAll('#preview-stage canvas.page-canvas').length }))()`

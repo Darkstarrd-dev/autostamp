@@ -1700,6 +1700,8 @@ window.__autoStampMock = (function () {
       ["Ctrl+D", "instances.duplicate.btn", "duplicate instance", "复制印章实例"],
       ["加章模式: 左键页面点击", "app.sealAddMode.btn", "drop current seal at click point", "在点击处放置当前印章"],
       ["骑缝章模式: 左键页面点击", "app.sealCrossAddMode.btn", "place cross-page seal starting at click height", "以点击处高度为起点放置骑缝章"],
+      ["F1 / F2", "app.sealAddMode.btn", "toggle add-seal / cross-page placement mode", "切换加章 / 骑缝放置模式"],
+      ["右键 / Esc（模式开启时）", "mode.cancel.hint", "cancel the active placement mode", "取消当前放置模式（右键 / Esc）"],
       ["Ctrl+Enter", "apply.write.btn", "stamp into the PDF (write)", "盖到 PDF（写入落盘）"],
       ["Ctrl+Z", "apply.undo.btn", "undo the stamp write", "撤销落盘"],
       ["Arrows", "nudge.hint", "move 1pt (Shift: 10pt)", "移动 1pt（Shift = 10pt）"],
@@ -1830,6 +1832,20 @@ window.__autoStampMock = (function () {
   }
   function wireKeys() {
     window.addEventListener("keydown", function (e) {
+      // SM1 mirror: F1/F2 toggle the placement modes (F-keys are not text,
+      // so they answer even while a field is focused).
+      if (e.key === "F1") {
+        e.preventDefault();
+        setAddMode(S.addMode === "normal" ? "off" : "normal");
+        applySealMode();
+        return;
+      }
+      if (e.key === "F2") {
+        e.preventDefault();
+        setAddMode(S.addMode === "crosspage" ? "off" : "crosspage");
+        applySealMode();
+        return;
+      }
       var tag = (e.target.tagName || "").toLowerCase();
       if (tag === "input" || tag === "select" || tag === "textarea") return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "o") { e.preventDefault(); setState("opened"); }
@@ -1840,7 +1856,13 @@ window.__autoStampMock = (function () {
       else if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); stampIntoPDF(); }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undoStamping(); }
       else if (e.key === "Delete") removeInstance(S.selId);
-      else if (e.key === "Escape") { setModal(null); clearToast(); setAddMode("normal"); }
+      // SM2 mirror: Esc priority = open dialog -> cancel an active placement
+      // mode -> toast (same chain as app-shell-chrome.onKey).
+      else if (e.key === "Escape") {
+        if (document.documentElement.getAttribute("data-modal")) setModal(null);
+        else if (S.addMode !== "off") setAddMode("off");
+        else clearToast();
+      }
       else if (e.key === "?") setModal("shortcuts");
       else if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown") {
         var step = e.shiftKey ? 10 : 1;
@@ -1857,6 +1879,13 @@ window.__autoStampMock = (function () {
         var p = S.pages[Number(e.key) - 1];
         if (p) { S.current = p.n; layout(); draw(); }
       }
+    });
+    // SM2 mirror: right-click cancels an active placement mode; the native
+    // menu is suppressed only while a mode owns the gesture (app-shell mirror).
+    document.addEventListener("contextmenu", function (e) {
+      if (S.addMode === "off") return;
+      e.preventDefault();
+      setAddMode("off");
     });
   }
 

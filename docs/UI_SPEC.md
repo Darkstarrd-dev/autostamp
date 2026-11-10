@@ -1,6 +1,6 @@
 # AutoStamp — UI_SPEC（P0.5 UI 契约）
 
-> 最后核对：2026-11-10（**T1–T2 = UI6 轮：苹果系商务极简配色 + styled tooltip + CN 排版** —— T1 token 名不变、值全换：亮 = `#1d1d1f`/`#f5f5f7`/`#e9e9ee`/`#d5d8dd` + Apple 蓝 `#0071e3`；暗 = `#1c1c1e`/`#2c2c2e`/`#3a3a3c`/`#48484a` + 暗蓝 `#0a84ff`（accent 填充上文字近黑 `#08131f`）；**两主题正文对比 ≥4.5:1**；字体栈 SF Pro/Segoe UI Variable + PingFang SC/Microsoft YaHei；macOS segmented 选中药丸（不再 accent 实心）；按钮 hover = surface-2、active = surface-3；modal 10px/16px、toast 8px；thin 滚动条、`::selection`、`.14s` 过渡 + `prefers-reduced-motion` 守卫；新增 presentation token `--tooltip-bg`/`--tooltip-fg`。**tooltip 引擎** = `app-shell-chrome.bindTooltips`：`[data-i18n-title]` hover/focus → `.app-tooltip` 反色浮层（bg=`--fg`、fg=`--surface`、8px、12.5px/1.45、320px、140ms；wheel/Esc 即散），**title 仅在 hover/focus 期间摘除、按 stash 原文回挂，`aria-label` 恒不动**（N2 断言仍成立）；T2 = `html:lang(zh-CN)` line-height 1.6 + letter-spacing .01em（en 不加）。契约面：§4 i18n **139 不变**、§6 ui-ids **57 不变**、字段词表 52 不变，无新路由/新字段；§8 新增 T1/T2 决策行。前轮 B1–B2（UI5）/ N1–N4（UI4）见 `docs/changelog/UI_SPEC.md`。）
+> 最后核对：2026-11-10（**SM1–SM2 + CS1 = UI7 轮：放置模式快捷键 + 调色滑杆配对缺陷** —— SM1：F1 = 加章模式切档、F2 = 骑缝放置切档（互斥由既有 setter 承担），快捷键表新增两行；SM2：模式开启态下 **右键**（窗口级 `contextmenu`，仅模式开启时抑制原生菜单）或 **Esc** 取消该态，Esc 优先级 = modal → 放置模式 → toast；顺带修正 right-button 在 stage/affordance 上会误放置/起拖（`button !== 0` 守卫）。CS1（用户颜色 Debug 审核）：三滑杆预览/落盘像素链（UI5-B2）实测绿，真实缺陷 = `bindPlumbing` 的 input capture handler 用 `readField`（= 配对**首个**元素 = 滑杆半边）读值 → 数值孪生框的键入/步进被按滑杆**旧值**写进实例；修复 = 从 `e.target` 取值并保持控件形态语义（`div.seg` = 按下按钮的 `data-value`、checkbox = `checked`、其余走 NUMERIC/`Number`；初版直读 `.value` 把 seg 字段覆写成 `undefined`、骑缝 alternate/none 坏，strip 段钉住后补回）；overlay-sm filter 段新增真实手势钉（拖 range、键入 number，params == 元素值 == 公式像素）。契约面：§4 i18n **139 → 140**（`mode.cancel.hint`）、§6 ui-ids **57 不变**、字段词表 52 不变，无新路由/新字段；§8 新增 SM1/SM2/CS1 决策行。前轮 T1–T2（UI6）/ B1–B2（UI5）见 `docs/changelog/UI_SPEC.md`。）
 
 ## 1. 组件层级与状态机
 
@@ -192,7 +192,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 `#empty-pick-multi`、「过滤」切档 `#empty-pick-filter` 与 pathGrantId chip 已删
 （§6 ui-ids −3、§4 −12 键），`openByPath(path)` 只剩 §7 驱动 API。
 
-## 4. i18n 清单（key | en | cn；共 139 键，SP1 净删 116 → 151、SP5 再删 7 → 144、HD19 再删 12 → 132、Z5 再加 9 → 141、N3 再删 4 → 137、B2 再加 2 → 139，由 `node tools/verify/gen-i18n.mjs` 生成；生成器打印同数）
+## 4. i18n 清单（key | en | cn；共 140 键，SP1 净删 116 → 151、SP5 再删 7 → 144、HD19 再删 12 → 132、Z5 再加 9 → 141、N3 再删 4 → 137、B2 再加 2 → 139、SM 加 1 → 140，由 `node tools/verify/gen-i18n.mjs` 生成；生成器打印同数）
 
 规则（AGENTS §7）：每个可见控件/文案必须有 `data-i18n` key，en/cn 两值非空；
 `data-i18n-cn`（及 `-placeholder`、`-title`）提供中文值，en 取元素自身文本或 `class="tag"` 的字段名。
@@ -243,6 +243,7 @@ SP5 起 `ui.lang` / `ui.theme` 的 §2 行改挂切档**自身文案键**（`lan
 |app.shortcuts.btn|Shortcuts|快捷键|
 |app.sealAddMode.btn|Add-seal mode|添加印章模式|
 |app.sealCrossAddMode.btn|Add cross-page seal mode|添加骑缝章模式|
+|mode.cancel.hint|cancel the placement mode (right-click / Esc)|取消放置模式（右键 / Esc）|
 |app.console.btn|Backend log|后端终端|
 |apply.undo.btn|Undo stamping|撤销盖章|
 |apply.write.btn|Stamp into PDF|盖到 PDF|
@@ -603,6 +604,9 @@ FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 |B2|明度/饱和度调节范围不足（浅红→深红→全黑做不到；现参数只预览不落盘）|用户 ask 选择（2026-11-09）|已确认（用户 ask 选项 =「新增密度滑杆+全部烘焙落盘」）：新增 `api.apply.ink`（密度 = 色阶曲线指数 g，1..10 默认 1），`saturate` 范围 0..3 → **0..5**；三参数**全部烘焙进印章位图**（`pdfcore.AdjustPNG` 落盘链 `Adjust→Rotate→Strips`，前端 `app-overlay.adjustedBitmap` 同公式缓存替换 `ctx.filter` 色链），**预览 == 落盘**；公式 = pow（v′=255·(v/255)^g）→ ×brightness → CSS saturate 矩阵（0.213/0.715/0.072），每步 clamp、四舍五入，alpha 不变，顺序固定|2026-11-09|用户 2026-11-09 ask（两项一批）|
 |T1|前端配色按「苹果、商务、极简」优化（亮/暗两套各自打磨）；tooltip 样式换可控的浮层|用户直接指令（2026-11-10 对话指令：安装 ui-ux-pro-max skill 并按其指引优化）|已确认（用户 2026-11-10 对话指令）：token **名字**不变、**值全换** —— 亮 = Apple 中性灰阶（`--fg #1d1d1f`、`--muted #5f646b`、`--surface #fff`/`#f5f5f7`/`#e9e9ee`、`--border #d5d8dd`、Apple 蓝 `--accent #0071e3`）；暗 = Apple elevated（`#1c1c1e`/`#2c2c2e`/`#3a3a3c`、`--border #48484a`、暗蓝 `#0a84ff`，accent 填充上文字 = 近黑 `#08131f` 对比 ≥4.5）；success/warning/error Apple 色相（亮 warning `#8f5d00`、暗 error `#ff6961`、`#ff9f0a`、`#30d158`）——**两主题正文对比 ≥4.5:1**（ui-ux-pro-max pro-rules 实测：亮 muted 5.5–6.0 / 暗 7.2）。字体栈 = SF Pro/Segoe UI Variable + PingFang SC/Microsoft YaHei/Noto Sans SC。macOS segmented 选中药丸（`surface` 浮起 + 软阴影，不再 accent 实心；语言/主题/导出切档同源）；按钮 hover = surface-2、active = surface-3；modal 10px/16px、toast 8px/10–14px；thin 滚动条、`::selection` accent 26%、`.14s` 过渡 + reduced-motion 守卫。**tooltip 换 styled 浮层**（`.app-tooltip` 引擎 = `app-shell-chrome.bindTooltips`）：`[data-i18n-title]` hover/focus 显示，文本 = 当前语言 pair（`pairFor(el,"title")`，与 N2 同源）；**title 属性仅在 hover/focus 期间摘除（原生 tooltip 抑制），离开时按 stash 原文回挂**——`aria-label` 恒定不动（可及名不丢，N2 的 title/aria-label 断言仍成立）；浮层 = 反色 token（bg=`--fg`、fg=`--surface`，两主题自动反色）、8px 圆角、12.5px/1.45、max-width 320px、140ms 淡入+位移；wheel/Esc 即散。新增 `--tooltip-bg`/`--tooltip-fg` 两个 presentation token|2026-11-10|用户 2026-11-10 对话指令（三项一批）|
 |T2|中英文字间距/行高优化（tooltip 样式与文字间距按语言分别打磨）|用户直接指令（2026-11-10，与 T1 同一批）|已确认：`html:lang(zh-CN)`（真壳 `applyLang` 写 `html.lang="zh-CN"`，mock 同源写 lang → 两个 surface 同一条选择器命中）→ `body { line-height: 1.6; letter-spacing: .01em }`，`.app-tooltip` 同款；en 保持 SF Pro/Segoe 系统原生度量不加 tracking。i18n 键与键数（139）、ui-ids（57）**零变化**|2026-11-10|用户 2026-11-10 对话指令（三项一批）|
+|SM1|F1/F2 切到加章/骑缝放置模式|用户直接指令|已确认（用户 2026-11-10 对话指令）：**F1 = 加章模式切档、F2 = 骑缝放置切档**（`app-shell-chrome.onKey`；互斥由既有 `setAddMode`/`setCrosspageAdd` 承担，`probe('addMode')`/`probe('crosspageAdd')` 与 `#btn-seal-add`/`#btn-crosspage-add` 的 `aria-pressed` 同步）；SHORTCUTS 表新增 F1/F2 行（复用 `app.sealAddMode.btn`/`app.sealCrossAddMode.btn` 键）；钉 = shell-sm SM1（开/关往返、互斥、按钮回显）|2026-11-10|用户 2026-11-10 对话指令（三项一批）|
+|SM2|开启态的加章/骑缝放置模式如何关闭|用户直接指令|已确认（用户 2026-11-10 对话指令）：**右键 / Esc 取消当前放置模式** —— 窗口级 `contextmenu`（仅模式开启时 `preventDefault` 抑制原生菜单，模式关着时右键保持浏览器默认）+ `Escape` 优先级 = modal → 放置模式 → toast；顺带缺陷修正：右按钮 `pointerdown` 在 `#preview-stage`/affordance 上原本会**误放置一条印章并起拖**，现 `button !== 0` 守卫只认左键；SHORTCUTS 表新增取消行（新键 `mode.cancel.hint`，i18n 139→140）；钉 = shell-sm SM2（Esc 取消、右键取消 + 按钮回显）|2026-11-10|用户 2026-11-10 对话指令（三项一批）|
+|CS1|「明度、饱和度、密度三滑块有问题」代码审核|用户直接指令（审核请求；实际情况由实测确定）|已确认（用户 2026-11-10 对话指令）：实测 = UI5-B2 像素链（预览滑杆/落盘烘焙、pow→bright→sat 公式、滑杆↔数值双向同步）**全部仍绿**；真实缺陷只有一个：`bindPlumbing` 的 `input` capture handler 用 `readField(name)` 取配对**首个**元素（= range 半边）的值，且该 handler 先于 target 自身的 pair sync 触发 → **在数值孪生框里键入/步进时，写进实例的是滑杆半边的旧值**（拖 range 一直正确；表现为数值框落后一步）。修复 = capture handler 从 `e.target.value` 读取（按 NUMERIC 尾巴判数字）；钉 = overlay-sm filter 段真实手势（拖 range：param == 元素值且复合 == 公式像素；number 框键 0.5：param=0.5、range 同步、像素 == 公式）|2026-11-10|用户 2026-11-10 对话指令（三项一批）|
 
 SP5 是 2026-11-06 用户在对话里直接下的指令：**右侧边栏整块删除** —— SP1 之后它只剩
 「导出设置 + 动作段」，SP5 把这最后两段也拆掉：「导出设置」段（含 `#estimate` 体积预估）

@@ -576,6 +576,43 @@ async function main() {
   });
   if (keys.rows < 7) bad(`shortcuts table rows = ${keys.rows}, want >= 7 (UI_SPEC §5)`);
 
+  // SM1/SM2 (2026-11-10, user dialogue directive): F1/F2 toggle the two
+  // placement modes (the setters keep them mutually exclusive), and Esc or a
+  // right-click cancels whichever mode is active. Keyboard route = the
+  // synthetic KeyboardEvent pattern this script already uses; the right-click
+  // rides a real contextmenu event.
+  const smodes = await pageErr(`(function(){
+    var s = window.__autoStampShell;
+    function press(key) {
+      document.dispatchEvent(new KeyboardEvent("keydown", {key: key, bubbles: true, cancelable: true}));
+    }
+    var out = {};
+    s.setAddMode(false); s.setCrosspageAdd(false);
+    press("F1");
+    out.f1on = { add: s.probe("addMode"), cross: s.probe("crosspageAdd").on,
+      addBtn: document.querySelector("#btn-seal-add").getAttribute("aria-pressed") };
+    press("F1");
+    out.f1off = s.probe("addMode");
+    press("F2");
+    out.f2on = { cross: s.probe("crosspageAdd").on, add: s.probe("addMode"),
+      crossBtn: document.querySelector("#btn-crosspage-add").getAttribute("aria-pressed") };
+    press("F1"); // mutual exclusion: arming F1 disarms the cross-page mode
+    out.f1excl = { add: s.probe("addMode"), cross: s.probe("crosspageAdd").on };
+    press("Escape"); // SM2: Esc cancels the active mode (no modal is open here)
+    out.esc = { add: s.probe("addMode"), cross: s.probe("crosspageAdd").on };
+    press("F2");
+    document.dispatchEvent(new MouseEvent("contextmenu", {bubbles: true, cancelable: true}));
+    out.rclick = { add: s.probe("addMode"), cross: s.probe("crosspageAdd").on,
+      crossBtn: document.querySelector("#btn-crosspage-add").getAttribute("aria-pressed") };
+    return out;
+  })()`);
+  cmp("F1 arms the add-seal mode (SM1)", smodes.f1on, { add: true, cross: false, addBtn: "true" });
+  cmp("F1 again disarms it (SM1)", smodes.f1off, false);
+  cmp("F2 arms the cross-page mode (SM1)", smodes.f2on, { cross: true, add: false, crossBtn: "true" });
+  cmp("F1 turns the cross-page mode off (SM1 mutual exclusion)", smodes.f1excl, { add: true, cross: false });
+  cmp("Esc cancels the active placement mode (SM2)", smodes.esc, { add: false, cross: false });
+  cmp("right-click cancels the active placement mode (SM2)", smodes.rclick, { add: false, cross: false, crossBtn: "false" });
+
   // SP5 (2026-11-06): the save dialog is the last home of the export vocabulary -
   // #panel-export + #export-mode + #estimate-* now live inside #save-modal, while
   // the sidebar's own #panel-actions / #save-open opener must stay dead.
@@ -812,9 +849,11 @@ async function main() {
   truthy("single PDF drop opened the document (PD2)", gate.pdfOpened === true && gate.pdfDrop.during === true && gate.pdfDrop.after === "off" && gate.pageCount >= 1);
   truthy(`the document title carries version + drop name (HD5): ${JSON.stringify(gate.docTitle)}`,
     gate.docTitle === "AutoStamp " + version + " pasted one.pdf");
-  truthy("pasted image prepared a seal (PD1) without touching instances (HD17)",
+  truthy(
+    `pasted image prepared a seal (PD1) without touching instances (HD17) [paste=${gate.pastePng1} ready=${gate.sealReady} n1=${gate.sealCount1} slate=${JSON.stringify(gate.slate && gate.slate.count)} after=${JSON.stringify(gate.afterPaste1)}]`,
     gate.pastePng1 === true && gate.sealReady === true && gate.sealCount1 >= 1 &&
-      gate.afterPaste1.count === gate.slate.count && gate.afterPaste1.curSeal === true);
+      gate.afterPaste1.count === gate.slate.count && gate.afterPaste1.curSeal === true,
+  );
   truthy("Add-instance snapshots the current seal (HD17)", gate.snapSealed === true);
   truthy(`pasting two images prepares both but creates no instance (HD17): ${JSON.stringify({ base: gate.multiSeals, same: gate.multiSame })}`,
     gate.multiSeals === true && gate.multiSame === true && gate.currentLast === true);
