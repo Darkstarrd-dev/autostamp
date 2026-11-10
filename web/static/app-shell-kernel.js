@@ -39,6 +39,7 @@
     "api.apply.opacity": ["apply", "opacity"],
     "api.apply.brightness": ["apply", "brightness"],
     "api.apply.saturate": ["apply", "saturate"],
+    "api.apply.ink": ["apply", "ink"],
     "api.apply.scale": ["apply", "scale"],
     "api.apply.pos": ["apply", "pos"],
     "api.apply.anchor": ["apply", "anchor"],
@@ -58,7 +59,7 @@
 
 
   const NUMERIC = new Set([
-    "opacity", "brightness", "saturate", "scale", "rotation",
+    "opacity", "brightness", "saturate", "ink", "scale", "rotation",
     "startOffset", "customDpi", "quality", "cover",
   ]);
 
@@ -329,7 +330,7 @@
       // SP1: the seal-prepare options, the split vocabulary and the batch
       // group lost their controls - the server-side defaults (Go config) are
       // what seal/apply/export/split now run on.
-      ["apply", ["blend", "opacity", "brightness", "saturate", "scale", "pos", "anchor", "offset", "rotation", "pages", "crossPage", "binding", "startOffset", "cover"]],
+      ["apply", ["blend", "opacity", "brightness", "saturate", "ink", "scale", "pos", "anchor", "offset", "rotation", "pages", "crossPage", "binding", "startOffset", "cover"]],
       ["export", ["mode", "dpi", "customDpi", "quality", "pages"]],
     ];
     for (const [group, keys] of pairs) {

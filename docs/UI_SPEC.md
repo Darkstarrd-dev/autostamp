@@ -1,28 +1,25 @@
 # AutoStamp — UI_SPEC（P0.5 UI 契约）
 
-> 最后核对：2026-11-09（**N1–N4 = UI4 轮**：N1 初始透明度 = **0.6**（Go/前端 default 早已 0.6，
-> 本轮只复位被测试拖成 1 的会话 settings 值，代码/文案/键零改动）；N2 **说明文字 → tooltip**：
-> 每条**静态** `hintline` 从界面删除，改挂所在 `.field`/行容器的 `data-i18n-title` +
-> `data-i18n-title-cn`（键名与键数不变；动态读数 `#save-source`/`#confirm-path`/
-> `#estimate-total`/`#estimate-per-page`、空态 `.hint`、`#log-console`、`#drop-hint` 仍可见，
-> CSS `.hintline` 规则保留）；N3 **骑缝切片只有随机**：`ui.crosspage.sliceMode` 切档 +
-> `#crosspage-slicemode` 控件 + Go config 三件套整条删除，cp 组控件恒随骑缝实例显示
-> （Z5 的「平均」档作废；请求缺 `slices` 时后端等宽切仍是兜底）；N4 **`api.apply.startOffset`
-> 改百分比 0..100**：0% = 条带**下缘**贴页面下边、100% = 条带**上缘**贴页面上边，几何
-> `travel = pageH − 条带盒高 h`、`Y = (1 − startOffset/100) × travel`（预览 == 落盘；纵拖与
-> 放置点击都换算成同一百分比）。本轮改动：§2 删 `ui.crosspage.sliceMode` 行 +
-> `api.apply.startOffset` 行改 `0..100（%）`、§4 **141 → 137**（删 sliceMode 族 4 键 +
-> `startOffset.ctl`/`.hint` 换文本）、§6 ui-ids **58 → 57**（删 `crosspage-slicemode`）、
-> §8 新增 N1–N4 四行 + Z5 行挂作废注记。同日前一轮 **IP1/IP2 = 印章参数面板停靠轮**
-> （`#instance-panel` 停靠 `#preview` 右缘全高 + `overflow-y:auto`、`posInstancePanel` 锚点链
-> 删除只留 show/hide，契约面零变化；AGENTS §5.44）。更早一轮 **Z5 = 骑缝切片模拟轮**（覆盖率
-> 滑杆 + 重新随机按钮 + 随机取值写 `api.apply.slices`；其「平均|随机」切档已由本轮 N3 作废，
-> 见 §8 Z5 行注记）。再早 **Z1–Z4 = 盖章默认值与骑缝旋转轮**（blend 默认 multiply、42 mm
-> `autoScale()`、骑缝实例单击可选、先旋转整枚再切竖条）。上一轮 **HD19 = 空态简化**、
-> **SP5 = 右侧边栏退场**、**更早一轮 SP1–SP4 = 侧栏收尾轮**。历史计数链 i18n
-> 266 → 267 → 151 → 144 → 132 → 141 → **137**、ui-ids 96 → 63 → 59 → 56 → 58 → **57**；
-> HD13–HD18、HD1–HD7、顶栏收尾（2026-11-03）、V4–V7 与 P2–P6 接线记录沿用
-> 2026-10-30/11-02/11-03，历轮过程叙述见 `docs/changelog/`。
+> 最后核对：2026-11-09（**B1–B2 = UI5 轮**：B1 **骑缝选择框 = 整章轮廓**——选中框宽 =
+> `scale × 页显示宽`（整章 fullW）、贴装订边（right 绑边 `x = pageW − w`）、高 = `w /`
+> 章纵横比（与普通章同一算法），页面内仍只画该页条带，条带落在轮廓之内
+>（`app-overlay.outlineFor`/`state.outlines`，`probe('strips')` 回显 `ox/oy/ow/oh`，
+> 不新增字段/路由）；B2 **调色烘焙落盘 + 密度滑杆**：新增 `api.apply.ink`（密度 = 色阶
+> 曲线指数 g，1..10 默认 1），`saturate` 范围 **0..3 → 0..5**，`apply` 三参数
+> `brightness/saturate/ink` **全部烘进印章位图**（落盘 `pdfcore.AdjustPNG`，链序
+> 调色→旋转→切片；前端 `app-overlay.adjustedBitmap` 同公式缓存替换 `ctx.filter` 色链），
+> 公式 = `v′=255·(v/255)^g` → `×brightness` → CSS saturate 矩阵（0.213/0.715/0.072），
+> 每步 clamp、四舍五入，alpha 不变，**预览 == 落盘**；旧「brightness/saturate 仅预览、
+> 发送即 400」语义作废）。本轮改动：§2 新增 `api.apply.ink` 行 + brightness/saturate 行
+> 换烘焙语义、§4 **137 → 139**（ink 族 2 键）、§6 ui-ids **57 不变**（密度滑杆无独立
+> id）、§8 新增 B1/B2 两行。同日前一轮 **N1–N4 = UI4 轮**（初始透明度 0.6 复位、静态
+> hintline → tooltip、骑缝切片仅随机 + `sliceMode` 整条删除、`startOffset` 改 0..100
+> 百分比，§4 141 → 137、ui-ids 58 → 57）。更早一轮 **IP1/IP2 = 参数面板停靠轮**
+>（AGENTS §5.44）。再早 **Z5 = 骑缝切片模拟轮**、「Z1–Z4 = 盖章默认值与骑缝旋转轮」。
+> 上一轮 **HD19 = 空态简化**、**SP5 = 右侧边栏退场**、**更早 SP1–SP4 = 侧栏收尾轮**。
+> 历史计数链 i18n 266 → 267 → 151 → 144 → 132 → 141 → 137 → **139**、ui-ids 96 → 63 →
+> 59 → 56 → 58 → **57**；HD13–HD18、HD1–HD7、顶栏收尾（2026-11-03）、V4–V7 与 P2–P6
+> 接线记录沿用 2026-10-30/11-02/11-03，历轮过程叙述见 `docs/changelog/`。
 > 本文是 **UI 语义唯一权威**：字段名/取值域/控件绑定/DOM id/状态机
 > 在此冻结；P0 起 `web/static/index.html` 必须照 §1 骨架与 §7 id 搭建，P1–P5 只换数据源。
 > 与 `AGENTS.md` §6 路由字段冲突时：先改本文 + §6（同一提交），再改代码。
@@ -93,8 +90,9 @@ field=api.seal.prepare.resampleDpi api=seal.prepare.resampleDpi type=number rang
 field=api.seal.preset.presetName api=seal.preset.presetName type=text range=string default=- nullable=no ctl=no i18nkey=- decision=SP1
 field=api.apply.blend api=apply.blend type=select-grouped range=16blend词表 default=multiply nullable=no ctl=yes i18nkey=api.apply.blend.ctl decision=Z1
 field=api.apply.opacity api=apply.opacity type=slider+number range=0..1 default=0.6 nullable=no ctl=yes i18nkey=api.apply.opacity.ctl decision=-
-field=api.apply.brightness api=apply.brightness type=slider+number range=0..2 default=1 nullable=no ctl=yes i18nkey=api.apply.brightness.ctl decision=-
-field=api.apply.saturate api=apply.saturate type=slider+number range=0..3 default=1 nullable=no ctl=yes i18nkey=api.apply.saturate.ctl decision=-
+field=api.apply.brightness api=apply.brightness type=slider+number range=0..2 default=1 nullable=no ctl=yes i18nkey=api.apply.brightness.ctl decision=B2
+field=api.apply.saturate api=apply.saturate type=slider+number range=0..5 default=1 nullable=no ctl=yes i18nkey=api.apply.saturate.ctl decision=B2
+field=api.apply.ink api=apply.ink type=slider+number range=1..10 default=1 nullable=no ctl=yes i18nkey=api.apply.ink.ctl decision=B2 unit=曲线指数 g
 field=api.apply.scale api=apply.scale type=slider+number range=0.05..5.0 default=0.202 nullable=no ctl=yes i18nkey=api.apply.scale.ctl decision=HD12,Z2 unit=相对页宽分数
 field=api.apply.pos api=apply.pos type=text range=x,y default=- nullable=no ctl=no i18nkey=- decision=HD12 unit=pt
 field=api.apply.anchor api=apply.anchor type=segmented range=tl|tr|center|bl|br default=center nullable=no ctl=no i18nkey=- decision=HD12
@@ -135,8 +133,11 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 语义要点（实测见 FACTS，不得凭记忆改）：
 - `api.apply.opacity` → 落盘 `ExtGState /CA /ca`（pdfcpu `opacity:` 同义，FACTS §2.1）；
   `api.apply.blend` → `blend.go` 注入 `/BM`（pdfcpu 不写 `/BM`，FACTS §2.2）。
-- `api.apply.brightness/saturate` 只在预览（`ctx.filter`），**落盘不写**；每层叠加前显式
-  `ctx.filter='none'`（FACTS §1.4 的污染坑）。
+- `api.apply.brightness/saturate/ink` **烘焙进印章位图**（UI5-B2，§8 B2）：落盘前
+  `pdfcore.AdjustPNG` 逐像素，预览走 `app-overlay.adjustedBitmap`（同公式缓存记忆化）——
+  公式 = 通道依次 **pow（ink：v′=255·(v/255)^g）→ ×brightness → CSS saturate 矩阵**
+  （常数 0.213/0.715/0.072），每步 clamp 0..255、四舍五入，alpha 不变；顺序固定不可换。
+  旧「只在预览、落盘不写」语义作废；`ctx.filter='none'` 显式复位仍保留（FACTS §1.4）。
 - `api.apply.scale` 是相对页宽分数：滑杆范围 **10%..200%**（0.1..2.0），最左 10%、最右 200%，
   默认（settings 字段）0.202 = 20.2%；**新放置与 `#instance-reset` 复位的实例取 Z2 自动值 =
   42 mm 印章宽 ÷ 页显示宽**（`autoScale()`：竖版页的宽就是短边，A4 竖版 = 0.2008 = 42/210，即
@@ -186,9 +187,9 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 | 顶栏 · 最近印章下拉（`#seal-recent-select`） | `decision.seal.recentSeals` | `<select>`（名称去后缀，value=路径） | `fs/pick{filePath}` → `seal/prepare(pathGrantId)`；文件没了 → 移除选项 + `PATCH settings` |
 | 顶栏 · 加章模式开关（`#btn-seal-add`） | `ui.seal.addMode` | toggle button（`aria-pressed`，SVG） | 无请求；开启后左键点击页面空白处 = 在该点新增实例 |
 | 顶栏 · 骑缝章放置开关（`#btn-crosspage-add`） | `ui.seal.crosspageAddMode` | toggle button（`aria-pressed`，SVG 骑缝） | 无请求；开启后左键点击页面空白处 = 骑缝条带实例（点击 y → `startOffset`，装订边锚定，SP4）|
-| 主画布 · 选中实例（`#stamp-layer`） | 普通实例：`apply.offset`（拖框）/ `apply.scale`（四角手柄、`+/−` 快捷键，滑杆回显；Ctrl+滚轮 = 全局整页缩放，V7 取代 V3）/ `apply.rotation`（顶部手柄）。骑缝实例（SP4）：纵拖 = `apply.startOffset`（水平不拖），四角/旋转手柄同普通 | 虚线框 + 手柄 | 无请求（叠加层内部状态） |
+| 主画布 · 选中实例（`#stamp-layer`） | 普通实例：`apply.offset`（拖框）/ `apply.scale`（四角手柄、`+/−` 快捷键，滑杆回显；Ctrl+滚轮 = 全局整页缩放，V7 取代 V3）/ `apply.rotation`（顶部手柄）。骑缝实例（SP4）：纵拖 = `apply.startOffset`（水平不拖），四角/旋转手柄同普通；**选择框 = 整章轮廓（UI5-B1：宽 fullW、贴装订边、高同普通章；页面内仍只画该页条带，条带落在轮廓内）** | 虚线框 + 手柄 | 无请求（叠加层内部状态） |
 | 实例参数面板（右缘停靠） · 混合模式（`#instance-panel`） | `api.apply.blend` | 分组 `<select>` | `/api/pdf/apply` |
-| 实例参数面板（右缘停靠） · 透明度/明度/饱和度/缩放/旋转 | `api.apply.opacity/brightness/saturate/scale/rotation` | 滑杆 + 数值（双向绑定；scale 10%..200%，可被拖角超出；rotation −180..180） | 同上 / 仅预览 |
+| 实例参数面板（右缘停靠） · 透明度/明度/饱和度/密度/缩放/旋转 | `api.apply.opacity/brightness/saturate/ink/scale/rotation` | 滑杆 + 数值（双向绑定；scale 10%..200%，可被拖角超出；ink 1..10 曲线指数；rotation −180..180） | 同上（bright/sat/ink 烘焙进印章像素并随 apply 发送，UI5-B2） |
 | 实例参数面板（右缘停靠） · 装订边 + 起始位置（SP4，仅骑缝实例显示；`startOffset` = 百分比 0..100，N4） | `ui.crosspage.binding` / `api.apply.startOffset` | segmented（纵向堆叠）+ 滑杆/数值 | 同上（几何见 §8 D2/SP4/N4） |
 | 实例参数面板（右缘停靠） · 覆盖率滑杆（Z5，仅骑缝实例显示，N3 起恒随 cp 组） | `ui.crosspage.cover` | 滑杆 + 数值（0..100%） | settings（`apply.cover`）；改动即时重掷分布 |
 | 实例参数面板（右缘停靠） · 重新随机（Z5，`#crosspage-retry`） | 重试 = 对选中骑缝实例重新取值一次 | button | 无请求（新分布随下一次 `apply` 落盘） |
@@ -216,7 +217,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 `#empty-pick-multi`、「过滤」切档 `#empty-pick-filter` 与 pathGrantId chip 已删
 （§6 ui-ids −3、§4 −12 键），`openByPath(path)` 只剩 §7 驱动 API。
 
-## 4. i18n 清单（key | en | cn；共 137 键，SP1 净删 116 → 151、SP5 再删 7 → 144、HD19 再删 12 → 132、Z5 再加 9 → 141、N3 再删 4 → 137，由 `node tools/verify/gen-i18n.mjs` 生成；生成器打印同数）
+## 4. i18n 清单（key | en | cn；共 139 键，SP1 净删 116 → 151、SP5 再删 7 → 144、HD19 再删 12 → 132、Z5 再加 9 → 141、N3 再删 4 → 137、B2 再加 2 → 139，由 `node tools/verify/gen-i18n.mjs` 生成；生成器打印同数）
 
 规则（AGENTS §7）：每个可见控件/文案必须有 `data-i18n` key，en/cn 两值非空；
 `data-i18n-cn`（及 `-placeholder`、`-title`）提供中文值，en 取元素自身文本或 `class="tag"` 的字段名。
@@ -231,14 +232,16 @@ SP5 起 `ui.lang` / `ui.theme` 的 §2 行改挂切档**自身文案键**（`lan
 |api.apply.blend.ctl|apply.blend|混合模式|
 |api.apply.blend.hint|16 blend modes (PDF Table 136) grouped; backend writes ExtGState /BM.|16 种 PDF 混合模式（PDF 表 136），分组选择器；落盘写 ExtGState /BM。|
 |api.apply.brightness.ctl|apply.brightness 0..2|明度|
-|api.apply.brightness.hint|Preview-only (canvas filter), not written to PDF.|仅预览（前端 ctx.filter brightness），落盘不写。|
+|api.apply.brightness.hint|0..2; channel coefficient baked into the seal pixels before stamping; disk == preview.|0..2；通道 ×系数后烘焙进印章位图，落盘像素与预览一致（UI5-B2）。|
 |api.apply.crossPage.ctl|apply.crossPage|骑缝章|
+|api.apply.ink.ctl|apply.ink 1..10|密度|
+|api.apply.ink.hint|Levels curve v′=255·(v/255)^g (g=1..10): pale red to deep red to black; baked first, before brightness/saturate; disk == preview.|色阶曲线 v′=255·(v/255)^g（g=1..10）：浅红→深红→全黑；先于明度/饱和度烘焙进印章位图（UI5-B2）。|
 |api.apply.opacity.ctl|apply.opacity 0..1|透明度|
 |api.apply.opacity.hint|0..1 writes ExtGState /CA and /ca.|0..1，落盘 ExtGState /ca /CA（pdfcpu opacity 同义）。|
 |api.apply.rotation.ctl|apply.rotation|旋转（度）|
 |api.apply.rotation.hint|Degrees around the seal centre.|-180 到 180；印章绕自身中心旋转。|
-|api.apply.saturate.ctl|apply.saturate 0..3|饱和度|
-|api.apply.saturate.hint|Preview-only (canvas filter), not written to PDF.|仅预览（前端 ctx.filter saturate），落盘不写。|
+|api.apply.saturate.ctl|apply.saturate 0..5|饱和度|
+|api.apply.saturate.hint|0..5 (0 = gray); CSS saturation matrix baked into the seal pixels; disk == preview.|0..5（0=灰度）；CSS 饱和矩阵烘焙进印章位图，落盘像素与预览一致（UI5-B2）。|
 |api.apply.scale.ctl|apply.scale|印章宽度（相对页宽）|
 |api.apply.scale.hint|Seal width as a fraction of page width; slider 10%..200%, corner-drag can exceed and echoes back on the slider. Fresh stamps use the Z2 auto scale = 42 mm over the page's display width.|印章宽度为相对页宽分数；滑杆最左 10%、最右 200%，拖动边角可超出范围并回显在滑杆上（A4 = 595.3pt）。新放置/复位的印章按 Z2 自动缩放 = 42 mm 章宽 ÷ 页显示宽（A4 竖版即 0.2008）。|
 |api.apply.startOffset.ctl|apply.startOffset|起始位置（%）|
@@ -621,6 +624,8 @@ FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 |N2|每条选项说明还留在界面上吗|用户直接指令|已确认（用户 2026-11-09 对话指令）：**说明文字全量转 tooltip** —— 每条**静态** `hintline`（`X.hint`）从界面删除，说明文本改挂所在 `.field`/行容器：`data-i18n-title="X.hint"` + `data-i18n-title-cn="<cn 原文逐字>"`（`applyLang` 的 `[data-i18n-title]` → `title` + `aria-label` 通道已存在，无需改 JS）。**i18n 键名与键数不变**（141 中只有 4 个随 N3 删）。保持可见的动态读数不转 tooltip：`#save-source`、`#confirm-path`（`top.file.hint`）、`#estimate-total`/`#estimate-per-page` 读数行（`export.estimate.hint`）、空态 `.hint`（`empty.hint`）、`#log-console`、`#drop-hint`；`export.estimate.note` 改转 title 挂 `#estimate-total` 容器。CSS `.hintline` 规则保留（仍有可见读数使用）|2026-11-09|用户 2026-11-09 对话指令（四项一批）|
 |N3|骑缝切片的「平均\|随机」切档还保留吗|用户直接指令|已确认（用户 2026-11-09 对话指令）：**整条作废** —— `ui.crosspage.sliceMode` 字段（settings 组 `apply.sliceMode`）、`#crosspage-slicemode` 控件与 Go config 三件套（`types.go` 的 `SliceMode`、`defaults.go` 的 `SliceMode: "even"`、`patch.go` 的指针字段 + `setStr`、`sanitize.go` 的 even\|random 校验）全部删除，**无迁移**：旧 settings.json 的 `sliceMode` 键由 Unmarshal 静默忽略（无 `DisallowUnknownFields`）。cp 组的覆盖率滑杆与 `#crosspage-retry` **恒随骑缝实例显示**（`.cp-rand` 类与 `syncCpGroup` 的 declared 读取删除）；新骑缝实例与 `#instance-reset` 复位都立即随机取值（现状即如此，只是不再有平均分支）。`api/apply.go` 的 `slices` 词表与「无 `slices` = 等宽切」的后端兜底**不动**，UI 不再暴露平均。i18n 删 4 键（`ui.crosspage.sliceMode.ctl`/`.hint`、`sliceMode.even`、`sliceMode.random`）→ **137**；§6 ui-ids 删 `crosspage-slicemode` → **57**；`crosspage.retry.noRandom` 键保留（非骑缝实例按重试仍告警）|2026-11-09|用户 2026-11-09 对话指令（四项一批）|
 |N4|`api.apply.startOffset` 的取值域与语义|用户直接指令|已确认（用户 2026-11-09 对话指令）：**改成百分比 0..100** —— 字段名不变，**0% = 条带下缘贴页面下边、100% = 条带上缘贴页面上边**。几何 `travel = pageH_disp − 条带盒高 h`（= `scale × pageW × aspect` 的整章盒高）、`box.Y = (1 − startOffset/100) × travel`（`travel` 可为负 = 盒比页高，钳位照旧），预览 `app-overlay.rectFor` 与落盘 `pdfcore.StampGeom.Box` 同一公式（`Y: g.StartOffset` → 百分比公式）。滑杆/数框 `min 0 max 100 step 1`，ctl 文案 = 「起始位置（%）」，hint 换 §4 新文本。Go：`sanitize.go` 的 StartOffset 0..200 pt → 0..100（消息「0..100 %」）、`api/apply.go` 校验同步（`defaultApplyStartOffset` 仍 0）。纵拖 = `newPct = basePct − dy/(pageH − rect.h) × 100`（clamp 0..100、`toFixed(2)`，`travel ≈ 0` 时不写）；放置点击 = `pct = clamp(round1((1 − pt.y/(pageH − h)) × 100), 0, 100)`|2026-11-09|用户 2026-11-09 对话指令（四项一批）|
+|B1|骑缝实例选择框形态（用户报「普通章与骑缝章 boundingbox 不一致 → 初始大小不一致」）|用户 ask 选择（2026-11-09）|已确认（用户 ask 选项 =「整章轮廓框」）：骑缝实例的**选择框/四角/旋转手柄/hitTest/拖拽基准 = 整章轮廓**（w = `scale × pageW`、贴装订边、高 = `fullW × aspect` 同普通章、y = N4 百分比公式），跨页每页都显示轮廓（Z5 gap 页也显示轮廓但无条带像素）；页面内仍只画该页条带，条带落在轮廓内；四角按整章宽调 scale（与普通章同语义）。落盘几何（条带切片/`Box`）不变——轮廓只是 affordance|2026-11-09|用户 2026-11-09 ask（两项一批）|
+|B2|明度/饱和度调节范围不足（浅红→深红→全黑做不到；现参数只预览不落盘）|用户 ask 选择（2026-11-09）|已确认（用户 ask 选项 =「新增密度滑杆+全部烘焙落盘」）：新增 `api.apply.ink`（密度 = 色阶曲线指数 g，1..10 默认 1），`saturate` 范围 0..3 → **0..5**；三参数**全部烘焙进印章位图**（`pdfcore.AdjustPNG` 落盘链 `Adjust→Rotate→Strips`，前端 `app-overlay.adjustedBitmap` 同公式缓存替换 `ctx.filter` 色链），**预览 == 落盘**；公式 = pow（v′=255·(v/255)^g）→ ×brightness → CSS saturate 矩阵（0.213/0.715/0.072），每步 clamp、四舍五入，alpha 不变，顺序固定|2026-11-09|用户 2026-11-09 ask（两项一批）|
 
 SP5 是 2026-11-06 用户在对话里直接下的指令：**右侧边栏整块删除** —— SP1 之后它只剩
 「导出设置 + 动作段」，SP5 把这最后两段也拆掉：「导出设置」段（含 `#estimate` 体积预估）

@@ -107,6 +107,18 @@ func TestSanitizeClampsAndReports(t *testing.T) {
 			"binding=none while apply.crossPage=true",
 		},
 		{
+			"ink below the floor 1 clamps up (UI5-B2)",
+			func(s *Settings) { s.Apply.Ink = 0 },
+			func(s *Settings) bool { return s.Apply.Ink == 1 },
+			"apply.ink 0 out of 1..10",
+		},
+		{
+			"saturate above the ceiling 5 clamps down (B2 moved it from 3)",
+			func(s *Settings) { s.Apply.Saturate = 7 },
+			func(s *Settings) bool { return s.Apply.Saturate == 5 },
+			"apply.saturate 7 out of 0..5",
+		},
+		{
 			"quality outside 40..95 is clamped",
 			func(s *Settings) { s.Export.Quality = 99 },
 			func(s *Settings) bool { return s.Export.Quality == 95 },
@@ -183,12 +195,15 @@ func TestParseHelpers(t *testing.T) {
 func TestPatchMergeKeepsOtherGroups(t *testing.T) {
 	s := Default()
 	before := s
-	p := Patch{Apply: &PatchApply{Opacity: new(0.42)}}
-	Merge(&s, &p)
-	if s.Apply.Opacity != 0.42 {
-		t.Errorf("apply.opacity = %v, want 0.42", s.Apply.Opacity)
+	if s.Apply.Ink != 1 || s.Apply.Saturate != 1 {
+		t.Fatalf("the shipped defaults must carry the bake group: ink = %v, saturate = %v", s.Apply.Ink, s.Apply.Saturate)
 	}
-	if s.Apply.Blend != before.Apply.Blend || s.Apply.Scale != before.Apply.Scale {
+	p := Patch{Apply: &PatchApply{Opacity: new(0.42), Ink: new(4.5), Saturate: new(5.0)}}
+	Merge(&s, &p)
+	if s.Apply.Opacity != 0.42 || s.Apply.Ink != 4.5 || s.Apply.Saturate != 5 {
+		t.Errorf("apply patch merge = %+v, want the three sent fields", s.Apply)
+	}
+	if s.Apply.Blend != before.Apply.Blend || s.Apply.Scale != before.Apply.Scale || s.Apply.Brightness != before.Apply.Brightness {
 		t.Errorf("sibling apply fields changed: %+v", s.Apply)
 	}
 	if s.Export != before.Export || s.Split != before.Split || s.UI != before.UI {

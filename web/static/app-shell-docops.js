@@ -484,6 +484,11 @@
           opacity: S.numAt(p, "api.apply.opacity", "api.apply.opacity"),
           scale: S.numAt(p, "api.apply.scale", "api.apply.scale"),
           rotation: S.numAt(p, "api.apply.rotation", "api.apply.rotation"),
+          // UI5-B2: color tuning bakes into the seal pixels server-side
+          // (the disk mirror is pdfcore.AdjustPNG with the same formulas).
+          brightness: S.numAt(p, "api.apply.brightness", "api.apply.brightness"),
+          saturate: S.numAt(p, "api.apply.saturate", "api.apply.saturate"),
+          ink: S.numAt(p, "api.apply.ink", "api.apply.ink"),
           pages: p["api.apply.pages"] !== undefined ? p["api.apply.pages"] : S.readField("api.apply.pages"),
           crossPage: Boolean(p["api.apply.crossPage"]),
           sealId: i.sealId,

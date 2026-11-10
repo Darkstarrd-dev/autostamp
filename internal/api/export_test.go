@@ -219,7 +219,7 @@ func TestExportRouteVectorSubsetPages(t *testing.T) {
 }
 
 // webx.DecodeJSON uses DisallowUnknownFields: raster-only vocabulary in a
-// vector body is a 400, exactly like apply rejecting brightness/saturate.
+// vector body is a 400, exactly like apply rejecting an instance field outside its vocabulary.
 func TestExportRouteVectorRejectsUnknownFields(t *testing.T) {
 	mux, _, _ := newTestMux(t)
 	session := newSession(t)

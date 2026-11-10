@@ -2,6 +2,18 @@
 
 > `docs/FACTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-10 — §1.10 新增：调色烘焙「预览 == 落盘」金值与端到端（UI5-B2）
+
+- 新增 §1.10（UI5-B2，实测 2026-11-09）：契约公式顺序（pow→×brightness→CSS saturate 矩阵
+  0.213/0.715/0.072，每步 clamp、末步 round、alpha 不变）+ 落盘链序（调色→旋转→切条）+
+  `adjust_test.go` 金值表（fixture (200,40,40)：g=3→(123,1,1)、bright 1.5→(255,60,60)、
+  sat 0→(74,74,74)、链 g=3→bright1.5→sat0.5→(113,21,21) 等）+ identity(1,1,1) 字节恒等 +
+  JPEG 进 PNG 出（Δ ≤ 2）。
+- 端到端：`apply-sm --only=color`（ink 2.2 / bright 0.8 / sat 1.5）落盘回读 == 公式独立重算
+  (111,18,53) Δ ≤ 3；Go 侧 `apply_test.go` `ExtractImagesFile` 直读位图独立重算 ±1。
+- §5.1：`apply-sm` 行 token 补 `perpage|color`、引用 §1.10；头「最后核对」= UI5-B2。
+
+
 ## 2026-11-03 — §4.3 新增：UPX 极限压缩实测（`buildm.ps1`）
 
 - 输入 20,226,048 B（webview+strip）→ `upx --ultra-brute` 6,157,312 B（30.44%，98.5 s）；

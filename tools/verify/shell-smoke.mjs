@@ -1060,6 +1060,24 @@ async function main() {
         out.stripEdge = pr.strips[0] ? pr.strips[0].edge : null;
         out.stripIndex = pr.strips[0] ? pr.strips[0].index : null;
       })();
+      // UI5-B1: the cross-page selection frame = whole-seal outline - the DOM
+      // box width equals the full seal width (strip.w/ow ratio), and the
+      // outline hugs the binding edge: ox + ow == pageW (right binding).
+      out.xOutline = (function () {
+        var pr = s.probe("strips");
+        var st0 = pr.strips && pr.strips[0];
+        var ov = window.__autoStampOverlay;
+        var el = document.querySelector('#stamp-layer .instance[data-mode="crosspage"]');
+        var sb = el ? el.querySelector(".sel-box") : null;
+        var sbR = sb ? sb.getBoundingClientRect() : null;
+        var metaW = ov.state ? ov.state.meta.width : 0;
+        var sc = ov.state.scale;
+        return {
+          ow: st0 ? st0.ow : null,
+          edgeOk: Boolean(st0) && Math.abs(st0.ox + st0.ow - metaW) <= 2,
+          boxWOk: Boolean(sbR && st0) && Math.abs(sbR.width - st0.ow * sc) <= 3,
+        };
+      })();
       // Z5 (2026-11-09): 随机-only slice simulation (UI4-N3 deleted the 平均
       // branch and its mode segment). The deterministic core checks pin the
       // user's mechanism (cover rounds the covered middle; first 25..50 / last
@@ -1228,6 +1246,8 @@ async function main() {
       hd.xAffordance.handles === 5);
   truthy(`Z3: a bare click on the strip re-selects it and shows the box (no press-and-hold): ${JSON.stringify(hd.xClick)}`,
     hd.xClick && hd.xClick.selected === true && hd.xClick.boxVisible === true && hd.xClick.state === "stamp-selected");
+  truthy(`UI5-B1: cross-page selection box = whole-seal outline (w=fullW, hugs the binding edge): ${JSON.stringify(hd.xOutline)}`,
+    hd.xOutline && hd.xOutline.ow > 0 && hd.xOutline.edgeOk && hd.xOutline.boxWOk);
   truthy(`SP4: the panel cp group shows for the cross-page selection and echoes the vocabulary (startOffset back as 0..100 %): ${JSON.stringify(hd.cpProbe)}`,
     hd.cpProbe && hd.cpProbe.on === true && hd.cpProbe.cpFields === 4 &&
       hd.cpProbe.binding === "right" && hd.cpProbe.startOffset >= 0 && hd.cpProbe.startOffset <= 100 &&

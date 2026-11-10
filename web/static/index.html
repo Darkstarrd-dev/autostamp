@@ -150,15 +150,22 @@
       <div class="field">
         <div class="flabel"><span data-i18n="api.apply.brightness.ctl" data-i18n-cn="明度">apply.brightness 0..2</span></div>
         <div class="num-pair">
-          <input data-field="api.apply.brightness" type="range" min="0" max="2" step="0.05" value="1" aria-label="brightness" data-i18n-title="api.apply.brightness.hint" data-i18n-title-cn="仅预览（前端 ctx.filter brightness），落盘不写。">
+          <input data-field="api.apply.brightness" type="range" min="0" max="2" step="0.05" value="1" aria-label="brightness" data-i18n-title="api.apply.brightness.hint" data-i18n-title-cn="0..2；通道 ×系数后烘焙进印章位图，落盘像素与预览一致（UI5-B2）。">
           <input data-field="api.apply.brightness" type="number" min="0" max="2" step="0.05" value="1" aria-label="brightness">
         </div>
       </div>
       <div class="field">
-        <div class="flabel"><span data-i18n="api.apply.saturate.ctl" data-i18n-cn="饱和度">apply.saturate 0..3</span></div>
+        <div class="flabel"><span data-i18n="api.apply.saturate.ctl" data-i18n-cn="饱和度">apply.saturate 0..5</span></div>
         <div class="num-pair">
-          <input data-field="api.apply.saturate" type="range" min="0" max="3" step="0.05" value="1" aria-label="saturate" data-i18n-title="api.apply.saturate.hint" data-i18n-title-cn="仅预览（前端 ctx.filter saturate），落盘不写。">
-          <input data-field="api.apply.saturate" type="number" min="0" max="3" step="0.05" value="1" aria-label="saturate">
+          <input data-field="api.apply.saturate" type="range" min="0" max="5" step="0.05" value="1" aria-label="saturate" data-i18n-title="api.apply.saturate.hint" data-i18n-title-cn="0..5（0=灰度）；CSS 饱和矩阵烘焙进印章位图，落盘像素与预览一致（UI5-B2）。">
+          <input data-field="api.apply.saturate" type="number" min="0" max="5" step="0.05" value="1" aria-label="saturate">
+        </div>
+      </div>
+      <div class="field">
+        <div class="flabel"><span data-i18n="api.apply.ink.ctl" data-i18n-cn="密度">apply.ink 1..10</span></div>
+        <div class="num-pair">
+          <input data-field="api.apply.ink" type="range" min="1" max="10" step="0.05" value="1" aria-label="ink" data-i18n-title="api.apply.ink.hint" data-i18n-title-cn="色阶曲线 v′=255·(v/255)^g（g=1..10）：浅红→深红→全黑；先于明度/饱和度烘焙进印章位图（UI5-B2）。">
+          <input data-field="api.apply.ink" type="number" min="1" max="10" step="0.05" value="1" aria-label="ink">
         </div>
       </div>
       <div class="field">

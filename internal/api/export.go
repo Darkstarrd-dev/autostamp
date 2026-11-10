@@ -7,7 +7,7 @@ package api
 //     or trimmed to the selected pages (pdfcore.TrimPages); nothing is
 //     re-encoded. The body vocabulary is exactly assetId/mode/pages —
 //     webx.DecodeJSON rejects unknown fields, so dpi/quality/customDpi in a
-//     vector body is a 400, same as apply's rejection of brightness/saturate.
+//     vector body is a 400, same as apply rejecting a field outside its vocabulary.
 //   - multipart/form-data → raster: the front-end posts `spec` (a JSON
 //     string) plus one bitmap per page (`page-<n>`, already in display
 //     orientation, AGENTS §5.17); pdfcore.WriteRaster assembles them.

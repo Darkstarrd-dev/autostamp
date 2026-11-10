@@ -2,7 +2,29 @@
 
 > `docs/UI_SPEC.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
-## 2026-11-09 — §8 新增 N1–N4：UI4 轮（透明度 0.6 / 说明转 tooltip / 骑缝仅随机 / startOffset 百分比）
+## 2026-11-10 — §8 新增 B1/B2：UI5 轮（骑缝选择框 = 整章轮廓 / 调色烘焙落盘 + 密度滑杆）
+
+- 头「最后核对」= B1/B2 摘要；UI4 轮降为「同日前一轮」（历轮摘要压成一行注记，禁止堆叠）；
+  计数链 i18n … → 137 → **139**、ui-ids **57 不变**。
+- §2：新增 `api.apply.ink` 词表行（`type=slider+number`、`range=1..10`、`default=1`、
+  `decision=B2`、`unit=曲线指数 g`）；`api.apply.brightness` 行 `range` 保持 0..2 但语义换
+  「烘焙落盘」；`api.apply.saturate` 行 `range=0..3` → **`range=0..5`**。
+- §2 语义要点：新增「`api.apply.brightness/saturate/ink` 烘焙进印章位图」条目（公式
+  pow → ×brightness → CSS saturate 矩阵，链序调色→旋转→切条，预览 == 落盘）；骑缝要点挂
+  B1 括注（选择框 = 整章轮廓）。
+- §3 绑定表：实例参数面板行控件列表 + `ink`（「透明度/明度/饱和度/密度/缩放/旋转」六控件，
+  `ink 1..10 曲线指数`）；骑缝实例行挂 B1 注记（选择框宽 fullW、贴装订边、页面内仍只画条带）；
+  骑缝要点行同挂 B1/B2 注记。
+- §4：**137 → 139**（新增 `api.apply.ink.ctl`/`api.apply.ink.hint` 两键；`api.apply.brightness.hint`
+  /`api.apply.saturate.hint` 换烘焙语义双语文本）；清单头「共 139 键」+ 计数链补 B2。
+- §7.1 驱动清单：`probe('strips')` 每条目新增 `ox/oy/ow/oh`（轮廓读数）。
+- §8：新增 **B1/B2** 两行决策（来源 = 用户 2026-11-09 ask 选择，两项一批；B1 =「整章轮廓框」、
+  B2 =「新增密度滑杆+全部烘焙落盘」；C3/B4 旧「preview-only」条目挂 B2 修订注记）。
+- 本轮契约汇总：i18n **139**、ui-ids **57 不变**、`data-field` +1（`api.apply.ink`）、
+  字段词表 +1、路由/状态/id 不变；门槛 = `build.ps1` 全量 失败 0 / 跳过 0。
+
+
+## 2026-11-09 — §8 新增 N1–N4：UI4 轮（透明度 0.6 / 说明转 tooltip / 仅随机 / startOffset 百分比）
 
 - 头「最后核对」= N1–N4 摘要；IP1/IP2 降为「同日前一轮」、Z5 降为「更早一轮」，历轮摘要压成一行
   注记（禁止堆叠）；计数链 i18n … → 141 → **137**、ui-ids … → 58 → **57**。

@@ -2,6 +2,27 @@
 
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-10 — §5 新增 46/47（UI5 轮 B1/B2：骑缝选择框 = 整章轮廓 + 调色烘焙落盘）+ §6 apply 行换义 + §11 一行
+
+- §5.46（B1）：骑缝实例的选择框 = **整章轮廓**（`outlineFor`：宽 = `scale × 页显示宽`、贴装订边
+  （`strip.edge` 同源）、高 = fullW × 整章（旋转后）bbox 纵横比，与普通章同一算法）；DOM
+  选择框/四角/旋转手柄/hitTest/拖拽基准全部走轮廓（条带仍命中、Z5 gap 页也画轮廓但无条带像素）；
+  `probe('strips')` 每条目新增 `ox/oy/ow/oh` 轮廓读数；落盘几何（条带切片/`Box`）完全不变——
+  轮廓只是 affordance。用户 2026-11-09 ask 选项 =「整章轮廓框」。
+- §5.47（B2）：`api.apply.brightness/saturate/ink`（ink = 曲线指数 g，1..10 默认 1；saturate
+  范围 0..3→**0..5**）三参数**随 apply 发送**并被 `pdfcore.AdjustPNG`（新文件 `internal/pdfcore/adjust.go`）
+  烘进印章像素，顺序 = pow → ×brightness → CSS saturate 矩阵，先调色再旋转再切片（`AdjustPNG →
+  RotatePNG → Strips`）；前端 `app-overlay.js` 用 `adjustedBitmap`（逐像素同公式 + 256 位 pow 查找表，
+  按 (sealId,参数签名) 缓存）替换旧 `ctx.filter` 色链（`drawSeal` 不再设 filter；FACTS §1.4 的
+  `filter='none'` 复位保护仍保留），`effectiveBitmap` = 调色→旋转（rotCache 键进调色签名），
+  **预览 == 落盘**由 apply-sm --only=color 回读 == 公式独立重算（±3）钉死；§5.5「仅预览」语义作废。
+- §6 `POST /api/pdf/apply` 行：实例词表增 `brightness/saturate/ink`（旧「preview-only 故 400」
+  语义作废）；§5.42（Z4）注记保留。
+- §11 新增一行（「改调色烘焙 + 骑缝轮廓框（UI5 B1/B2）」，涉改文件清单含 Go/前端/verify 三面）。
+- 本轮契约汇总：i18n **139**、ui-ids **57 不变**、`data-field` +1（`api.apply.ink`），无新路由/
+  新状态；AGENTS §5 计数 45 后新增 46/47（本轮 2 条决策，AGENTS 累计 §5 条目 = 47）。
+
+
 ## 2026-11-09 — §5 新增 45（UI4 轮 N1–N4）+ §5.43/§5.7/§5.41/§5.42 挂 N3/N4 注记 + §6 括注 + §11 Z5 行换义
 
 - §5.45（新，UI4 轮四项一批）：**N1** 初始透明度 0.6（Go/前端 default 早已 0.6 → 零代码改动，只

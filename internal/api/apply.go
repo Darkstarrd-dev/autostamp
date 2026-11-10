@@ -25,10 +25,11 @@ import (
 // `binding` that ui.crosspage.binding feeds into the same request), sent per
 // instance because the UI keeps a list of instances and each may differ.
 //
-// apply.brightness and apply.saturate are deliberately absent: they are
-// preview-only (ctx.filter) and never written to the PDF (UI_SPEC §2 语义要点).
-// webx.DecodeJSON rejects unknown fields, so sending them is a 400 rather than
-// a silently dropped field.
+// UI5-B2 (2026-11-09, 用户确认): brightness / saturate / ink moved from a
+// preview-only ctx.filter to the request vocabulary, because they now bake
+// into the seal bitmap — pdfcore.AdjustPNG runs ahead of the Z4 rotate-and-
+// slice chain, so 预览 == 落盘 by construction. Absent fields answer the
+// declared defaults (all three = 1, the identity bake).
 type applyBody struct {
 	AssetID   string              `json:"assetId"`
 	Instances []applyInstanceBody `json:"instances"`
@@ -37,11 +38,16 @@ type applyBody struct {
 // applyInstanceBody is one instance. Pointer numbers keep "0" from being
 // ambiguous: opacity 0, startOffset 0 and rotation 0 are real answers, so an
 // absent field falls back to the UI_SPEC default while an explicit 0 is
-// honoured.
+// honoured. The bake sliders (UI5-B2) are pointers for the same reason: 0 is a
+// real answer for brightness/saturate, and absent means the identity (1).
 type applyInstanceBody struct {
-	SealID      string    `json:"sealId"`
-	Blend       string    `json:"blend"`
-	Opacity     *float64  `json:"opacity"`
+	SealID  string   `json:"sealId"`
+	Blend   string   `json:"blend"`
+	Opacity *float64 `json:"opacity"`
+	// The three bake sliders (UI5-B2); the ranges are checked per instance.
+	Brightness  *float64  `json:"brightness"`
+	Saturate    *float64  `json:"saturate"`
+	Ink         *float64  `json:"ink"`
 	Scale       *float64  `json:"scale"`
 	Pos         string    `json:"pos"`
 	Anchor      string    `json:"anchor"`
@@ -61,6 +67,10 @@ const (
 	defaultApplyScale       = 0.202
 	defaultApplyRotation    = 0.0
 	defaultApplyStartOffset = 0.0
+	// UI5-B2: absent sliders mean "no adjustment", i.e. the identity bake.
+	defaultApplyBrightness = 1.0
+	defaultApplySaturate   = 1.0
+	defaultApplyInk        = 1.0
 )
 
 // applyTimeout bounds a stamping run: pdfcpu works page by page and a large
@@ -261,6 +271,31 @@ func resolveInstance(store *tmpstore.Store, owner string, doc *pdfcore.Doc, i in
 	if opacity < 0 || opacity > 1 {
 		return pdfcore.StampInstance{}, "bad_body", label + " opacity 必须在 0..1 之内"
 	}
+
+	// UI5-B2: the three bake sliders feed pdfcore.AdjustPNG, which range-checks
+	// the same vocabulary again; answering 400 here is what keeps a bad slider
+	// out of a 500.
+	bright := defaultApplyBrightness
+	if in.Brightness != nil {
+		bright = *in.Brightness
+	}
+	if bright < 0 || bright > 2 {
+		return pdfcore.StampInstance{}, "bad_body", label + " brightness 必须在 0..2 之内"
+	}
+	sat := defaultApplySaturate
+	if in.Saturate != nil {
+		sat = *in.Saturate
+	}
+	if sat < 0 || sat > 5 {
+		return pdfcore.StampInstance{}, "bad_body", label + " saturate 必须在 0..5 之内"
+	}
+	ink := defaultApplyInk
+	if in.Ink != nil {
+		ink = *in.Ink
+	}
+	if ink < 1 || ink > 10 {
+		return pdfcore.StampInstance{}, "bad_body", label + " ink 必须在 1..10 之内"
+	}
 	scale := defaultApplyScale
 	if in.Scale != nil {
 		scale = *in.Scale
@@ -348,6 +383,10 @@ func resolveInstance(store *tmpstore.Store, owner string, doc *pdfcore.Doc, i in
 		Blend:   b,
 		Pages:   list,
 		Slices:  in.Slices,
+		// UI5-B2: pdfcore bakes these into the bitmap before rotate/slice.
+		Brightness: bright,
+		Saturate:   sat,
+		Ink:        ink,
 	}, "", ""
 }
 

@@ -63,6 +63,7 @@ type Apply struct {
 	Opacity     float64 `json:"opacity"`
 	Brightness  float64 `json:"brightness"`
 	Saturate    float64 `json:"saturate"`
+	Ink         float64 `json:"ink"` // 1..10: the pow curve that bakes into the bitmap (UI5-B2)
 	Scale       float64 `json:"scale"`
 	Pos         string  `json:"pos"`
 	Anchor      string  `json:"anchor"`

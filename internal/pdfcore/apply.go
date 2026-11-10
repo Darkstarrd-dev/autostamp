@@ -40,6 +40,16 @@ type StampInstance struct {
 	Blend   Blend
 	Pages   []int
 
+	// Brightness/Saturate/Ink are the UI5-B2 bake parameters
+	// (api.apply.brightness 0..2 / saturate 0..5 / ink 1..10): the seal bitmap
+	// is adjusted by AdjustPNG *before* RotatePNG/Strips, so what the preview
+	// bakes is what the page carries. A caller that leaves the whole group at
+	// its zero value means "the panel never touched them" -> the identity bake
+	// (see bakeParams); the apply route always fills all three.
+	Brightness float64
+	Saturate   float64
+	Ink        float64
+
 	// Slices is the optional per-slot share of the whole-seal width (Z5):
 	// len == len(Pages), values 0..1; a 0 entry means the slot's page gets no
 	// strip at all. Empty = the even 1/len(Pages) split (the classic behaviour).
@@ -194,11 +204,25 @@ func groupByAppearance(instances []StampInstance) []stampPass {
 // what the preview draws: the same contract values on every page of a
 // heterogeneous document.
 func addInstance(m map[int][]*model.Watermark, doc *Doc, in StampInstance) error {
+	// UI5-B2 (2026-11-09, 用户确认): the colour sliders bake into the bitmap,
+	// and they bake **first**: adjust -> rotate -> slice, the same order
+	// app-overlay.js effectiveBitmap composes (adjustedBitmap -> rotCache ->
+	// strip columns). Identity parameters skip the bake, so a stamp nobody
+	// adjusted still carries the prepared bytes byte-for-byte.
+	base := in.PNG
+	if bright, sat, ink := bakeParams(in); bright != 1 || sat != 1 || ink != 1 {
+		adjusted, err := AdjustPNG(in.PNG, bright, sat, ink)
+		if err != nil {
+			return fmt.Errorf("调色烘焙: %w", err)
+		}
+		base = adjusted
+	}
 	if !in.Geom.CrossPage {
 		for _, p := range in.Pages {
 			// A plain seal keeps its rotation live: pdfcpu rotates the bitmap
 			// about the box (no raster bake - the vector stays untouched).
-			w, err := newStamp(in, doc.Pages[p-1], in.Geom, in.PNG, normalizeAngle(in.Rot))
+			// base, not in.PNG: the bake already ran (identity = same bytes).
+			w, err := newStamp(in, doc.Pages[p-1], in.Geom, base, normalizeAngle(in.Rot))
 			if err != nil {
 				return err
 			}
@@ -219,9 +243,8 @@ func addInstance(m map[int][]*model.Watermark, doc *Doc, in StampInstance) error
 	// and rotating each column in place (the old behaviour) tore the mark in
 	// halves and left the strips rotated against the binding gutter.
 	// The mirror on the preview side is app-overlay.js effectiveBitmap.
-	base := in.PNG
 	if rot := normalizeAngle(in.Rot); rot != 0 {
-		rotated, err := RotatePNG(in.PNG, rot)
+		rotated, err := RotatePNG(base, rot)
 		if err != nil {
 			return fmt.Errorf("骑缝旋转整章: %w", err)
 		}

@@ -7,10 +7,19 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"image"
+	"image/color"
+	"image/draw"
+	"math"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
+
+	pdfapi "github.com/pdfcpu/pdfcpu/pkg/api"
 
 	"autostamp/internal/webx"
 )
@@ -194,7 +203,12 @@ func TestApplyRouteRejectsVocabulary(t *testing.T) {
 		{"slices length mismatch", map[string]any{"crossPage": true, "binding": "right", "pages": "all", "slices": []float64{0.5, 0.5}}},
 		{"slices over the seal width", map[string]any{"crossPage": true, "binding": "right", "pages": "all", "slices": []float64{0.6, 0.6, 0.6}}},
 		{"slices all zero", map[string]any{"crossPage": true, "binding": "right", "pages": "all", "slices": []float64{0, 0, 0}}},
-		{"unknown field (brightness is preview-only)", nil},
+		{"brightness above 2 (UI5-B2)", map[string]any{"brightness": 2.5}},
+		{"saturate above the ceiling 5 (B2 moved it from 3)", map[string]any{"saturate": 5.5}},
+		{"saturate below 0", map[string]any{"saturate": -0.5}},
+		{"ink below the floor 1 (UI5-B2)", map[string]any{"ink": 0.5}},
+		{"ink above the ceiling 10 (UI5-B2)", map[string]any{"ink": 10.5}},
+		{"a bake slider sent as a string, not a number", nil},
 	}
 	mux, _, _ := newTestMux(t)
 	session := newSession(t)
@@ -203,9 +217,9 @@ func TestApplyRouteRejectsVocabulary(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			extra := tc.extra
-			if tc.name == "unknown field (brightness is preview-only)" {
-				// apply.brightness / apply.saturate never reach the PDF, so the
-				// request must not carry them.
+			if tc.name == "a bake slider sent as a string, not a number" {
+				// The bake sliders are numbers; the old percentage label
+				// ("150%") answers 400 on the JSON type, not on the range.
 				raw, err := json.Marshal(map[string]any{
 					"assetId": src,
 					"instances": []map[string]any{
@@ -304,5 +318,181 @@ func TestApplyRouteCrossPageOnSplitAsset(t *testing.T) {
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("uneven-slice apply = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// stampedSealImage applies one instance and reads the stamp bitmap back out of
+// the new asset: pdfcpu writes one image XObject per stamp (the /SMask folds
+// into the extracted file), so what ExtractImagesFile hands back is the pixels
+// the page carries — the disk-side mirror of tools/verify/apply-sm.mjs, which
+// probes the same file through pdf.js.
+func stampedSealImage(t *testing.T, mux http.Handler, session, asset, seal string, extra map[string]any, page string) image.Image {
+	t.Helper()
+	fields := map[string]any{"pages": page}
+	for k, v := range extra {
+		fields[k] = v
+	}
+	rec := applyOne(t, mux, session, asset, seal, fields)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("apply = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+	raw := rawAsset(t, mux, session, dataOf(t, rec)["assetId"].(string))
+	in := filepath.Join(t.TempDir(), "stamped.pdf")
+	if err := os.WriteFile(in, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "imgs")
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := pdfapi.ExtractImagesFile(context.Background(), in, out, []string{page}, nil); err != nil {
+		t.Fatalf("reading the stamped seal back: %v", err)
+	}
+	fs, err := os.ReadDir(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fs) != 1 {
+		t.Fatalf("page %s carries %d stamped images, want exactly one", page, len(fs))
+	}
+	b, err := os.ReadFile(filepath.Join(out, fs[0].Name()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, _, err := image.Decode(bytes.NewReader(b))
+	if err != nil {
+		t.Fatalf("the extracted stamp (%s) is not a decodable bitmap: %v", fs[0].Name(), err)
+	}
+	return img
+}
+
+// nrgbaAt samples one pixel as straight alpha: the bake contract speaks in
+// un-premultiplied channels, so whatever format the decoder picked goes through
+// draw.Src into an NRGBA cell.
+func nrgbaAt(img image.Image, x, y int) color.NRGBA {
+	cell := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+	draw.Draw(cell, cell.Bounds(), img, image.Pt(x, y), draw.Src)
+	return cell.NRGBAAt(0, 0)
+}
+
+// bakePixel mirrors the UI5-B2 contract formula for one colour sample: pow
+// curve, then brightness, then the CSS saturate matrix, each step clamped
+// before the next reads it. It is deliberately a copy of the contract rather
+// than a call into pdfcore, so the route test compares the stamped file with
+// the agreement both sides promise (±1 tolerance for pdfcpu's re-encode).
+func bakePixel(c color.NRGBA, bright, sat, ink float64) color.NRGBA {
+	step := func(v uint8) float64 {
+		f := bakeClamp(255 * math.Pow(float64(v)/255, ink))
+		return bakeClamp(f * bright)
+	}
+	r, g, b := step(c.R), step(c.G), step(c.B)
+	return color.NRGBA{
+		R: uint8(math.Round(bakeClamp((0.213+0.787*sat)*r + (0.715-0.715*sat)*g + (0.072-0.072*sat)*b))),
+		G: uint8(math.Round(bakeClamp((0.213-0.213*sat)*r + (0.715+0.285*sat)*g + (0.072-0.072*sat)*b))),
+		B: uint8(math.Round(bakeClamp((0.213-0.213*sat)*r + (0.715-0.715*sat)*g + (0.072+0.928*sat)*b))),
+		A: c.A,
+	}
+}
+
+func bakeClamp(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return v
+}
+
+func chanDelta(a, b uint8) int {
+	if int(a) > int(b) {
+		return int(a) - int(b)
+	}
+	return int(b) - int(a)
+}
+
+// UI5-B2: the sliders bake into the bitmap, so the stamped file carries the
+// adjusted colours and the same pixel grid. Absent sliders are the identity,
+// which is why the plain run is the reference.
+func TestApplyRouteBakesColourSlidersIntoTheStamp(t *testing.T) {
+	mux, _, _ := newTestMux(t)
+	session := newSession(t)
+	src := openUploadedPDF(t, mux, session, threePageA4(t))
+	seal := preparedSeal(t, mux, session)
+
+	plain := stampedSealImage(t, mux, session, src, seal, nil, "1")
+	box := plain.Bounds()
+	mid := image.Pt(box.Dx()/2, box.Dy()/2)
+	ref := nrgbaAt(plain, mid.X, mid.Y)
+	if ref.A == 0 {
+		t.Fatalf("the reference pixel is fully transparent: the fixture seal lost its ink")
+	}
+
+	for _, tc := range []struct {
+		name             string
+		bright, sat, ink float64
+		extra            map[string]any
+	}{
+		{"density alone darkens along the pow curve", 1, 1, 3, map[string]any{"ink": 3.0}},
+		{"saturate 0 greys the seal out", 1, 0, 1, map[string]any{"saturate": 0.0}},
+		{"saturate up to the new ceiling 5", 1, 5, 1, map[string]any{"saturate": 5.0}},
+		{"the chain pow -> bright -> sat", 1.5, 0.5, 3, map[string]any{"brightness": 1.5, "saturate": 0.5, "ink": 3.0}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			baked := stampedSealImage(t, mux, session, src, seal, tc.extra, "1")
+			if b := baked.Bounds(); b.Dx() != box.Dx() || b.Dy() != box.Dy() {
+				t.Fatalf("the bake resized the bitmap to %dx%d, want the unadjusted %dx%d",
+					b.Dx(), b.Dy(), box.Dx(), box.Dy())
+			}
+			got := nrgbaAt(baked, mid.X, mid.Y)
+			if got == ref {
+				t.Errorf("the bake left the stamped pixel at %+v: the sliders never reached the bitmap", ref)
+			}
+			want := bakePixel(ref, tc.bright, tc.sat, tc.ink)
+			if chanDelta(got.R, want.R) > 1 || chanDelta(got.G, want.G) > 1 || chanDelta(got.B, want.B) > 1 {
+				t.Errorf("stamped pixel = %+v, want %+v (±1) — the file does not carry the contract bake", got, want)
+			}
+		})
+	}
+}
+
+// The cross-page path bakes the whole seal before RotatePNG/Strips slice it, so
+// every slot page carries a column of the *adjusted* bitmap (AGENTS §5.42: 先
+// 调色 → 再旋转 → 再切). The strip read back off page 1 has to match the same
+// contract formula the plain case pins down.
+func TestApplyRouteBakesBeforeCrossPageStrips(t *testing.T) {
+	mux, _, _ := newTestMux(t)
+	session := newSession(t)
+	src := openUploadedPDF(t, mux, session, threePageA4(t))
+	seal := preparedSeal(t, mux, session)
+	srec := splitJSON(t, mux, map[string]any{"assetId": src, "splitMode": "rows-cols", "rows": 2, "cols": 1}, session)
+	if srec.Code != http.StatusCreated {
+		t.Fatalf("split = %d: %s", srec.Code, srec.Body.String())
+	}
+	cut := dataOf(t, srec)["assetId"].(string)
+
+	cross := map[string]any{"crossPage": true, "binding": "right", "startOffset": 30, "pages": "all"}
+	plain := stampedSealImage(t, mux, session, cut, seal, cross, "1")
+	ref := nrgbaAt(plain, 0, 0)
+	if ref.A == 0 {
+		t.Fatalf("the strip reference pixel is fully transparent: the fixture seal lost its ink")
+	}
+	baked := stampedSealImage(t, mux, session, cut, seal, map[string]any{
+		"crossPage":   true,
+		"binding":     "right",
+		"startOffset": 30,
+		"pages":       "all",
+		"brightness":  1.5,
+		"saturate":    0.5,
+		"ink":         3.0,
+	}, "1")
+	if b := baked.Bounds(); b.Dx() != plain.Bounds().Dx() || b.Dy() != plain.Bounds().Dy() {
+		t.Fatalf("the bake resized the strip to %dx%d, want the unadjusted %dx%d",
+			b.Dx(), b.Dy(), plain.Bounds().Dx(), plain.Bounds().Dy())
+	}
+	got := nrgbaAt(baked, 0, 0)
+	want := bakePixel(ref, 1.5, 0.5, 3)
+	if chanDelta(got.R, want.R) > 1 || chanDelta(got.G, want.G) > 1 || chanDelta(got.B, want.B) > 1 {
+		t.Errorf("strip pixel = %+v, want %+v (±1): the bake stopped before the strip chain", got, want)
 	}
 }

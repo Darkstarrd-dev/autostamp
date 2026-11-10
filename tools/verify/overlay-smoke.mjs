@@ -927,6 +927,20 @@ async function main() {
     nearPixel("saturate 0.5 moves the composite on its own", pxS.rgb, expectPixel(CB2, fSaturate(CS2, 0.5), 1, "multiply"), 2);
     truthy("the two filters stay distinct", pxB.rgb.some((v, i) => Math.abs(v - pxS.rgb[i]) > 3));
 
+    // UI5-B2: the density curve (ink = pow exponent) rides the same pixel
+    // pipeline, and the three-step chain (pow → bright → sat) has one fixed
+    // order — the combo below fails if any step is dropped or reordered.
+    const fPow = (c, g) => c.map((v) => clamp255(255 * Math.pow(v / 255, g)));
+    await setParams(app, { "api.apply.brightness": 1, "api.apply.saturate": 1, "api.apply.ink": 2.6 });
+    await sleep(220);
+    const pxI = await sampleAt(app, fx, fy, "composite");
+    nearPixel("ink 2.6 deepes the seal on its own (pow curve)", pxI.rgb, expectPixel(CB2, fPow(CS2, 2.6), 1, "multiply"), 2);
+    await setParams(app, { "api.apply.ink": 2.6, "api.apply.brightness": 0.9, "api.apply.saturate": 1.6 });
+    await sleep(220);
+    const px3 = await sampleAt(app, fx, fy, "composite");
+    nearPixel("pow→bright→sat chain matches the formula (UI5-B2)", px3.rgb,
+      expectPixel(CB2, fSaturate(fBright(fPow(CS2, 2.6), 0.9), 1.6), 1, "multiply"), 2);
+    await setParams(app, { "api.apply.brightness": 1, "api.apply.saturate": 1, "api.apply.ink": 1 });
     // one composite surface: the stamp-layer carries affordances only.
     const dom = await app.evaluate(
       `(() => ({ stampCanvases: document.querySelectorAll('#stamp-layer canvas').length, pageCanvases: document.querySelectorAll('#preview-stage canvas.page-canvas').length }))()`

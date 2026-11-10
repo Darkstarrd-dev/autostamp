@@ -83,6 +83,8 @@
     // "<sealId>|<deg>" (drag slider hands are integers, so the cache is small
     // and stable); the bitmapOf for an instance comes from here when set.
     rotCache: new Map(),
+    adjCache: new Map(),
+    outlines: new Map(),
     drag: null,
   };
 
@@ -144,18 +146,87 @@
     return c;
   }
 
-  // effectiveBitmap is the seal the geometry and the paint code work against:
-  // a cross-page instance with a rotation paints the ROTATED whole bitmap (the
-  // strips slice it column-wise), everything else paints the raw one. The disk
-  // mirror is pdfcore addInstance -> RotatePNG -> Strips.
+  // UI5-B2 (2026-11-09, 用户 ask 决定): 调色参数（brightness/saturate/ink）不再
+  // 走 ctx.filter —— 逐像素烘进位图，公式与 pdfcore.AdjustPNG 逐字一致
+  // （pow → bright → sat，每步 clamp，四舍五入；straight-alpha，alpha 不变），
+  // 所以预览 == 落盘。缓存按 (sealId, 参数签名) 记忆化，滑杆拖动免费。
+  const LUMA_R = 0.213, LUMA_G = 0.715, LUMA_B = 0.072; // CSS saturate 常数
+
+  function transformCanvas(img, bright, sat, ink) {
+    const c = doc.createElement("canvas");
+    c.width = img.width;
+    c.height = img.height;
+    const ctx = c.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    const data = ctx.getImageData(0, 0, c.width, c.height); // 非预乘
+    const px = data.data;
+    // pow 曲线表（0..255 金值 = round(255·(v/255)^g)），与 Go 的 LUT 同公式。
+    const pow = ink === 1 ? null : (() => {
+      const t = new Uint8Array(256);
+      for (let v = 0; v <= 255; v += 1) t[v] = Math.max(0, Math.min(255, Math.round(255 * Math.pow(v / 255, ink))));
+      return t;
+    })();
+    const r1 = LUMA_R + (1 - LUMA_R) * sat, g1 = LUMA_G - LUMA_G * sat, b1 = LUMA_B - LUMA_B * sat;
+    const r2c = LUMA_R - LUMA_R * sat, g2c = LUMA_G + (1 - LUMA_G) * sat, b2c = LUMA_B - LUMA_B * sat;
+    const r3c = LUMA_R - LUMA_R * sat, g3c = LUMA_G - LUMA_G * sat, b3c = LUMA_B + (1 - LUMA_B) * sat;
+    for (let i = 0; i < px.length; i += 4) {
+      let r = px[i], g = px[i + 1], b = px[i + 2];
+      if (pow) { r = pow[r]; g = pow[g]; b = pow[b]; }
+      if (bright !== 1) {
+        r = Math.max(0, Math.min(255, Math.round(r * bright)));
+        g = Math.max(0, Math.min(255, Math.round(g * bright)));
+        b = Math.max(0, Math.min(255, Math.round(b * bright)));
+      }
+      if (sat !== 1) {
+        const nr = r * r1 + g * g1 + b * b1;
+        const ng = r * r2c + g * g2c + b * b2c;
+        const nb = r * r3c + g * g3c + b * b3c;
+        r = Math.max(0, Math.min(255, Math.round(nr)));
+        g = Math.max(0, Math.min(255, Math.round(ng)));
+        b = Math.max(0, Math.min(255, Math.round(nb)));
+      }
+      px[i] = r; px[i + 1] = g; px[i + 2] = b;
+    }
+    ctx.putImageData(data, 0, 0);
+    return c;
+  }
+
+  const adjKey = (g, b, s) => `|${g.toFixed(2)}|${b.toFixed(2)}|${s.toFixed(2)}`;
+
+  // adjustedBitmap 返回（possibly cached）调色后的位图；签名进 rotCache 的键，
+  // 调色参数变了不会复用旧角度的旋转缓存。
+  function adjustedBitmap(inst, raw) {
+    const p = inst.params || {};
+    const ink = Math.max(1, Math.min(10, num(p["api.apply.ink"], 1)));
+    const bright = Math.max(0, Math.min(2, num(p["api.apply.brightness"], 1)));
+    const sat = Math.max(0, Math.min(5, num(p["api.apply.saturate"], 1)));
+    if (ink === 1 && bright === 1 && sat === 1) return { img: raw, sig: "" };
+    const key = `${inst.sealId}${adjKey(ink, bright, sat)}`;
+    let c = state.adjCache.get(key);
+    if (!c) {
+      c = transformCanvas(raw, bright, sat, ink);
+      state.adjCache.set(key, c);
+      if (state.adjCache.size > 6) {
+        const oldest = state.adjCache.keys().next().value;
+        state.adjCache.delete(oldest);
+      }
+    }
+    return { img: c, sig: key };
+  }
+
+  // effectiveBitmap: the tuned bitmap comes first (UI5-B2), then a cross-page
+  // instance bakes its rotation into the tuned bitmap (Z4: adjust → rotate →
+  // slice columns — same order as pdfcore AdjustPNG→RotatePNG→Strips).
   function effectiveBitmap(inst) {
-    const raw = sealModule() ? sealModule().bitmapOf(inst.sealId) : null;
-    if (!raw) return null;
+    const raw0 = sealModule() ? sealModule().bitmapOf(inst.sealId) : null;
+    if (!raw0) return null;
+    const adj = adjustedBitmap(inst, raw0);
+    const raw = adj.img;
     const p = inst.params || {};
     if (!p["api.apply.crossPage"]) return raw;
     const deg = num(p["api.apply.rotation"], 0);
     if (!deg) return raw;
-    const key = `${inst.sealId}|${deg}`;
+    const key = `${inst.sealId}|${deg}${adj.sig}`;
     let c = state.rotCache.get(key);
     if (!c) {
       c = rotatedBitmapCanvas(raw, deg);
@@ -222,6 +293,26 @@
     if (name === "bl" || name === "br") top = ay - h;
     if (name === "center") top = ay - h / 2;
     return { x: left, y: top, w, h, cx: left + w / 2, cy: top + h / 2 };
+  }
+
+  // UI5-B1 (2026-11-09, 用户 ask 决定): 骑缝实例的选择框 = 整章轮廓 ——
+  // 宽 fullW、贴装订边槽位、高 = fullW×aspect（与普通章同尺寸同语义），
+  // 页面内仍只画该页条带。y 通道就是 N4 的 startOffset 百分比公式。
+  function outlineFor(inst, meta, img, strip) {
+    if (!inst || !meta || !img) return null;
+    const p = inst.params || {};
+    const clampS = (v) => Math.max(0.05, Math.min(5, v));
+    const scale = clampS(num(p["api.apply.scale"], 0.202));
+    const aspect = img.height && img.width ? img.height / img.width : 1;
+    const fullW = scale * meta.width;
+    const h = fullW * aspect;
+    // Same edge logic as stripContext (alternate flips per page parity); the
+    // outline slot and the strip slot must agree or hit tests land outside.
+    const edge = strip ? strip.edge : ((p["ui.crosspage.binding"] || "right") === "left" ? "left" : "right");
+    const x = edge === "left" ? 0 : meta.width - fullW;
+    const start = num(p["api.apply.startOffset"], 0);
+    const y = (1 - start / 100) * (meta.height - h);
+    return { x, y, w: fullW, h, cx: x + fullW / 2, cy: y + h / 2 };
   }
 
   // stripContext picks the strip this page shows: D2 keeps single-sided strips
@@ -300,6 +391,7 @@
 
     state.rects = new Map();
     state.strips = new Map();
+    state.outlines = new Map();
 
     const s = shell();
     if (!s || !state.meta) return;
@@ -317,9 +409,12 @@
       if (params["api.apply.crossPage"]) {
         strip = stripContext(inst, pages);
         if (!strip) continue;
+        // UI5-B1: the affordance outline exists on every page the instance
+        // runs through, gap pages included.
+        state.outlines.set(inst.id, outlineFor(inst, state.meta, img, strip));
         // Z5 gap page: a fraction of 0 means the binding left this page
         // unsealable. The probe entry stays (count stays honest); no rect,
-        // no affordance, no pixels.
+        // no pixels.
         if (strip.frac <= 0) {
           state.strips.set(inst.id, strip);
           continue;
@@ -345,8 +440,8 @@
     // an unset or unknown blend name lands there, never on source-over.
     const blend = BLEND_GCO[p["api.apply.blend"]] ? p["api.apply.blend"] : "multiply";
     const opacity = Math.max(0, Math.min(1, num(p["api.apply.opacity"], 1)));
-    const brightness = Math.max(0, num(p["api.apply.brightness"], 1));
-    const saturate = Math.max(0, num(p["api.apply.saturate"], 1));
+    // UI5-B2: brightness/saturate/ink are baked into the bitmap by
+    // adjustedBitmap/effectiveBitmap - no ctx.filter color chain any more.
     // Z4: a strip's rotation is already BAKED into the whole-seal bitmap
     // (effectiveBitmap), so the slot itself draws upright; only the plain
     // instance rotates live around the box centre.
@@ -358,9 +453,6 @@
     ctx.filter = "none";
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND_GCO[blend];
-    if (brightness !== 1 || saturate !== 1) {
-      ctx.filter = `brightness(${brightness}) saturate(${saturate})`;
-    }
 
     // Z5: the source slice starts at the slot's cumulative share (content
     // continuity across the binding gutter) and spans that slot's fraction;
@@ -458,17 +550,30 @@
     if (!s) return;
     for (const [id, node] of state.nodes.entries()) {
       const rect = state.rects.get(id);
-      if (!rect) continue;
-      const wCss = Math.max(1, Math.round(rect.w * state.scale));
-      const hCss = Math.max(1, Math.round(rect.h * state.scale));
-      node.box.style.left = `${rect.x * state.scale}px`;
-      node.box.style.top = `${rect.y * state.scale}px`;
+      const sinst = s.instanceById(id);
+      const cross = Boolean(sinst && sinst.params && sinst.params["api.apply.crossPage"]);
+      // UI5-B1: the visible selection box for a cross-page instance is the
+      // whole-seal outline (same width/height language as a plain seal);
+      // the probe canvas keeps the painted strip rect (instancePixels).
+      const geom = (cross && (state.outlines.get(id) || rect)) || rect;
+      if (!geom) continue;
+      const wCss = Math.max(1, Math.round(geom.w * state.scale));
+      const hCss = Math.max(1, Math.round(geom.h * state.scale));
+      node.box.style.left = `${geom.x * state.scale}px`;
+      node.box.style.top = `${geom.y * state.scale}px`;
       node.box.style.width = `${wCss}px`;
       node.box.style.height = `${hCss}px`;
       // The backing canvas keeps the device-pixel box of the rect so the
       // instancePixels probe reads the same seal the page canvas shows.
-      node.canvas.width = Math.round(wCss * state.dpr);
-      node.canvas.height = Math.round(hCss * state.dpr);
+      if (!rect) {
+        // gap page (Z5 frac 0): no strip pixels to read - blank the backing
+        // surface so instancePixels never answers from a stale bitmap.
+        node.canvas.width = 0;
+        node.canvas.height = 0;
+        continue;
+      }
+      node.canvas.width = Math.max(1, Math.round(Math.max(1, Math.round(rect.w * state.scale)) * state.dpr));
+      node.canvas.height = Math.max(1, Math.round(Math.max(1, Math.round(rect.h * state.scale)) * state.dpr));
       drawInstanceCanvas(node.canvas, id);
     }
     void s;
@@ -534,13 +639,19 @@
     const s = shell();
     if (!s) return null;
     const ids = Array.from(state.rects.keys()).reverse();
+    // UI5-B1: cross-page instances hit their whole-seal outline (present on
+    // every page incl. gap pages), so ids without a strip rect still answer.
+    for (const id of Array.from(state.outlines.keys()).reverse()) {
+      if (!ids.includes(id)) ids.push(id);
+    }
     for (const id of ids) {
       const inst = s.instanceById(id);
       if (!inst) continue;
-      const rect = state.rects.get(id);
       const params = inst.params || {};
-      const rot = num(params["api.apply.rotation"], 0);
       const baked = Boolean(params["api.apply.crossPage"]);
+      const rect = (baked && (state.outlines.get(id) || state.rects.get(id))) || state.rects.get(id);
+      if (!rect) continue;
+      const rot = num(params["api.apply.rotation"], 0);
       if (!rot || baked) {
         if (pt.x >= rect.x && pt.x <= rect.x + rect.w && pt.y >= rect.y && pt.y <= rect.y + rect.h) return inst;
         continue;
@@ -580,9 +691,13 @@
     if (!inst) return false;
     const pt = pagePoint(ev);
     if (!pt) return false;
-    const rect = state.rects.get(inst.id);
-    if (!rect) return false;
     const p = inst.params || {};
+    const baked = Boolean(p["api.apply.crossPage"]);
+    // UI5-B1: a cross-page drag/handle frame is the whole-seal outline, so the
+    // corner ratio measures the full width (same scale language as plain seals)
+    // and the vertical move keeps riding the startOffset channel.
+    const rect = (baked && state.outlines.get(inst.id)) || state.rects.get(inst.id);
+    if (!rect) return false;
     const [ox, oy] = parsePair(p["api.apply.offset"], 0, 0);
     state.drag = {
       mode,

@@ -2,6 +2,20 @@
 
 > `docs/IMPLEMENTATION_PLAN.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-10 — §10.1 登记「UI5 轮（B1–B2）」+ 头「最后核对」= UI5 轮摘要
+
+- 头「最后核对」= **B1–B2 = UI5 轮**摘要（骑缝选择框 = 整章轮廓 / 调色烘焙落盘 + 密度滑杆
+  `api.apply.ink`；契约面 i18n 137 → 139、`data-field` +1、ui-ids 57 不变）；N1–N4 UI4 轮、
+  IP1/IP2、Z5、Z1–Z4 降为历轮一行注记（禁止堆叠）。
+- §10.1 新增「B1–B2 UI5 轮」行：来源 = 用户 2026-11-09 ask 选择（两项一批；B1 =「整章轮廓框」、
+  B2 =「新增密度滑杆+全部烘焙落盘」），状态 = 已实现（本提交），实测列 = Go（`adjust.go` 金值 +
+  `apply_test.go` 直读位图 ±1 + config `ink`/saturate 0..5）+ 前端（`outlineFor` 轮廓框、
+  `adjustedBitmap` 像素链、`NUMERIC`/`applySettings` 含 ink、`stampBodyOf` 发三参数）+ verify
+  （overlay filter/strip、`shell-smoke.xOutline`、`apply-sm --only=color` (111,18,53)）+
+  门槛 `build.ps1` 全量 = 失败 0 / 跳过 0（116 s）。本轮修掉的自身回归：`effectiveBitmap`
+  identity 早退（Z4 预览竖条断档）与 outline 边缘未同步 `strip.edge`（Z3 单击 miss）。
+
+
 ## 2026-11-09 — §10.1 登记「UI4 轮（N1–N4）」+ 头「最后核对」= UI4 轮摘要
 
 - 头「最后核对」= N1–N4（初始透明度 0.6 会话值复位 / 说明转 tooltip / 骑缝切片仅随机 /

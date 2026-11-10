@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // tools/verify/apply-smoke.mjs — P4 落盘链路的数值验收(AGENTS §8;IMPLEMENTATION_PLAN P4 验收)。
 //
-// 四段(缺省全跑,`--only=<name>` 单跑):
+// 六段(缺省全跑,`--only=<name>` 单跑):
 //   matrix 真链路桥 + 回读一致性:open -> seal/prepare -> 实例 -> `盖到 PDF` ->
 //          落盘后的 asset 交给 pdf.js **重新渲染**,取样像素必须等于同一对颜色在
 //          同族渲染器里独立 blend 的参考值(16 模式 x {1.0,0.6,0.3},absdiff <= 2)。
@@ -9,6 +9,9 @@
 //   strip  骑缝章落盘:两页样本 + 水平双色印章 -> 第 1 页条带取印章左半色、第 2 页
 //          取右半色(逐页一条 + 切分顺序),条带贴页边(骑缝语义),bbox 的四条边
 //          误差 <= 1 pt(框内是印章、框外 2 pt 是底)。
+//   perpage 逐页落盘(HD11):实例 pages="2" 只盖第 2 页,第 1 页保持底。
+//   color  调色烘焙落盘(UI5-B2:AGENTS §5.47):ink/brightness/saturate 三参数烘进
+//          印章像素,落盘回读 == pow→bright→sat 公式独立重算(§5.47 顺序,±2/±3)。
 //   chain  切分 + 落盘 + 保存的资产链:手动 2 拼切分 -> 新 asset(2 页) -> 盖章 ->
 //          保存到沙箱路径;磁盘文件能再 fs/pick + open,页数一致。
 //   undo   撤销盖章 / 撤销切分:资产 id 换回上一份、实例列表带印章回来、链上 id 归位;
@@ -257,8 +260,9 @@ function instanceParams(o) {
   return {
     "api.apply.blend": o.blend,
     "api.apply.opacity": o.opacity,
-    "api.apply.brightness": 1,
-    "api.apply.saturate": 1,
+    "api.apply.brightness": o.brightness !== undefined ? o.brightness : 1,
+    "api.apply.saturate": o.saturate !== undefined ? o.saturate : 1,
+    "api.apply.ink": o.ink !== undefined ? o.ink : 1,
     "api.apply.scale": o.scale,
     "api.apply.anchor": o.anchor || "tl",
     "api.apply.offset": o.offset || "150,300",
@@ -647,6 +651,52 @@ async function checkPerPage(app, grantId, sealId) {
   if (r.chain && r.chain.instances.length !== 0) bad(`落盘后实例未清空(W2): ${JSON.stringify(r.chain.instances)}`);
   console.log("  ok 逐页落盘:pages=\"2\" 只盖第 2 页、第 1 页保持底");
 }
+
+// UI5-B2: 调色三参数（ink pow → brightness → CSS saturate 矩阵）烘进落盘像素。
+// 期望色独立重算（与 app-overlay.transformCanvas / pdfcore.AdjustPNG 同一契约），
+// 落盘回读必须 <=2 命中；「预览 == 落盘」在这条钉死（identity 参数不受影响）。
+async function checkColor(app, grantId, sealId) {
+  const r = await app.evaluate(
+    `(async () => {
+      const api = window.__autoStampApi, sh = window.__autoStampShell, p = window.__autoStampPreview;
+      const info = await api.request('/api/pdf/open', { method: 'POST', body: { pathGrantId: ${JSON.stringify(grantId)} } });
+      await sh.adopt(info);
+      sh.state.instances.forEach((i) => { i.sealId = null; });
+      const params = ${JSON.stringify(instanceParams({ blend: "normal", opacity: 1, scale: 0.25, offset: "0,0", brightness: 0.8, saturate: 1.5, ink: 2.2 }))};
+      sh.addInstance('color', params);
+      sh.setSealForSelected(${JSON.stringify(sealId)});
+      await new Promise((res) => setTimeout(res, 120));
+      const applied = await sh.stampIntoPDF({ quiet: true });
+      if (!applied || !applied.assetId) return { badApply: true };
+      await p.goTo(1);
+      await new Promise((res) => setTimeout(res, 260));
+      return {
+        inside: Array.from(window.__autoStampOverlay.sample(40, 40, 2, 2, 'composite').data).slice(0, 3),
+        untouched: Array.from(window.__autoStampOverlay.sample(300, 500, 2, 2, 'composite').data).slice(0, 3),
+      };
+    })()`
+  );
+  if (!r || r.badApply) {
+    bad("checkColor: 落盘失败");
+    return;
+  }
+  const clampR = (v) => Math.max(0, Math.min(255, Math.round(v)));
+  const powC = (c, g) => c.map((v) => clampR(255 * Math.pow(v / 255, g)));
+  const brightC = (c, b) => c.map((v) => clampR(v * b));
+  const satC = (c, s) => {
+    const m = [
+      0.213 + 0.787 * s, 0.715 - 0.715 * s, 0.072 - 0.072 * s,
+      0.213 - 0.213 * s, 0.715 + 0.285 * s, 0.072 - 0.072 * s,
+      0.213 - 0.213 * s, 0.715 - 0.715 * s, 0.072 + 0.928 * s,
+    ];
+    return [0, 1, 2].map((i) => clampR(m[3 * i] * c[0] + m[3 * i + 1] * c[1] + m[3 * i + 2] * c[2]));
+  };
+  const want = satC(brightC(powC(INK, 2.2), 0.8), 1.5);
+  if (!isClose(r.inside, want, 3)) bad(`checkColor: 落盘像素 ${r.inside.join(",")} != 调色公式 ${want.join(",")}（UI5-B2 烘焙未进落盘?）`);
+  if (!isClose(r.untouched, GROUND, 6)) bad(`checkColor: 框外底被改动: ${r.untouched.join(",")}`);
+  if (isClose(r.inside, INK, 2)) bad(`checkColor: 落盘仍是原色（identity 假通过）`);
+  console.log(`  ok 调色烘焙落盘:ink2.2/bright0.8/sat1.5 回读 == 公式 (${want.join(",")})`);
+}
 // ---------- 段 3:切分 -> 落盘 -> 保存 ----------------------------------
 
 async function checkChain(app, grantId, sealId, sandbox) {
@@ -847,6 +897,11 @@ async function main() {
       const grant = await grantOf(app, twoPage);
       if (!grant) throw new Error("two-page fixture 未授权");
       await checkPerPage(app, grant, solid.sealId);
+    }
+    if (runPart("color")) {
+      const grant = await grantOf(app, onePage);
+      if (!grant) throw new Error("one-page fixture 未授权");
+      await checkColor(app, grant, solid.sealId);
     }
     if (runPart("chain")) {
       const grant = await grantOf(app, onePage);

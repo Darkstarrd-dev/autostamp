@@ -24,6 +24,7 @@ func Default() Settings {
 			Opacity:     0.6,
 			Brightness:  1,
 			Saturate:    1,
+			Ink:         1,     // UI5-B2: 密度 default = identity pow curve
 			Scale:       0.202, // = seal 120 pt / A4 page 595 pt (UI_SPEC §2)
 			Pos:         "130,480",
 			Anchor:      "center",

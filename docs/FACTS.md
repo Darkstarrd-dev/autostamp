@@ -1,9 +1,9 @@
 # docs/FACTS.md — 实测事实（依赖与浏览器）
 
-> 最后核对：2026-11-03（新增 §4.3 UPX 极限压缩实测；本机 Windows + Go 1.26.5 + Chrome 151 + WebView2 Runtime）。
-> §1.2/§1.3/§1.4 由 `tools/verify/pixel-matrix.mjs`（2026-10-29）与
+> 最后核对：2026-11-10（**UI5-B2 = 调色烘焙轮**：新增 §1.10 金值表 + 端到端 `apply-sm --only=color`；
+> 落盘链序 = 调色→旋转→切条）。§1.2/§1.3/§1.4 由 `tools/verify/pixel-matrix.mjs`（2026-10-29）与
 > `tools/verify/overlay-smoke.mjs`（2026-10-30）在仓库内重跑；§1.7 P1、§1.8 P2、
-> §1.9 P4 回读、§2.3 切分、§2.6 落盘几何、§4 导出体积表（预估断言，见 §4 末）均可就地重跑，命令见 §5.1。
+> §1.9 P4 回读、§1.10 调色烘焙、§2.3 切分、§2.6 落盘几何、§4 导出体积表（预估断言，见 §4 末）均可就地重跑，命令见 §5.1。
 > 本文只记录**已执行验证**得到的事实；决策引用本文编号，不得凭记忆改写。
 > 未验证项一律标 `UNVERIFIED`。复现方式见 §5。
 
@@ -185,6 +185,32 @@
   FlateDecode：直接对原始字节 grep `/Watermark`、`/Fm0`、`cm /GS0` 全部**找不到**
   （`objstm=true`、`flate=true` 实测），要读内容只能用 pdfcpu 自己的路径
   （`ctx.PageContent` / `pdfcpu.ExtractPageContent`），别用字节文本搜索下结论。
+
+### 1.10 调色烘焙：预览与落盘同一像素（UI5-B2，实测 2026-11-09，`internal/pdfcore/adjust.go` + `apply-smoke --only=color`）
+
+- 契约公式（前端 `app-overlay.adjustedBitmap` / Go `pdfcore.AdjustPNG` 同一顺序）：
+  **pow（ink：`v′ = 255·(v/255)^g`）→ ×brightness → CSS saturate 矩阵**
+  （常数 0.213/0.715/0.072），每步 clamp 0..255、四舍五入只在最后一步，alpha 全程不变
+  （straight-alpha）。落盘链序 = **调色 → 旋转 → 切条**（AGENTS §5.42/§5.47）。
+- 金值（fixture (200,40,40)，straight alpha，`adjust_test.go` 钉死）：
+  |参数|结果|算式|
+  |ink g=3| (123,1,1) | 255·(200/255)³ = 123.03→123；40→0.984→1 |
+  |g=1.5| (177,16,16) | |
+  |g=10| (22,0,0) | |
+  |bright 1.5| (255,60,60) | 200×1.5=300 先 clamp |
+  |bright 0| (0,0,0) | |
+  |sat 0| (74,74,74) | 三通道 = 亮度灰值 |
+  |sat 5| (255,0,0) | |
+  |sat 2| (255,6,6) | |
+  |链 g=3→bright 1.5→sat 0.5| (113,21,21) | |
+- identity(1,1,1) 不解码：输出字节 == 输入（`bytes.Equal` 成立）；alpha=137 的像素烘色后
+  仍 A=137（R=123 变、alpha 不变）。JPEG(q100) 输入 → PNG 输出，尺寸保持，通道 Δ ≤ 2。
+- 端到端：`apply-smoke --only=color`（实例 ink 2.2 / bright 0.8 / sat 1.5，blend normal ×1.0）
+  落盘后 pdf.js 重渲染取 (40,40) 合成色 == 同一公式独立重算 (111,18,53)，Δ ≤ 3；框外底不变。
+- Go 侧 `apply_test.go` 用 pdfcpu `ExtractImagesFile` 直读落盘位图，独立重算 ±1。
+- 复现：`go test ./internal/pdfcore ./internal/api`（金值 + 路由烘焙）+
+  `node tools/verify/apply-smoke.mjs --only=color`。
+
 
 ## 2. 后端库：`github.com/pdfcpu/pdfcpu v0.16.3`（2026-10-19，Apache-2.0，纯 Go）
 
@@ -463,7 +489,7 @@
 |`go test ./internal/pdfcore -run 'PrepareSeal'`|§2.1|`PrepareSeal`/`SealMeta`/`SealBox`（去背/裁剪/重采样的后端等价实现，供对照）|
 |`go test ./internal/pdfcore -run 'Split'`|§2.3|切分词表 + 页尺寸断言（A4→297.5x842；`/Rotate 90`→421x595）|
 |`go test ./internal/api -run 'Split'`|AGENTS §6/§8.2|`/api/pdf/split` 的响应形状、词表 400、owner 边界、原资产仍可读|
-|`node tools/verify/apply-smoke.mjs [--only=<matrix\|strip\|chain\|undo>]`|§1.9 §2.6|真 exe + 真 UI：`盖到 PDF` → applied 资产重渲染的 48 组像素矩阵、骑缝落盘逐页半枚 + 条带 bbox 四边、切分→盖章→保存链（磁盘文件再 open）、撤销盖章/撤销切分|
+|`node tools/verify/apply-smoke.mjs [--only=<matrix\|strip\|perpage\|chain\|undo\|color>]`|§1.9 §1.10 §2.6|真 exe + 真 UI：`盖到 PDF` → applied 资产重渲染的 48 组像素矩阵、骑缝落盘逐页半枚 + 条带 bbox 四边、逐页落盘、调色烘焙落盘回读、切分→盖章→保存链（磁盘文件再 open）、撤销盖章/撤销切分|
 |`go test ./internal/pdfcore -run 'Stamp'`|§2.2 §2.6|落盘写 `/BM`+`/ca`、多外观分 pass 各得自己的 GS、页面自己的 GS 不被污染、条带框比来自整枚印章（`TestStampStripBoxUsesWholeSealAspect`）、非法请求拒绝|
 |`go test ./internal/api -run 'Apply\|Save'`|AGENTS §6|`/api/pdf/apply` 词表 + owner 边界 + 400 分类；`/api/pdf/save` 目标三选一、`Origin` 继承、原子写|
 |`node tools/verify/export-smoke.mjs [--only=<raster\|vector\|guard\|chain>]`|§4|真 UI 保存链里的光栅通道：页 pt == `px*72/dpi`、导出文件字节落在 §4 量级带、回读像素 Δ ≤6、vector 零请求 + 文字仍在、W6 超限只出 warn|

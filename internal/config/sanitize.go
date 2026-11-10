@@ -54,10 +54,19 @@ func Sanitize(s *Settings) error {
 		fail("apply.brightness %g out of 0..2", a.Brightness)
 	}
 	a.Brightness = clampFlt(a.Brightness, 0, 2)
-	if !inRangeF(a.Saturate, 0, 3) {
-		fail("apply.saturate %g out of 0..3", a.Saturate)
+	// UI5-B2: saturate's ceiling moved 3 -> 5, and all three colour sliders now
+	// bake into the bitmap instead of staying a preview-only filter.
+	if !inRangeF(a.Saturate, 0, 5) {
+		fail("apply.saturate %g out of 0..5", a.Saturate)
 	}
-	a.Saturate = clampFlt(a.Saturate, 0, 3)
+	a.Saturate = clampFlt(a.Saturate, 0, 5)
+	// B2's 密度 slider: the pow curve that darkens the seal's ink (g in
+	// 255*(v/255)^g). 1 = identity, so a document that never carried the key
+	// clamps up to "no adjustment" rather than blackening the stamp.
+	if !inRangeF(a.Ink, 1, 10) {
+		fail("apply.ink %g out of 1..10", a.Ink)
+	}
+	a.Ink = clampFlt(a.Ink, 1, 10)
 	// HD12: the instance panel can drive scale up to 200%+, corner drag beyond the
 	// slider — the on-disk vocabulary keeps 0.05..0.9 as the safe floor but the
 	// ceiling is 5.0 (a 2.0 slider end plus drag overshoot).

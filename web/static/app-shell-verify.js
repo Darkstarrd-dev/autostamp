@@ -108,6 +108,7 @@
         const kids = ov && ov.state.strips
           ? Array.from(ov.state.strips.entries()).map(([id, s]) => {
             const rect = ov.state.rects.get(id);
+            const out = ov.state.outlines && ov.state.outlines.get ? ov.state.outlines.get(id) : null;
             return {
               id,
               index: s.index,
@@ -119,6 +120,12 @@
               y: rect ? Math.round(rect.y) : null,
               w: rect ? Math.round(rect.w) : null,
               h: rect ? Math.round(rect.h) : null,
+              // UI5-B1: the affordance outline (whole-seal box at the binding
+              // edge) - DOM/hit-test frame the selection actually shows.
+              ox: out ? Math.round(out.x) : null,
+              oy: out ? Math.round(out.y) : null,
+              ow: out ? Math.round(out.w) : null,
+              oh: out ? Math.round(out.h) : null,
             };
           })
           : [];

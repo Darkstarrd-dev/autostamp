@@ -51,6 +51,7 @@ type PatchApply struct {
 	Opacity     *float64 `json:"opacity,omitempty"`
 	Brightness  *float64 `json:"brightness,omitempty"`
 	Saturate    *float64 `json:"saturate,omitempty"`
+	Ink         *float64 `json:"ink,omitempty"`
 	Scale       *float64 `json:"scale,omitempty"`
 	Pos         *string  `json:"pos,omitempty"`
 	Anchor      *string  `json:"anchor,omitempty"`
@@ -128,6 +129,7 @@ func Merge(s *Settings, p *Patch) {
 		setFlt(&a.Opacity, p.Apply.Opacity)
 		setFlt(&a.Brightness, p.Apply.Brightness)
 		setFlt(&a.Saturate, p.Apply.Saturate)
+		setFlt(&a.Ink, p.Apply.Ink)
 		setFlt(&a.Scale, p.Apply.Scale)
 		setStr(&a.Pos, p.Apply.Pos)
 		setStr(&a.Anchor, p.Apply.Anchor)

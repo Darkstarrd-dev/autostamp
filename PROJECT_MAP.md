@@ -1,32 +1,26 @@
 # PROJECT_MAP.md — AutoStamp 代码地图
 
-> 最后核对：2026-11-09（**N1–N4 = UI4 轮**：N3 **骑缝切片只有随机** —— `ui.crosspage.sliceMode`
-> 字段整条删除（`internal/config/{types,defaults,patch,sanitize}.go` 的 `SliceMode` 三件套 +
-> `#crosspage-slicemode` 控件 + `.cp-rand` 显隐类），cp 组控件恒随骑缝实例显示、随机取值恒生效；
-> N4 **`api.apply.startOffset` = 0..100 百分比**（0% = 条带下缘贴页面下边、100% = 条带上缘贴页面
-> 上边）—— `internal/pdfcore/stamp.go` 的 `Box.Y = (1 − startOffset/100) × (pageH − h)`、
-> `api/apply.go` 校验与 Go 测试同步、`app-overlay.js` 的 `rectFor`/`moveDrag` 同源换算；N2 **说明
-> 文字 → tooltip** —— 每条静态 `hintline` 从界面删除，说明文本改挂所在容器 `data-i18n-title` +
-> `data-i18n-title-cn`（`applyLang` 既有通道，JS 不动）；N1 **初始透明度 0.6** —— default 早已
-> 0.6，本轮只复位被测试拖成 1 的会话 settings 值。计数：i18n **137**（141 − 4：
-> `ui.crosspage.sliceMode.ctl`/`.hint`、`sliceMode.even`、`sliceMode.random`）、ui-ids **57**
-> （删 `crosspage-slicemode`）、`data-field` 面 −1（`ui.crosspage.sliceMode`），字段/状态/路由
-> 不变；AGENTS §5.45、`UI_SPEC §8` N1–N4。同日前一轮 **IP1/IP2 = 面板停靠右缘轮**（`style.css`
-> `#instance-panel` 停靠 `#preview` 右缘全高 + `overflow-y:auto`、`posInstancePanel` 锚点链删除
-> 只留 show/hide；AGENTS §5.44）。更早一轮 **Z5 = 骑缝不匀切片模拟轮**（`stamp.go`
-> `StripsFractions` 累计列切条 + `StampGeom.SlotFrac`、`apply.go` 实例词表 `slices`、
-> `randomCrossFractions`/`drawCrossSlices`/`retryCrossSlices`、`stripContext` 的 frac/cum、
-> settings `apply.cover`；其「平均|随机」切档已由本轮 N3 作废）。再早 **Z1–Z4**（`rotate.go`
-> `RotatePNG` 先旋转整枚再切竖条、`autoScale()` = 42 mm ÷ 页显示宽、blend 默认 multiply、骑缝实例
-> 单击可选）；**HD19 = 空态简化**（`#empty-state` 只剩 `#empty-pick` 大按钮 + 一行提示，
-> `openByPath(path)` 退化为 §7 驱动通道）；**SP5 = 右侧边栏退场**（导出设置段迁入 `#save-modal`、
-> `#app-main` 单列 full-bleed）；**HD13–HD18 + P0–P7 全绿**（预览卡 overlay、下拉当前选项同步、
-> 顶栏控件同高 34px、后端终端 `#btn-console`/`#log-console` + `GET /api/logs`、装载只设当前印章、
-> 实例可全删、面板默认收起齿轮、壳拆 7 模块）；**V7 = Ctrl+滚轮恒为整页缩放**（AGENTS §5.14）。
-> 历史计数 i18n 266 → 267 → 151 → 144 → 132 → 141 → **137**、ui-ids 96 → 63 → 59 → 56 → 58 →
-> **57**；出货件 = `build.ps1 -Task stripped,package` 的 `dist\autostamp-<rev>-win64.zip`；
-> 历轮增量（PD1/PD2、build1/buildm、HD1–HD12、V4–V6、P6/P7 接线）与已删键的完整清单只在
-> `docs/changelog/PROJECT_MAP.md` 留叙述，正文只留当前态事实。`app-crosspage.js` 这个计划名从未
+> 最后核对：2026-11-10（**B1–B2 = UI5 轮**：B1 **骑缝选择框 = 整章轮廓** —— `app-overlay.js`
+> `outlineFor`/`state.outlines`（宽 = `scale × 页显示宽`、贴装订边、高 = 整章盒高，与普通章同一
+> 尺寸语义；DOM 选择框/四角/旋转手柄/hitTest/拖拽基准走轮廓，页面内仍只画该页条带；
+> `probe('strips')` 新增 `ox/oy/ow/oh` 读数；无新字段/路由/id）；B2 **调色烘焙落盘 + 密度滑杆** ——
+> 新文件 `internal/pdfcore/adjust.go`（`AdjustPNG` pow→bright→sat 烘进印章位图，落盘链序
+> 调色→旋转→切条），`api.apply.ink`（1..10 默认 1）进 config 三件套、`saturate` 0..3→0..5、
+> `api/apply.go` 实例词表 `brightness/saturate/ink`、前端 `adjustedBitmap`/`transformCanvas`
+> 替换 `ctx.filter` 色链（`drawSeal` 无 filter），kernel `NUMERIC` + `applySettings` 含 ink；
+> 旧「brightness/saturate 仅预览、发送即 400」语义作废）。计数：i18n **139**（137 + ink 族 2 键）、
+> ui-ids **57 不变**、`data-field` +1（`api.apply.ink`）、字段词表 +1；AGENTS §5.46/§5.47、
+> `UI_SPEC §8` B1/B2、FACTS §1.10。同日前一轮 **N1–N4 = UI4 轮**（`sliceMode` 三件套删除、
+> `startOffset` 0..100 百分比、hintline → tooltip、初始透明度 0.6 复位；§4 141 → 137、
+> ui-ids 58 → 57）。更早一轮 **IP1/IP2 = 面板停靠右缘轮**（AGENTS §5.44）。更早 **Z5**
+>（`StripsFractions` 累计列切条 + `apply.cover`）/**Z1–Z4**（`rotate.go`、`autoScale()`、
+> blend 默认 multiply、骑缝单击可选）/**HD19**/**SP5**/**HD13–HD18 + P0–P7 全绿**
+>（预览卡 overlay、后端终端、装载只设当前印章、壳拆 7 模块）；**V7 = Ctrl+滚轮恒为整页缩放**
+>（AGENTS §5.14）。历史计数 i18n 266 → 267 → 151 → 144 → 132 → 141 → 137 → **139**、ui-ids 96 →
+> 63 → 59 → 56 → 58 → **57**；出货件 = `build.ps1 -Task stripped,package` 的
+> `dist\autostamp-<rev>-win64.zip`；历轮增量（PD1/PD2、build1/buildm、HD1–HD12、V4–V6、P6/P7
+> 接线）与已删键的完整清单只在 `docs/changelog/PROJECT_MAP.md` 留叙述，正文只留当前态事实。
+> `app-crosspage.js` 这个计划名从未
 > 创建，真实形态在 `app-overlay.js` + `app-shell-*.js` 模块组（7 文件，见下表「壳模块拆分」行）。
 >
 > 新增/删除包必须同步本文件（AGENTS §10.1）。阶段状态见 `docs/IMPLEMENTATION_PLAN.md §10`。
@@ -80,6 +74,7 @@
 |(续)|`sealimg.go`|印章图通道：`PrepareSeal`(去白底 `despillWhite` despill → alpha 包围盒裁剪 `alphaBounds`/`cropNRGBA` → `scaleDPI` 重采样 + `maxSide` 上限；词表 `despill/alphaTrim/resampleDpi/targetDpi/maxSide`，扩展名按实际内容写)、`SealMeta`(src*/out* 尺寸与 DPI、`AlphaBBox`、`OpaqueRatio` 按**源图**计)、`SealBox`。|P2（骑缝条带切分未做，见 P3）|
 |(续)|`split.go`|自动切分：词表 `SplitAuto/SplitRowsCols/SplitCustom/SplitUnsplit` + `SplitSpec{Mode,Rows,Cols,CustomCuts,Veto}`；`PlanForSplit`/`CutPlanForPage`（display 空间,**不按 /Rotate 交换轴**，FACTS §2.3）、`PageIsSpread`(横排且 `w/h>AutoSpreadRatio=0.7`)、`SplitOnePage`（剔掉 pdfcpu 附带的原页）、`MergeCreateFile` 合并回一个 PDF、`sortByPageTail`（按名内页号升序 = reading order）|P3|
 |(续)|`rotate.go`|**Z4（2026-11-09）** `RotatePNG(pngBytes, deg)`：骑缝章「先旋转整枚、再切竖条」的第一半 —— 屏幕顺时针、画布扩到旋转 bbox（精确 90° = 宽高互换，公式与前端 `rotatedBitmapCanvas` 一致）、最近邻采样、`deg == 0` 恒等|P4（Z4 修订）|
+|(续)|`adjust.go`|**UI5-B2（2026-11-09）** `AdjustPNG(data, bright, sat, ink)`：调色烘进印章位图 —— PNG/JPEG 解码后 straight-alpha 逐像素按契约公式（pow 密度曲线 → brightness → CSS saturate 3x3 矩阵，每步 clamp 0..255，末步 `math.Round` 四舍五入）→ 重编码 PNG；三参全 1 = 原字节恒等（不解码），参数越界（bright 0..2 / sat 0..5 / ink 1..10）报错不静默钳位。`bakeParams`：`StampInstance` 的 `Brightness/Saturate/Ink` 全 0 = 「调用方没碰过这组」→ 恒等。落盘顺序 = 调色 → 旋转 → 切条（AGENTS §5.42）|UI5-B2|
 |(续)|`stamp.go`|落盘几何与词表：`StampGeom{Scale,Anchor,OffX/OffY,PosX/PosY,CrossPage,Binding,StartOffset,Slot,SlotCount}` + `Box(Page)`（== `app-overlay.rectFor`，条带框高取**整枚印章旋转后**的比，Z4；**N4 起 `StartOffset` = 0..100 百分比 → `Box` 的 `Y` = `(1 − pct/100) × (pageH − h)`**）、`ParseAnchor`/`ParseBinding`/`ParsePair`、`SealAspect`、`Strips(png,count)`（骑缝条带切片，stdlib 逐列裁切 —— 输入已是 `RotatePNG` 的旋转位图，每列是竖条）、`StripsFractions(png, fractions)`（**Z5**：按各页占比的累计列切条，0 槽返回 nil 不盖章）、`StampInstance`、`ClampScale`|P3+P4（Z4/Z5 + N4 修订）|
 |(续)|`apply.go`|**落盘主路径** `Stamp(ctx, r, doc, instances)`：按外观分组 → 每组一次 pdfcpu pass → `newStamp` 把契约框翻译成 `model.Watermark{Pos:BottomLeft, Dx/Dy(y 翻转), ScaleAbs}`（FACTS §2.6）→ `BlendApply` 注入本 pass 新 GS 的 `/BM` → 断言页自身的 GS 未被污染|P4|
 |(续)|`blend.go`|`/BM` 注入层：`Blend` 16 名 ↔ PDF `/BM`、`BlendApply`、`ExtGStateKeysOf`/`StampGraphicStatesOf`（只注入本 pass 新建、`Artifact/Watermark` 引用的状态；共享对象不重写；已有别的 `/BM` 报错）、内容流 token 扫描器（`>>BDC` 无空格实测）|P4|
@@ -104,7 +99,7 @@
 |`web/static/app-textlayer.js`|pdf.js 自带 `TextLayer` 驱动（6.4 无 `renderTextContent` 导出，官方 `TextLayerBuilder` 在未 vendor 的 `web/pdf_viewer.mjs`）：`attach({pdfjs,pageObj,viewport,frame,dpr})` 设 `--total-scale-factor = viewport.scale × OutputScale.pixelRatio` + `--scale-round-x/y` + `transform: scale(1/dpr)`，CSS 用 vendor 的 `.textLayer` 规则；`count(pageObj)` 给验收断言|
 |`web/static/app-pager.js`|`#page-pager` 分页条（2026-10-29 P0.5 协议确认：chip + chip 内缩略图，无新增 id）：计数 chip（`pager.count` 走 `title`/`aria-label`）+ 每页一枚 `button.chip[data-page]`（`.pg-no` + `canvas.pg-thumb`，`IntersectionObserver` 懒渲染、重建时 `task.cancel()`）、`All` chip 写 `apply.pages`/`export.pages`|
 |`web/static/app-seal.js`|P2 印章图通道：`upload/prepare`（`POST /api/pdf/seal/prepare`，multipart + 页内选项 `seal.prepare.*`）、`prepareFromGrant`（JSON `{pathGrantId}` 形态，顶栏「上传印章」/最近印章下拉走这条，HD8）、`revert()`（内存原图 → `despill:false` 重跑 = 「撤销去背」）、`bitmapOf(sealId)`（`/api/pdf/seal/raw` + `createImageBitmap`，给 overlay 合成）、`renderPreview`（把当前印章画进 `#seal-preview-canvas`，HD9）、`renderMeta`（chip 文案）、`probe('seals'/'count'/'meta')`。**去背在前端**（UI_SPEC D4 / FACTS §1.8 的反算规则：彩色保留、白/灰丢弃，`min(R,G,B)>=60` 判彩色，彩像素按 `max(0,min(255-c,255-60)/195)` 校正 RGB）；**HD17（2026-11-05）：`upload`/`revert` 不再调用 `setSealForSelected`——只设当前印章**|
-|`web/static/app-overlay.js`|P2 叠加层：`paint(ctx, info)`（先把干净页存进 `state.snapshot`，再把印章按 alpha 预乘 uint8 + `globalCompositeOperation` + `ctx.filter` 合成进同一 canvas；`save()/restore()` + 显式 `filter='none'`，FACTS §1.4；页面 canvas 是**唯一可见合成面**——`.instance` 只挂 `sel-box`，实例画布**不挂 DOM**仅作 probe 背板，ghost 双绘制已修，AGENTS §5.27）、`repaint()`（拖拽廉价重合成）、`stripGeometryFor/stripRectsFor`（骑缝条带：单边 right/双面 alternate，宽 = 页宽 ×10%，`startOffset` 位移，逐页不同列）、DOM affordance（`#stamp-layer .instance` + 四角/中心/旋转手柄）、`hitTest/selectAt/beginDrag/moveDrag/endDrag`（**V7（2026-11-05）：`consumeWheel` 已删除**——滚轮不再属于叠加层，Ctrl+滚轮恒为 chrome 的整页缩放）、`parsePages`（`all/none/1,3/2-4`）、`imageDataOf/pixelsForRect`（给 verify 算像素）、`probe()`：`rects strips view affordance drag instancePixels selected filter snapshot canvasRect`（FACTS §1.8）|
+|`web/static/app-overlay.js`|P2 叠加层：`paint(ctx, info)`（先把干净页存进 `state.snapshot`，再把印章按 alpha 预乘 uint8 + `globalCompositeOperation` 合成进同一 canvas——调色色链 = `adjustedBitmap`/`effectiveBitmap`（UI5-B2：`pow→bright→sat` 同公式逐像素，`adjCache`；骑缝先调色后旋转再切条，`rotCache` = Z4；取代旧 `ctx.filter` 色链，`drawSeal` 不再设 filter）；`save()/restore()` + 显式 `filter='none'` 复位保留，FACTS §1.4；页面 canvas 是**唯一可见合成面**——`.instance` 只挂 `sel-box`，实例画布**不挂 DOM**仅作 probe 背板，ghost 双绘制已修，AGENTS §5.27）、`repaint()`（拖拽廉价重合成）、`stripGeometryFor/stripRectsFor`（骑缝条带：单边 right/双面 alternate，宽 = 页宽 ×10%，`startOffset` 位移，逐页不同列）、DOM affordance（`#stamp-layer .instance` + 四角/中心/旋转手柄；**骑缝实例的选择框/手柄/hitTest/拖拽基准 = 整章轮廓 `outlineFor`/`state.outlines`，UI5-B1**）、`hitTest/selectAt/beginDrag/moveDrag/endDrag`（**V7（2026-11-05）：`consumeWheel` 已删除**——滚轮不再属于叠加层，Ctrl+滚轮恒为 chrome 的整页缩放）、`parsePages`（`all/none/1,3/2-4`）、`imageDataOf/pixelsForRect`（给 verify 算像素）、`probe()`：`rects strips view affordance drag instancePixels selected filter snapshot canvasRect`（FACTS §1.8）|
 |（续）|**壳模块拆分**（2026-11-05，AGENTS §5.35；用户对话指令「拆分代码文件便于维护」）|7 文件加载顺序固定（kernel→instances→seals→export→docops→chrome→verify，`index.html` 七 `<script defer>`），唯一跨模块通道 = 门面 `window.__autoStampShell`（kernel 创建，后续模块 `Object.assign(S, …)` 登记；跨文件引用一律 `S.` 前缀，局部 helper 不外泄）。契约面零变化：ui-ids/fields/i18n/probe 词表/门面成员（109）全部不变。拆分生成器留档 `tmp/split-shell.mjs`（此后直接改文件，不重跑）|
 |（续）|`app-shell-docops.js` 的 **P4 落盘通道**|`stampIntoPDF`（`POST /api/pdf/apply` → applied 资产 `adopt`，W2：实例挂到新资产上、`apply-undo` 可用）、`undoRoute('apply'|'split')`、`submitSave`（目标三选一）、`stampBodyOf()` 让 verify 直接读请求体、`probe('chain')` 打印链上 5 个 asset id|
 |（续）|`web/static/app-overlay.js` 的 **P4 快照身份**|`paint` 用 `state.surface = info.canvas` 决定快照归属（按**画布元素**，不按 page/scale/尺寸）—— 换文档必须重抓快照，AGENTS §5.18 / FACTS §1.9|

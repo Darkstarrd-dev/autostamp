@@ -2,6 +2,23 @@
 
 > `PROJECT_MAP.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-10 — UI5 轮（B1/B2）：`internal/pdfcore` 新增 `adjust.go` 行、`app-overlay.js` 行换义（调色/轮廓）、计数 139 / 57
+
+- 头「最后核对」= B1/B2 摘要；UI4 轮降为「同日前一轮」（历轮摘要压成一行注记，禁止堆叠）；
+  计数链 i18n … → 137 → **139**、ui-ids **57 不变**、`data-field` +1（`api.apply.ink`）。
+- `internal/pdfcore` 新增「（续）`adjust.go`」行（UI5-B2，AGENTS §5.47）：`AdjustPNG(data, bright,
+  sat, ink)` 调色烘进印章位图（straight-alpha 逐像素 pow→bright→CSS saturate 矩阵，每步 clamp、
+  末步 round；三参全 1 = 原字节恒等不解码；越界报错不静默钳位）+ `bakeParams`；落盘链序 =
+  调色→旋转→切条；`apply.go` 行（落盘主路径）同轮换义含实例调色。
+- `app-overlay.js` 行：「P2 叠加层」描述换义——调色色链不再走 `ctx.filter`（改 `adjustedBitmap`/
+  `effectiveBitmap` 像素级烘焙 + `adjCache`/`rotCache`，`drawSeal` 无 filter；`filter='none'`
+  复位保护保留 FACTS §1.4），骑缝实例 DOM 选择框/手柄/hitTest/拖拽基准 = 整章轮廓
+  `outlineFor`/`state.outlines`（UI5-B1）。
+- verify 面（登记在本轮叙述，文件表无新增行）：`shell-smoke.xOutline`、`overlay-smoke`
+  filter/strip 段换色公式重算、`apply-sm --only=color` 新段、`adjust_test.go` 金值。
+- 本轮契约汇总：i18n **139**、ui-ids **57 不变**、`data-field` +1、无新路由/新状态/新包。
+
+
 ## 2026-11-09 — UI4 轮（N1–N4）：新增「（续）N1–N4 UI4 轮」行、`stamp.go`/测试行挂 N4 注记、Z5 行挂 N3 注记、计数 137 / 57
 
 - 头「最后核对」= N1–N4 摘要；IP1/IP2 降为「同日前一轮」、Z5 降为「更早一轮」（历轮摘要压成一行
