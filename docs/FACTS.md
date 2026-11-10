@@ -1,8 +1,9 @@
 # docs/FACTS.md — 实测事实（依赖与浏览器）
 
-> 最后核对：2026-11-10（**UI6 = 配色/tooltip 轮**：`shell-smoke` 新增 tooltip 浮层断言（UI6 T1，
-> show/hide、title 摘挂、aria-label 恒定、反色 token、8px/12.5px 读数）；本轮无新增实测表 ——
-> 两主题正文对比 ≥4.5:1 由 ui-ux-pro-max pro-rules 的 WCAG 算法计算，非浏览器实测）。
+> 最后核对：2026-11-10（**UI8 = CS2+SV1 轮**：§1.10 重跑 = 新链 ×bright→pow(ink)+alpha 覆盖提升→sat，
+> 金值 ink3→(123,1,1)、alpha 137→207、链 bright1.5→g3→sat0.5→(156,30,30)；§5.1 复现清单加
+> fsx 另存为脚本守卫（`TestSaveScriptShape`）与 api save 通道守卫（`TestPickSaveChannelGuards`）；
+> 本轮无新增体积/像素实测表 —— CS2 金值由公式手算 + `go test` 双端钉死）。
 > §1.2/§1.3/§1.4 由 `tools/verify/pixel-matrix.mjs`（2026-10-29）与
 > `tools/verify/overlay-smoke.mjs`（2026-10-30）在仓库内重跑；§1.7 P1、§1.8 P2、
 > §1.9 P4 回读、§1.10 调色烘焙、§2.3 切分、§2.6 落盘几何、§4 导出体积表（预估断言，见 §4 末）均可就地重跑，命令见 §5.1。
@@ -188,28 +189,33 @@
   （`objstm=true`、`flate=true` 实测），要读内容只能用 pdfcpu 自己的路径
   （`ctx.PageContent` / `pdfcpu.ExtractPageContent`），别用字节文本搜索下结论。
 
-### 1.10 调色烘焙：预览与落盘同一像素（UI5-B2，实测 2026-11-09，`internal/pdfcore/adjust.go` + `apply-smoke --only=color`）
+### 1.10 调色烘焙：预览与落盘同一像素（UI5-B2 轮 + UI8-CS2 顺序/覆盖提升修订，实测 2026-11-10，`internal/pdfcore/adjust.go` + `apply-smoke --only=color`）
 
-- 契约公式（前端 `app-overlay.adjustedBitmap` / Go `pdfcore.AdjustPNG` 同一顺序）：
-  **pow（ink：`v′ = 255·(v/255)^g`）→ ×brightness → CSS saturate 矩阵**
-  （常数 0.213/0.715/0.072），每步 clamp 0..255、四舍五入只在最后一步，alpha 全程不变
-  （straight-alpha）。落盘链序 = **调色 → 旋转 → 切条**（AGENTS §5.42/§5.47）。
+- 契约公式（前端 `app-overlay.adjustedBitmap` / Go `pdfcore.AdjustPNG` 同一顺序，CS2）：
+  **×brightness → pow（ink：`v′ = 255·(v/255)^g`，同时 `a′ = 255·(a/255)^(1/g)`）→ CSS saturate 矩阵**
+  （常数 0.213/0.715/0.072）；每步 clamp 0..255（半值进位 `math.Round`/`Math.round` 只在饱和步后
+  执行一次），**alpha 只随密度覆盖提升变**（ink=1 恒等、alpha 全程不动；straight-alpha）。
+  旧 UI5-B2 的 pow→bright→sat + 「alpha 不变」作废（CS2：全滑杆打最大不再被明度洗白；半透明
+  淡章做覆盖提升才有真的「浓」）。落盘链序 = **调色 → 旋转 → 切条**（AGENTS §5.42/§5.47/§5.51）。
 - 金值（fixture (200,40,40)，straight alpha，`adjust_test.go` 钉死）：
   |参数|结果|算式|
   |ink g=3| (123,1,1) | 255·(200/255)³ = 123.03→123；40→0.984→1 |
+  |ink 3 的 alpha 提升| 137→**207** | 255·(137/255)^(1/3) = 207.35 |
   |g=1.5| (177,16,16) | |
   |g=10| (22,0,0) | |
-  |bright 1.5| (255,60,60) | 200×1.5=300 先 clamp |
+  |bright 1.5| (255,60,60) | 200×1.5=300 先 clamp，pow 恒等 |
   |bright 0| (0,0,0) | |
   |sat 0| (74,74,74) | 三通道 = 亮度灰值 |
   |sat 5| (255,0,0) | |
   |sat 2| (255,6,6) | |
-  |链 g=3→bright 1.5→sat 0.5| (113,21,21) | |
-- identity(1,1,1) 不解码：输出字节 == 输入（`bytes.Equal` 成立）；alpha=137 的像素烘色后
-  仍 A=137（R=123 变、alpha 不变）。JPEG(q100) 输入 → PNG 输出，尺寸保持，通道 Δ ≤ 2。
+  |链 bright1.5→g3→sat0.5| **(156,30,30)** | 300→clamp→255；60→pow→3.32；sat→155.9→156 / 30.1→30 |
+- identity(bright1,ink1,sat1) 不解码：输出字节 == 输入（`bytes.Equal` 成立）；ink≠1 才走 alpha
+  提升（`TestAdjustPNG*` 钉 A=207 同 R=123）。JPEG(q100) 输入 → PNG 输出，尺寸保持，通道 Δ ≤ 2。
 - 端到端：`apply-smoke --only=color`（实例 ink 2.2 / bright 0.8 / sat 1.5，blend normal ×1.0）
-  落盘后 pdf.js 重渲染取 (40,40) 合成色 == 同一公式独立重算 (111,18,53)，Δ ≤ 3；框外底不变。
-- Go 侧 `apply_test.go` 用 pdfcpu `ExtractImagesFile` 直读落盘位图，独立重算 ±1。
+  落盘后 pdf.js 重渲染取 (40,40) 合成色 == 同一公式独立重算（Δ ≤ 3，公式 = bright→pow→sat）；
+  框外底不变。链序钉在页内独立重算里：交换 bright/ink 次序则期望值不同 → 任一被换即断。
+- Go 侧 `apply_test.go` 用 pdfcpu `ExtractImagesFile` 直读落盘位图，独立重算 ±1（`bakePixel`
+  含 alpha lift）。
 - 复现：`go test ./internal/pdfcore ./internal/api`（金值 + 路由烘焙）+
   `node tools/verify/apply-smoke.mjs --only=color`。
 

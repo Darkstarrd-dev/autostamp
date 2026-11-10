@@ -15,9 +15,8 @@
 
   // submitSave posts the real /api/pdf/save route (AGENTS §6). The target has
   // exactly three channels and the server rejects an ambiguous request, so the
-  // front-end picks one: replaceOriginal for the confirmation modal, otherwise
-  // the native picker's grant while the text box still holds the picked path,
-  // otherwise the typed path itself.
+  // front-end picks one (SV1): replaceOriginal for the §7 drive twin,
+  // otherwise the path the native save dialog reported (state.saveTarget).
   //
   // W1 已确认: an instance that is still only a preview gets baked first, so
   // 保存 never silently drops what the user is looking at. A failed bake aborts
@@ -56,12 +55,8 @@
         if (!exported) return;
       }
     }
-    const typed = String(S.readField("api.save.targetPath") || "");
     const body = { assetId: state.file.assetId, replaceOriginal: Boolean(replaceOriginal) };
-    if (!replaceOriginal) {
-      if (state.saveGrant && typed === state.saveGrantPath) body.pathGrantId = state.saveGrant;
-      else body.targetPath = typed;
-    }
+    if (!replaceOriginal) body.targetPath = state.saveTarget || "";
     try {
       const res = await api.request("/api/pdf/save", { method: "POST", body });
       state.assets.save = res && res.assetId ? res.assetId : state.file.assetId;
@@ -278,24 +273,57 @@
   }
 
 
-  // pickSaveTarget fills the save dialog's target path from the native picker.
-  // P4 writes through the returned grant; the text box stays editable so a
-  // typed path is equally valid.
-  async function pickSaveTarget() {
+  // pickSaveTarget (the old "pick a file, then re-type the path" pair) died
+  // with SV1: the save modal now asks the backend for ONE native save-as
+  // dialog ({save:true} on /api/fs/pick, AGENTS §6) and saves what the dialog
+  // reports. The name box is pre-filled with same-name + .stamp.pdf, and the
+  // browse starts at the document's own folder (info.path from pdf/open).
+  async function saveViaDialog() {
+    if (!state.file) {
+      S.toast("error", S.t("err.apply.noDoc"));
+      return;
+    }
+    const defaultName = S.baseName(state.file.name || "document") + ".stamp.pdf";
+    let startDir = "";
+    if (state.file.path) {
+      const parts = String(state.file.path).split(/[\\/]+/);
+      parts.pop();
+      startDir = parts.join("\\");
+    }
     let res;
     try {
-      res = await api.pick({ filter: "all", multi: false });
+      res = await api.request("/api/fs/pick", {
+        method: "POST",
+        body: { save: true, filter: "pdf", defaultName, startDir },
+      });
     } catch (e) {
       S.toast("error", `${e.code}: ${e.message}`);
       return;
     }
-    if (!res || res.cancelled || !res.picks || !res.picks.length) return;
-    const pick = res.picks[0];
-    state.saveGrant = pick.pathGrantId;
-    state.saveGrantPath = pick.path;
-    state.lastGrant = pick.pathGrantId;
-    S.writeField("api.save.targetPath", pick.path);
-    S.renderAssetHooks();
+    if (!res || res.cancelled || !res.targetPath) return; // cancel = quiet
+    await saveToPath(res.targetPath);
+  }
+
+  // saveToPath is the §7 drive channel (SV1): name the target explicitly and
+  // run the same save chain the button uses. The verify scripts use it
+  // instead of clicking #save-confirm, because clicking would show the real
+  // native dialog and a headless run cannot answer it.
+  async function saveToPath(path) {
+    state.saveTarget = String(path == null ? "" : path).trim();
+    if (!state.saveTarget) {
+      S.toast("error", "saveToPath: empty path");
+      return;
+    }
+    const chip = S.q("#save-dest");
+    if (chip) chip.textContent = state.saveTarget;
+    await submitSave(false);
+  }
+
+  // submitReplace is the §7 drive twin of the (unreachable from the UI since
+  // SV1) 替换原文件 confirmation: the S1 channel stays, the modal stays,
+  // nothing else calls submitSave(true).
+  async function submitReplace() {
+    await submitSave(true);
   }
 
 
@@ -318,7 +346,12 @@
     const pages = S.normalisePages(info.pages || []);
     info.pages = pages;
     const name = derived ? (state.file && state.file.name) || info.name : info.name;
-    state.file = { assetId: info.assetId, name, size: info.size, pages };
+    // SV1: the disk original from pdf/open (openResult.path) rides in
+    // state.file.path — the save dialog browses to it, the replace confirmation
+    // shows it, and derived swaps carry it forward (split/apply/export answer
+    // with the same origin).
+    const path = info.path || (derived && state.file && state.file.path) || "";
+    state.file = { assetId: info.assetId, name, path, size: info.size, pages };
     state.lastInfo = info;
     if (!derived) {
       state.assets.open = info.assetId;
@@ -571,7 +604,7 @@
 
   Object.assign(S, {
     submitSave, pickAndOpen, openByPath, openGrant, handleFiles, classifyLoad, loadSeals,
-    submitFiles, openFailed, retryOpen, pickSaveTarget, adopt, spreadPages,
+    submitFiles, openFailed, retryOpen, saveViaDialog, saveToPath, submitReplace, adopt, spreadPages,
     splitModeOf, splitGridOf, cutsOf, splitPagesFor, splitBodyOf, runSplit, undoSplit,
     stampBodyOf, stampIntoPDF, undoStamping,
     loadLogOf: () => loadLog,

@@ -197,9 +197,11 @@ func handleApply(store *tmpstore.Store, log *slog.Logger) http.HandlerFunc {
 		}
 		log.Info("pdf stamped", "from", body.AssetID, "into", asset.ID,
 			"instances", len(instances), "bytes", asset.Size)
+		carry, _ := store.OriginOf(asset.ID, owner)
 		webx.Created(w, openResult{
 			AssetID: asset.ID,
 			Name:    "",
+			Path:    carry,
 			Size:    asset.Size,
 			Kind:    string(asset.Kind),
 			Doc:     *newDoc,

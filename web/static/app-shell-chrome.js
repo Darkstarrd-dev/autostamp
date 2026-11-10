@@ -479,15 +479,17 @@
     S.q("#btn-save").addEventListener("click", () => { S.setModal("save-modal"); S.setState("save-confirm"); });
     S.q("#save-cancel").addEventListener("click", () => { S.setModal(null); S.setState("opened"); });
     S.q("#save-confirm").addEventListener("click", () => {
-      if (S.readField("api.save.replaceOriginal")) { S.setModal("confirm-modal"); S.setState("replace-confirm"); return; }
-      S.submitSave(false);
+      // SV1 (2026-11-10): one click = one native save-as dialog (fs/pick
+      // {save:true}); the chosen path goes straight to /api/pdf/save. The
+      // 替换原文件 switch left the modal, so this is the only save route the
+      // UI offers.
+      S.saveViaDialog();
     });
     S.q("#confirm-cancel").addEventListener("click", () => {
-      S.writeField("api.save.replaceOriginal", false);
       S.setModal("save-modal");
       S.setState("save-confirm");
     });
-    S.q("#confirm-ok").addEventListener("click", () => S.submitSave(true));
+    S.q("#confirm-ok").addEventListener("click", () => S.submitReplace());
     // --- P1 open channel: picker / drag and drop (AGENTS §6) ---
     // HD19 (2026-11-06): the empty state is the one centered #empty-pick
     // button (+ the paste/drag hint). The typed path box (#empty-path) is gone;
@@ -560,7 +562,6 @@
       S.setState(state.file ? "opened" : "empty");
     });
     S.q("#pw-retry").addEventListener("click", () => S.retryOpen());
-    S.q("#save-pick").addEventListener("click", () => S.pickSaveTarget());
     S.q("#modal-layer .scrim").addEventListener("click", () => S.setModal(null));
     doc.addEventListener("keydown", onKey);
     // HD12/IP1 (2026-11-09): the panel is docked at the preview's right edge

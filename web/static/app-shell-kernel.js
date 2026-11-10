@@ -83,8 +83,10 @@
     assets: { open: "", split: "", apply: "", export: "", save: "" }, // assetId per route (UI_SPEC §2 asset hooks)
     pending: null, // the open that asked for a password, so Retry can replay it
     lastGrant: "", // last pathGrantId the picker returned (readout chip)
-    saveGrant: null, // pathGrantId for the save dialog's target (P4 writes it)
-    saveGrantPath: "", // the path the grant covers, so the text box can be edited
+    // SV1 (2026-11-10): the save target is the path the native save-as dialog
+    // reported (or the §7 drive channel handed over); submitSave sends it as
+    // targetPath. The old picker-grant pair is gone.
+    saveTarget: "",
     splitChain: null, // previous document snapshot for 撤销切分
     applyChain: null, // previous document + instances for 撤销盖章
     vetoed: new Set(), // D3: page numbers the split must skip
@@ -224,6 +226,10 @@
     state.modal = id || null;
     if (id === "save-modal") {
       q("#save-source").textContent = state.file ? state.file.path : t("top.file.hint");
+      // SV1: the dialog answer (or the drive channel's path) stays visible as
+      // feedback; on first open it shows the i18n "not chosen yet" text.
+      const dest = q("#save-dest");
+      if (dest) dest.textContent = state.saveTarget || t("save.dest.none");
       q("#save-modal").dataset.hasFile = String(!!state.file);
     }
     if (id === "confirm-modal") q("#confirm-path").textContent = state.file ? state.file.path : t("top.file.hint");

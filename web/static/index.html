@@ -150,21 +150,21 @@
       <div class="field">
         <div class="flabel"><span data-i18n="api.apply.brightness.ctl" data-i18n-cn="明度">apply.brightness 0..2</span></div>
         <div class="num-pair">
-          <input data-field="api.apply.brightness" type="range" min="0" max="2" step="0.05" value="1" aria-label="brightness" data-i18n-title="api.apply.brightness.hint" data-i18n-title-cn="0..2；通道 ×系数后烘焙进印章位图，落盘像素与预览一致（UI5-B2）。">
+          <input data-field="api.apply.brightness" type="range" min="0" max="2" step="0.05" value="1" aria-label="brightness" data-i18n-title="api.apply.brightness.hint" data-i18n-title-cn="0..2；通道 ×系数先于密度曲线执行（UI8-CS2 顺序），烘焙进印章位图，落盘像素与预览一致。">
           <input data-field="api.apply.brightness" type="number" min="0" max="2" step="0.05" value="1" aria-label="brightness">
         </div>
       </div>
       <div class="field">
         <div class="flabel"><span data-i18n="api.apply.saturate.ctl" data-i18n-cn="饱和度">apply.saturate 0..5</span></div>
         <div class="num-pair">
-          <input data-field="api.apply.saturate" type="range" min="0" max="5" step="0.05" value="1" aria-label="saturate" data-i18n-title="api.apply.saturate.hint" data-i18n-title-cn="0..5（0=灰度）；CSS 饱和矩阵烘焙进印章位图，落盘像素与预览一致（UI5-B2）。">
+          <input data-field="api.apply.saturate" type="range" min="0" max="5" step="0.05" value="1" aria-label="saturate" data-i18n-title="api.apply.saturate.hint" data-i18n-title-cn="0..5（0=灰度）；CSS 饱和矩阵是调色烘焙的最后一步，落盘像素与预览一致。">
           <input data-field="api.apply.saturate" type="number" min="0" max="5" step="0.05" value="1" aria-label="saturate">
         </div>
       </div>
       <div class="field">
         <div class="flabel"><span data-i18n="api.apply.ink.ctl" data-i18n-cn="密度">apply.ink 1..10</span></div>
         <div class="num-pair">
-          <input data-field="api.apply.ink" type="range" min="1" max="10" step="0.05" value="1" aria-label="ink" data-i18n-title="api.apply.ink.hint" data-i18n-title-cn="色阶曲线 v′=255·(v/255)^g（g=1..10）：浅红→深红→全黑；先于明度/饱和度烘焙进印章位图（UI5-B2）。">
+          <input data-field="api.apply.ink" type="range" min="1" max="10" step="0.05" value="1" aria-label="ink" data-i18n-title="api.apply.ink.hint" data-i18n-title-cn="色阶曲线 v′=255·(v/255)^g（g=1..10，执行于明度之后），同时给半透明像素做覆盖提升 a′=255·(a/255)^(1/g) —— 扫描淡章因此真的变浓；烘焙进位图，落盘与预览一致（UI8-CS2）。">
           <input data-field="api.apply.ink" type="number" min="1" max="10" step="0.05" value="1" aria-label="ink">
         </div>
       </div>
@@ -308,17 +308,9 @@
         <div class="hintline"><output id="estimate-per-page" data-i18n="export.estimate.hint" data-i18n-cn="每页约 124 KB（150dpi q75，A4 单页）。">-</output></div>
       </div>
     </div>
-    <div class="row">
-      <button type="button" id="save-pick" class="btn" data-i18n="save.pick.btn" data-i18n-cn="系统文件选择器">System file picker</button>
-      <span class="chip" data-field="api.fs.pick.pathGrantId" data-field-role="display">-</span>
-    </div>
-    <div class="field">
-      <div class="flabel"><span data-i18n="api.save.targetPath.ctl" data-i18n-cn="目标路径">save.targetPath</span><span class="tag">save.targetPath</span></div>
-      <input data-field="api.save.targetPath" type="text" aria-label="save targetPath" data-i18n-title="api.save.targetPath.hint" data-i18n-title-cn="留空则用同名 + .stamp.pdf；写盘走 temp+rename（原子写）。">
-    </div>
-    <div class="field">
-      <div class="flabel"><span data-i18n="api.save.replaceOriginal.ctl" data-i18n-cn="替换原文件">save.replaceOriginal</span><span class="tag">save.replaceOriginal</span></div>
-      <label class="switch" data-i18n-title="save.replace.hint" data-i18n-title-cn="替换原文件需要再确认一次，且会丢弃原 PDF 的可选内容层。"><input data-field="api.save.replaceOriginal" type="checkbox"><span data-i18n="save.replace.on" data-i18n-cn="开">on</span></label>
+    <div class="field" data-i18n-title="save.dest.hint" data-i18n-title-cn="「保存」会先弹出系统文件浏览器：选择目录并输入文件名（必带 .pdf）；写盘走 temp+rename（原子写）。">
+      <div class="flabel"><span data-i18n="save.dest.label" data-i18n-cn="保存位置">Save location</span></div>
+      <div class="row"><span class="chip" id="save-dest" data-i18n="save.dest.none" data-i18n-cn="未选择 —— 点「保存」挑选位置">No location chosen yet</span></div>
     </div>
     <div class="actions">
       <button type="button" class="btn" id="save-cancel" data-i18n="modal.cancel" data-i18n-cn="取消">Cancel</button>

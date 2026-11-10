@@ -1,6 +1,6 @@
 # AutoStamp — UI_SPEC（P0.5 UI 契约）
 
-> 最后核对：2026-11-10（**SM1–SM2 + CS1 = UI7 轮：放置模式快捷键 + 调色滑杆配对缺陷** —— SM1：F1 = 加章模式切档、F2 = 骑缝放置切档（互斥由既有 setter 承担），快捷键表新增两行；SM2：模式开启态下 **右键**（窗口级 `contextmenu`，仅模式开启时抑制原生菜单）或 **Esc** 取消该态，Esc 优先级 = modal → 放置模式 → toast；顺带修正 right-button 在 stage/affordance 上会误放置/起拖（`button !== 0` 守卫）。CS1（用户颜色 Debug 审核）：三滑杆预览/落盘像素链（UI5-B2）实测绿，真实缺陷 = `bindPlumbing` 的 input capture handler 用 `readField`（= 配对**首个**元素 = 滑杆半边）读值 → 数值孪生框的键入/步进被按滑杆**旧值**写进实例；修复 = 从 `e.target` 取值并保持控件形态语义（`div.seg` = 按下按钮的 `data-value`、checkbox = `checked`、其余走 NUMERIC/`Number`；初版直读 `.value` 把 seg 字段覆写成 `undefined`、骑缝 alternate/none 坏，strip 段钉住后补回）；overlay-sm filter 段新增真实手势钉（拖 range、键入 number，params == 元素值 == 公式像素）。契约面：§4 i18n **139 → 140**（`mode.cancel.hint`）、§6 ui-ids **57 不变**、字段词表 52 不变，无新路由/新字段；§8 新增 SM1/SM2/CS1 决策行。前轮 T1–T2（UI6）/ B1–B2（UI5）见 `docs/changelog/UI_SPEC.md`。）
+> 最后核对：2026-11-10（**CS2 + SV1 = UI8 轮：调色链序 + 保存另存为** —— §1 转移改写（save-confirm = 原生另存为、replace-confirm 仅 §7 驱动）、§2 加 `api.fs.pick.save/defaultName` 行 + save 两行 ctl=no、§3 保存弹窗两行（`#save-dest` chip）、§4 **140 → 137**（`save.dest.*` 三键 − 六旧键，gen-i18n 同数）、§6 ui-ids 57 → 57（`save-pick` → `save-dest`）、§7 新增 `saveViaDialog/saveToPath/submitReplace`、§8 CS2/SV1 决策行；调色链 = ×bright→pow(ink)+覆盖提升→sat（CS2 钉，gold 见 FACTS §1.10）
 
 ## 1. 组件层级与状态机
 
@@ -19,7 +19,7 @@ stamp-resizing   句柄缩放中（scale 实时更新）
 split-preview    切分预览（2 拼结果页 + 切点）
 crosspage        骑缝章模式（逐页条带 + 起始位置 + 装订边）
 export           导出设置段（SP5：此段现于 `#save-modal` 内；dpi/quality/mode + 体积预估）
-save-confirm     保存对话框（targetPath / replaceOriginal + SP5 起的导出设置段）
+save-confirm     保存对话框（save-dest 保存位置行 + SP5 起的导出设置段；SV1：目标 = 原生「另存为」对话框回报的路径）
 replace-confirm  替换原文件的二次确认
 password-error   加密 PDF 需口令
 save-error       写盘失败（权限 / 占用，可改存新文件）
@@ -31,7 +31,8 @@ warn-large-page  超大页面降采样警告（MaxImagePixels 收紧）
 `opened ⇄ split-preview`（切分产生新 asset，原文只读）；`opened → crosspage`
 （`crossPage=true` 且切分生效，实例模式变 crosspage）；`opened/stamp-* →
 stamp-dragging/stamp-resizing → stamp-selected`（pointerup）；`stamp-selected →
-save-confirm → replace-confirm`（`replaceOriginal=true`）→ 成功 toast 或 `save-error`；
+save-confirm`（SV1：「保存」= 原生另存为对话框 → `pdf/save{targetPath}`）；`replace-confirm`
+= §7 驱动路径（`S.submitReplace`，UI 不再有「替换原文件」开关）→ 成功 toast 或 `save-error`；
 `opened → warn-no-text / warn-large-page`（渲染与文字抽取的降级提示）。
 
 不变量（AGENTS §3）：预览像素 == 落盘后再次渲染像素；PDF 原文只读，所有修改落到新 asset；
@@ -51,6 +52,8 @@ field=api.fs.pick.filter api=fs.pick.filter type=select range=pdf|image|all defa
 field=api.fs.pick.multi api=fs.pick.multi type=toggle range=bool default=true nullable=no ctl=no i18nkey=- decision=HD19
 field=api.fs.pick.pathGrantId api=fs.pick.pathGrantId type=text range=grant id default=(auto after pick) nullable=yes ctl=no i18nkey=- decision=-
 field=api.fs.pick.startDir api=fs.pick.startDir type=text range=abs dir default=%APPDATA%\AutoStamp nullable=yes ctl=no i18nkey=api.fs.pick.startDir.hint decision=-
+field=api.fs.pick.save api=fs.pick.save type=toggle range=bool default=false nullable=no ctl=no i18nkey=- decision=SV1
+field=api.fs.pick.defaultName api=fs.pick.defaultName type=text range=basename .pdf nullable=yes ctl=no i18nkey=- decision=SV1
 field=api.open.assetId api=open.assetId type=text range=assetId default=- nullable=yes ctl=no i18nkey=- decision=-
 field=ui.lang api=- type=segmented range=en|cn default=en nullable=no ctl=yes i18nkey=lang.en decision=SP5
 field=ui.theme api=- type=segmented range=light|dark default=light nullable=no ctl=yes i18nkey=theme.light decision=SP5
@@ -93,8 +96,8 @@ field=ui.crosspage.binding api=- type=segmented range=right|alternate|none defau
 field=api.apply.startOffset api=apply.startOffset type=slider+number range=0..100（%） default=0 nullable=no ctl=yes i18nkey=api.apply.startOffset.ctl decision=D2,N4 unit=%
 field=ui.crosspage.cover api=- type=slider+number range=0..100 default=75 nullable=no ctl=yes i18nkey=ui.crosspage.cover.ctl decision=Z5 unit=%
 field=api.apply.slices api=apply.slices type=array range=0..1每槽占比（Σ≤1） default=- nullable=yes ctl=no i18nkey=- decision=Z5
-field=api.save.targetPath api=save.targetPath type=text range=绝对路径 default=- nullable=yes ctl=yes i18nkey=api.save.targetPath.ctl decision=-
-field=api.save.replaceOriginal api=save.replaceOriginal type=toggle range=bool default=false nullable=no ctl=yes i18nkey=api.save.replaceOriginal.ctl decision=S1
+field=api.save.targetPath api=save.targetPath type=text range=绝对路径 default=- nullable=yes ctl=no i18nkey=- decision=SV1
+field=api.save.replaceOriginal api=save.replaceOriginal type=toggle range=bool default=false nullable=no ctl=no i18nkey=- decision=S1（SV1 起仅 §7 驱动）
 field=api.open.pw api=open.pw type=password range=string default=- nullable=yes ctl=yes i18nkey=api.open.pw.ctl decision=-
 field=api.fs.pick.dir api=fs.pick.dir type=toggle range=bool default=false nullable=no ctl=no i18nkey=- decision=BM1
 field=api.save.mkdirs api=save.mkdirs type=toggle range=bool default=false nullable=no ctl=no i18nkey=- decision=BM2
@@ -108,11 +111,13 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 语义要点（实测见 FACTS，不得凭记忆改）：
 - `api.apply.opacity` → 落盘 `ExtGState /CA /ca`（pdfcpu `opacity:` 同义，FACTS §2.1）；
   `api.apply.blend` → `blend.go` 注入 `/BM`（pdfcpu 不写 `/BM`，FACTS §2.2）。
-- `api.apply.brightness/saturate/ink` **烘焙进印章位图**（UI5-B2，§8 B2）：落盘前
+- `api.apply.brightness/saturate/ink` **烘焙进印章位图**（UI5-B2，§8 B2；顺序修订 = §8 CS2）：落盘前
   `pdfcore.AdjustPNG` 逐像素，预览走 `app-overlay.adjustedBitmap`（同公式缓存记忆化）——
-  公式 = 通道依次 **pow（ink：v′=255·(v/255)^g）→ ×brightness → CSS saturate 矩阵**
-  （常数 0.213/0.715/0.072），每步 clamp 0..255、四舍五入，alpha 不变；顺序固定不可换。
-  旧「只在预览、落盘不写」语义作废；`ctx.filter='none'` 显式复位仍保留（FACTS §1.4）。
+  公式 = 通道依次 **×brightness → pow（ink：v′=255·(v/255)^g）→ CSS saturate 矩阵**
+  （常数 0.213/0.715/0.072），每步 clamp 0..255、只在最后一步四舍五入；**明度先于密度 pow**
+  是 CS2 的钉（全滑杆打最大也不再被明度洗白，密度掌暗端）；密度同时给半透明像素做
+  **alpha 覆盖提升** `a′=255·(a/255)^(1/g)`（扫描淡章因此真的变浓；ink=1 恒等、alpha 不动），
+  alpha 只随密度变。顺序固定不可换。
 - `api.apply.scale` 是相对页宽分数：滑杆范围 **10%..200%**（0.1..2.0），最左 10%、最右 200%，
   默认（settings 字段）0.202 = 20.2%；**新放置与 `#instance-reset` 复位的实例取 Z2 自动值 =
   42 mm 印章宽 ÷ 页显示宽**（`autoScale()`：竖版页的宽就是短边，A4 竖版 = 0.2008 = 42/210，即
@@ -175,9 +180,8 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 | 导出设置段 · JPEG 质量 | `api.export.quality` | 滑杆 + 数值 | 同上 |
 | 导出设置段 · 导出页 | `api.export.pages` | text + All | 同上 |
 | 导出设置段 · 体积预估 | （只读派生） | `#estimate`（`#estimate-total` / `#estimate-per-page`） | 由 FACTS §4 表算，不请求 |
-| 保存弹窗 · 目标路径 | `api.save.targetPath` | text | `/api/pdf/save` |
-| 保存弹窗 · 系统选择器 | `api.fs.pick.filePath` + `pathGrantId` | button + display chip | `/api/fs/pick` |
-| 保存弹窗 · 替换原文件 | `api.save.replaceOriginal` | toggle + 二次确认 | 同上 |
+| 保存弹窗 · 保存位置（`#save-dest` chip，SV1） | `state.saveTarget` → `api.save.targetPath`（另存为对话框回显，无输入控件） | 只读 chip + 「保存」按钮触发原生另存为对话框 | `/api/fs/pick{save:true}` → `/api/pdf/save` |
+| 保存弹窗 · 替换原文件（UI 已删开关，SV1） | `api.save.replaceOriginal` | §7 驱动 `S.submitReplace`（confirm-modal 仍在状态机） | 同上 |
 | 口令弹窗 · PDF 口令 | `api.open.pw` | password | `/api/pdf/open` |
 | 顶栏 · 语言 / 主题（**SP5 起仍在顶栏**；只有四条 hintline 文案键删除，切档控件与 `ui.lang`/`ui.theme` 字段不变） | `ui.lang` / `ui.theme` | segmented | 无（前端） |
 | 空态 · 「打开文件」大按钮（`#empty-pick`：156 px 大方圆角 button，居中；下方一行 `.hint` = 粘贴/拖拽装载提示） | （无控件字段：`api.fs.pick.filePath`/`filter`/`multi` 三行 HD19 起 `ctl=no`，选择器参数由 `pickAndOpen()` 固定为 `{filter:"pdf", multi:true}`） | button + 上传图标 → 原生选择器 | `/api/fs/pick` → `pdf/open`（`pickAndOpen()`）；提示行本身走 `submitFiles`（PD1/PD2），无请求 |
@@ -192,7 +196,7 @@ darken color-burn overlay soft-light difference exclusion hue saturation color l
 `#empty-pick-multi`、「过滤」切档 `#empty-pick-filter` 与 pathGrantId chip 已删
 （§6 ui-ids −3、§4 −12 键），`openByPath(path)` 只剩 §7 驱动 API。
 
-## 4. i18n 清单（key | en | cn；共 140 键，SP1 净删 116 → 151、SP5 再删 7 → 144、HD19 再删 12 → 132、Z5 再加 9 → 141、N3 再删 4 → 137、B2 再加 2 → 139、SM 加 1 → 140，由 `node tools/verify/gen-i18n.mjs` 生成；生成器打印同数）
+## 4. i18n 清单（key | en | cn；共 137 键，SP1 净删 116 → 151、SP5 再删 7 → 144、HD19 再删 12 → 132、Z5 再加 9 → 141、N3 再删 4 → 137、B2 再加 2 → 139、SM 加 1 → 140、SV1 删 6 加 3 → 137，由 `node tools/verify/gen-i18n.mjs` 生成；生成器打印同数）
 
 规则（AGENTS §7）：每个可见控件/文案必须有 `data-i18n` key，en/cn 两值非空；
 `data-i18n-cn`（及 `-placeholder`、`-title`）提供中文值，en 取元素自身文本或 `class="tag"` 的字段名。
@@ -207,16 +211,16 @@ SP5 起 `ui.lang` / `ui.theme` 的 §2 行改挂切档**自身文案键**（`lan
 |api.apply.blend.ctl|apply.blend|混合模式|
 |api.apply.blend.hint|16 blend modes (PDF Table 136) grouped; backend writes ExtGState /BM.|16 种 PDF 混合模式（PDF 表 136），分组选择器；落盘写 ExtGState /BM。|
 |api.apply.brightness.ctl|apply.brightness 0..2|明度|
-|api.apply.brightness.hint|0..2; channel coefficient baked into the seal pixels before stamping; disk == preview.|0..2；通道 ×系数后烘焙进印章位图，落盘像素与预览一致（UI5-B2）。|
+|api.apply.brightness.hint|0..2; a channel x-factor applied BEFORE the density pow curve (UI8-CS2 order), baked into the seal pixels; disk == preview.|0..2；通道 ×系数先于密度曲线执行（UI8-CS2 顺序），烘焙进印章位图，落盘像素与预览一致。|
 |api.apply.crossPage.ctl|apply.crossPage|骑缝章|
 |api.apply.ink.ctl|apply.ink 1..10|密度|
-|api.apply.ink.hint|Levels curve v′=255·(v/255)^g (g=1..10): pale red to deep red to black; baked first, before brightness/saturate; disk == preview.|色阶曲线 v′=255·(v/255)^g（g=1..10）：浅红→深红→全黑；先于明度/饱和度烘焙进印章位图（UI5-B2）。|
+|api.apply.ink.hint|Levels curve v′=255·(v/255)^g (g=1..10, runs after brightness) plus the coverage lift a′=255·(a/255)^(1/g) — a paler scan seal really gets more ink on the page; baked; disk == preview (UI8-CS2).|色阶曲线 v′=255·(v/255)^g（g=1..10，执行于明度之后），同时给半透明像素做覆盖提升 a′=255·(a/255)^(1/g) —— 扫描淡章因此真的变浓；烘焙进位图，落盘与预览一致（UI8-CS2）。|
 |api.apply.opacity.ctl|apply.opacity 0..1|透明度|
 |api.apply.opacity.hint|0..1 writes ExtGState /CA and /ca.|0..1，落盘 ExtGState /ca /CA（pdfcpu opacity 同义）。|
 |api.apply.rotation.ctl|apply.rotation|旋转（度）|
 |api.apply.rotation.hint|Degrees around the seal centre.|-180 到 180；印章绕自身中心旋转。|
 |api.apply.saturate.ctl|apply.saturate 0..5|饱和度|
-|api.apply.saturate.hint|0..5 (0 = gray); CSS saturation matrix baked into the seal pixels; disk == preview.|0..5（0=灰度）；CSS 饱和矩阵烘焙进印章位图，落盘像素与预览一致（UI5-B2）。|
+|api.apply.saturate.hint|0..5 (0 = gray); the CSS saturation matrix, as the last bake step; disk == preview.|0..5（0=灰度）；CSS 饱和矩阵是调色烘焙的最后一步，落盘像素与预览一致。|
 |api.apply.scale.ctl|apply.scale|印章宽度（相对页宽）|
 |api.apply.scale.hint|Seal width as a fraction of page width; slider 10%..200%, corner-drag can exceed and echoes back on the slider. Fresh stamps use the Z2 auto scale = 42 mm over the page's display width.|印章宽度为相对页宽分数；滑杆最左 10%、最右 200%，拖动边角可超出范围并回显在滑杆上（A4 = 595.3pt）。新放置/复位的印章按 Z2 自动缩放 = 42 mm 章宽 ÷ 页显示宽（A4 竖版即 0.2008）。|
 |api.apply.startOffset.ctl|apply.startOffset|起始位置（%）|
@@ -234,9 +238,6 @@ SP5 起 `ui.lang` / `ui.theme` 的 §2 行改挂切档**自身文案键**（`lan
 |api.open.pw.ctl|open.pw|PDF 口令|
 |api.fs.pick.pathGrantId.ctl|pathGrantId: grant-x9z|授权句柄（只读显示）：选择器返回的 pathGrantId|
 |api.open.pw.hint|UserPW and OwnerPW are both tried; AES-256 read is UNVERIFIED (FACTS 6).|UserPW/OwnerPW 都试；AES-256 读取链路目前 UNVERIFIED（FACTS §6）。|
-|api.save.replaceOriginal.ctl|save.replaceOriginal|替换原文件|
-|api.save.targetPath.ctl|save.targetPath|目标路径|
-|api.save.targetPath.hint|Blank means same name + .stamp.pdf; atomic temp+rename.|留空则用同名 + .stamp.pdf；写盘走 temp+rename（原子写）。|
 |api.seal.prepare.despill.hint|White-background keying applied live; reversible before save.|对白底扫描件即时去背；预览可撤销，预设保存时保留 alpha。|
 |app.open.btn|Open PDF|打开 PDF|
 |app.save.btn|Save|保存|
@@ -311,10 +312,10 @@ SP5 起 `ui.lang` / `ui.theme` 的 §2 行改挂切档**自身文案键**（`lan
 |pw.title|Password required|需要口令|
 |ruler.hint|page size in pt; origin at top-left|页面尺寸（pt）；标尺原点在左上|
 |save.confirm|Save|保存|
+|save.dest.hint|The Save button opens a native save-as dialog: pick the folder and type the file name (.pdf required); atomic temp+rename.|「保存」会先弹出系统文件浏览器：选择目录并输入文件名（必带 .pdf）；写盘走 temp+rename（原子写）。|
+|save.dest.label|Save location|保存位置|
+|save.dest.none|No location chosen yet|未选择 —— 点「保存」挑选位置|
 |save.hint|save dialog|保存对话框|
-|save.pick.btn|System file picker|系统文件选择器|
-|save.replace.hint|Replacing the original needs a second confirmation.|替换原文件需要再确认一次，且会丢弃原 PDF 的可选内容层。|
-|save.replace.on|on|开|
 |save.retryNew.btn|Save to a new file|改存新文件|
 |save.title|Save PDF|保存 PDF|
 |scale.hint|scale +-0.01|缩放 +-0.01|
@@ -371,7 +372,7 @@ P0/P1 的 `index.html` 必须使用下表 id（`ui-ids` 块 = `ui-contract.mjs` 
 新增 id 要先登记，mock 缺该 id 即报错。
 
 ```ui-ids
-app-main  app-root  apply-blend  btn-console  btn-crosspage-add  btn-open  btn-save  btn-seal-add  btn-seal-upload  btn-shortcuts  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  crosspage-retry  drop-hint  empty-pick  empty-state  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-collapse  instance-fab  instance-panel  instance-remove  instance-reset  lang-seg  log-console  log-console-body  modal-layer  page-pager  panel-export  password-modal  pixel-readout  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  save-cancel  save-confirm  save-modal  error-toast  save-pick  save-source  seal-preview  seal-preview-canvas  seal-preview-name  seal-recent-select  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  theme-seg  topbar
+app-main  app-root  apply-blend  btn-console  btn-crosspage-add  btn-open  btn-save  btn-seal-add  btn-seal-upload  btn-shortcuts  confirm-cancel  confirm-modal  confirm-ok  crosspage-binding  crosspage-retry  drop-hint  empty-pick  empty-state  estimate  estimate-per-page  estimate-total  export-dpi  export-mode  instance-collapse  instance-fab  instance-panel  instance-remove  instance-reset  lang-seg  log-console  log-console-body  modal-layer  page-pager  panel-export  password-modal  pixel-readout  preview  preview-ruler  preview-stage  pw-cancel  pw-retry  save-cancel  save-confirm  save-dest  save-modal  error-toast  save-source  seal-preview  seal-preview-canvas  seal-preview-name  seal-recent-select  stamp-layer  shortcuts-close  shortcuts-modal  shortcuts-table  theme-seg  topbar
 
 ```
 
@@ -456,6 +457,13 @@ error toast with no dialog, and it reads no DOM field),
 `runSplit(opts)` / `undoSplit()` / `stampIntoPDF(opts)` / `undoStamping()` (the write-back chain:
 the sidebar buttons were removed in SP1 and the whole sidebar is gone in SP5, so the §7 API and the keyboard are the entry points;
 `runSplit(opts)` carries the vocabulary per call, e.g. `{splitMode:"rows-cols", rows:1, cols:2}`),
+`saveViaDialog()` / `saveToPath(path)` / `submitReplace()` (SV1 save channels: the first is the
+save modal's 「保存」= one native save-as dialog (`fs/pick{save:true, defaultName, startDir}`)
+then `pdf/save{targetPath}` with whatever the dialog reported (cancel = quiet; no document =
+`err.apply.noDoc` toast); `saveToPath(path)` is the drive channel the verify scripts use
+instead of clicking `#save-confirm`, because a headless run cannot answer a real dialog;
+`submitReplace()` keeps the S1 replace channel reachable (`confirm-modal` stays in the state
+machine, the UI switch is gone)),
 `q()/qa()`、`t(key)`。
 `probe` 关键字：`state` `overflow` `instances` `instanceCount` `selected`
 `modal` `toast` `lang` `theme` `version`（纯版本串）`docTitle`（窗口/标签页标题，HD2）`labels`
@@ -607,6 +615,8 @@ FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 |SM1|F1/F2 切到加章/骑缝放置模式|用户直接指令|已确认（用户 2026-11-10 对话指令）：**F1 = 加章模式切档、F2 = 骑缝放置切档**（`app-shell-chrome.onKey`；互斥由既有 `setAddMode`/`setCrosspageAdd` 承担，`probe('addMode')`/`probe('crosspageAdd')` 与 `#btn-seal-add`/`#btn-crosspage-add` 的 `aria-pressed` 同步）；SHORTCUTS 表新增 F1/F2 行（复用 `app.sealAddMode.btn`/`app.sealCrossAddMode.btn` 键）；钉 = shell-sm SM1（开/关往返、互斥、按钮回显）|2026-11-10|用户 2026-11-10 对话指令（三项一批）|
 |SM2|开启态的加章/骑缝放置模式如何关闭|用户直接指令|已确认（用户 2026-11-10 对话指令）：**右键 / Esc 取消当前放置模式** —— 窗口级 `contextmenu`（仅模式开启时 `preventDefault` 抑制原生菜单，模式关着时右键保持浏览器默认）+ `Escape` 优先级 = modal → 放置模式 → toast；顺带缺陷修正：右按钮 `pointerdown` 在 `#preview-stage`/affordance 上原本会**误放置一条印章并起拖**，现 `button !== 0` 守卫只认左键；SHORTCUTS 表新增取消行（新键 `mode.cancel.hint`，i18n 139→140）；钉 = shell-sm SM2（Esc 取消、右键取消 + 按钮回显）|2026-11-10|用户 2026-11-10 对话指令（三项一批）|
 |CS1|「明度、饱和度、密度三滑块有问题」代码审核|用户直接指令（审核请求；实际情况由实测确定）|已确认（用户 2026-11-10 对话指令）：实测 = UI5-B2 像素链（预览滑杆/落盘烘焙、pow→bright→sat 公式、滑杆↔数值双向同步）**全部仍绿**；真实缺陷只有一个：`bindPlumbing` 的 `input` capture handler 用 `readField(name)` 取配对**首个**元素（= range 半边）的值，且该 handler 先于 target 自身的 pair sync 触发 → **在数值孪生框里键入/步进时，写进实例的是滑杆半边的旧值**（拖 range 一直正确；表现为数值框落后一步）。修复 = capture handler 从 `e.target.value` 读取（按 NUMERIC 尾巴判数字）；钉 = overlay-sm filter 段真实手势（拖 range：param == 元素值且复合 == 公式像素；number 框键 0.5：param=0.5、range 同步、像素 == 公式）|2026-11-10|用户 2026-11-10 对话指令（三项一批）|
+|CS2|「预览里把三个滑杆都打最大，印章又淡又糊」——调色语义修正|用户直接指令（人工验收反馈 2026-11-10）|已确认（用户 2026-11-10 对话指令）：**顺序改钉 = ×brightness → pow(ink) → CSS saturate**（UI5-B2 的 pow→bright→sat 作废：明度在 pow 前，密度掌暗端，全滑杆打最大不再被明度洗白）；**密度同时做覆盖提升 `a′=255·(a/255)^(1/g)`**（ink=1 恒等、alpha 不动；半透明扫描淡章因此真的变浓，这是 CS1 之后用户症状的直接原因）；每步 clamp、只在饱和步后四舍五入一次（旧的逐步取整作废）；`pdfcore.AdjustPNG` + `app-overlay.adjustedBitmap` 同步同序；FACTS §1.10 gold 表重算（(200,40,40)：ink3→(123,1,1)，alpha 137→(a′=255·(137/255)^(1/3)=207 同值链见 FACTS）；钉 = adjust_test/apply_test bakePixel（alpha lift）+ overlay-sm filter 段 bright→pow→sat 链 + apply-sm color 段回读==公式|2026-11-10|用户 2026-11-10 对话指令（人工验收续轮）|
+|SV1|保存对话框怎么简化（P4 起的 targetPath 输入框 + 系统选择器按钮 + 替换原文件开关三件套）|打开一个系统文件浏览器，选择路径并输入名称（用户直接指令）/ 保留手输通道|已确认（用户 2026-11-10 对话指令）：**「保存」按钮 = 一次原生另存为对话框**（`fs/pick{save:true, defaultName=同名.stamp.pdf, startDir=文档所在目录}` → Windows `SaveFileDialog`；取消=静默）→ `pdf/save{targetPath}`。删除面：`#save-pick` 按钮、pathGrantId 显示 chip、`#save-target`/`api.save.targetPath` 文本框、「替换原文件」切档（六键：`save.pick.btn`/`save.replace.on`/`save.replace.hint`/`api.save.targetPath.ctl`/`.hint`/`api.save.replaceOriginal.ctl`）；新增只读行 = `#save-dest` 保存位置 chip（新键 `save.dest.label`/`.none`/`.hint`；i18n 140→137、ui-ids 57→57：`save-pick`→`save-dest`）。后端通道：`api.fs.pick.save`/`defaultName`（§2 新行，`validSaveName` 纯 basename 校验，组合 `dir/multi/filePath` → 400）、`openResult` 新增 `path`（pdf/open/split/apply/export 回显磁盘原路径，前端 `state.file.path` 用于 startDir/保存位置/替换确认框）；`replaceOriginal` 通道与 `confirm-modal`（replace-confirm 态）**保留但 UI 无入口**（§7 `S.submitReplace`），`targetPath`/`mkdirs` 词表不变；§7 新增驱动 `saveToPath(path)`（verify 替代点按钮：无头跑弹真对话框）、`saveViaDialog`、`submitReplace`。钉 = shell-sm SV1（chip 文案 + 三控件不在 DOM + 驱动函数在）+ fsx saveScript 形状测试 + api save 通道守卫（组合/坏名 → bad_body，无对话框）|2026-11-10|用户 2026-11-10 对话指令（人工验收续轮）|
 
 SP5 是 2026-11-06 用户在对话里直接下的指令：**右侧边栏整块删除** —— SP1 之后它只剩
 「导出设置 + 动作段」，SP5 把这最后两段也拆掉：「导出设置」段（含 `#estimate` 体积预估）

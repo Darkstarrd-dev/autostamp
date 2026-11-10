@@ -211,6 +211,9 @@ for (const i of i18n) {
 // so those twelve keys must stay out as well. UI4 N3 (2026-11-09) deleted the
 // 骑缝切片 mode pair with its control: the four sliceMode-family keys are the
 // 137-key vocabulary's fourth dead line, so 141 - 4 = 137 stays honest here.
+// UI8-SV1 (2026-11-10) then killed the save modal's manual path channels:
+// the targetPath input, the replaceOriginal switch and the picker button are
+// gone for good, so their six keys must stay out (140 - 6 + 3 save.dest.* = 137).
 const pickBtn = i18n.find((i) => i.key === "empty.pick.btn");
 if (!pickBtn || pickBtn.en !== "Open file" || pickBtn.cn !== "打开文件")
   bad("E-I18N-PICK", `empty.pick.btn must be "Open file"/"打开文件", got ${JSON.stringify(pickBtn)}`);
@@ -219,8 +222,11 @@ for (const k of ["empty.open.btn", "empty.upload.btn", "save.open.btn", "ui.lang
   "api.fs.pick.multi.ctl", "api.fs.pick.multi.hint", "api.fs.pick.filter.ctl", "api.fs.pick.filter.hint",
   "fs.pick.multi.on", "fs.pick.filter.pdf", "fs.pick.filter.all", "api.fs.pick.pathGrantId.hint",
   // UI4 N3: 随机 is the only slice channel - the mode control and its keys are
-  // gone for good (137 keys, not 141).
-  "ui.crosspage.sliceMode.ctl", "ui.crosspage.sliceMode.hint", "sliceMode.even", "sliceMode.random"])
+  // gone for good.
+  "ui.crosspage.sliceMode.ctl", "ui.crosspage.sliceMode.hint", "sliceMode.even", "sliceMode.random",
+  // UI8-SV1: the save target is the native dialog's, never typed.
+  "save.pick.btn", "save.replace.on", "save.replace.hint",
+  "api.save.targetPath.ctl", "api.save.targetPath.hint", "api.save.replaceOriginal.ctl"])
   if (i18nSet.has(k)) bad("E-I18N-GONE", `dropped key "${k}" is back in UI_SPEC §4`);
 // top.file.hint survives as the save/confirm path hint, bound on both elements.
 const hintRows = [...shellMarkup.matchAll(/id="(save-source|confirm-path)"[^>]*data-i18n="([^"]+)"/g)];

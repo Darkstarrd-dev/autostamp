@@ -322,6 +322,53 @@ func TestRawRequiresAKnownAsset(t *testing.T) {
 	}
 }
 
+// TestPickSaveChannelGuards: the UI8-SV1 save dialog channel rejects the
+// combinations and pre-filled names that could never reach the dialog
+// honestly - all of these answer before runPick, so no test ever shows a
+// modal window. (The happy path needs a real interactive dialog; the
+// verify harness covers it in the live UI.)
+func TestPickSaveChannelGuards(t *testing.T) {
+	mux, _, _ := newTestMux(t)
+	owner := newSession(t)
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"dir combo", `{"save":true,"dir":true}`},
+		{"multi combo", `{"save":true,"multi":true}`},
+		{"filePath combo", `{"save":true,"filePath":"C:\\x.pdf"}`},
+		{"traversal name", `{"save":true,"defaultName":"..\\evil.pdf"}`},
+		{"path name", `{"save":true,"defaultName":"C:/x.pdf"}`},
+		{"wrong extension", `{"save":true,"defaultName":"report.txt"}`},
+		{"dotfile name", `{"save":true,"defaultName":".hidden.pdf"}`},
+	}
+	for _, c := range cases {
+		req := httptest.NewRequest(http.MethodPost, "/api/fs/pick", strings.NewReader(c.body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set(webx.SessionHeader, owner)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: %s = %d, want 400", c.name, c.body, rec.Code)
+			continue
+		}
+		if env := decodeEnvelope(t, rec); env.Code != "bad_body" {
+			t.Errorf("%s: code = %s, want bad_body", c.name, env.Code)
+		}
+	}
+	// validSaveName itself: bare names and .pdf-optional defaults pass.
+	for _, name := range []string{"", "report.pdf", "报告 2.pdf", "a.pdf", "x y"} {
+		if msg := validSaveName(name); msg != "" {
+			t.Errorf("validSaveName(%q) = %q, want usable", name, msg)
+		}
+	}
+	for _, name := range []string{"a.exe", "n:" + `s`, `a\b`, "dir/x.pdf", ".x", "x.", "x "} {
+		if msg := validSaveName(name); msg == "" {
+			t.Errorf("validSaveName(%q) accepted, want rejection", name)
+		}
+	}
+}
+
 // The empty-state path box is the only way to open a file without a dialog, so
 // it must return a grant the open route accepts.
 func TestPickGrantsTypedPath(t *testing.T) {

@@ -2,6 +2,10 @@
 
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-10 — §5 新增 51–52（UI8 轮 CS2 调色链序 + SV1 保存另存为）+ §5.47 公式改钉 + §6 fs/pick 行 + §11 两行
+
+§5.47 的公式改钉 = ×brightness → pow(ink)+alpha 覆盖提升 → CSS saturate（旧 pow→bright→sat 作废）。§5.51（CS2）：链序改钉的理由 = 明度先执行、pow 掌暗端（三滑杆全最大不再被洗白）；密度做 `a′=255·(a/255)^(1/g)` 覆盖提升（ink=1 恒等；扫描淡章只有 alpha 差异 → 不做提升时密度真的无效果 = 用户症状根因）；gold = FACTS §1.10 重算（链 bright1.5→g3→sat0.5 → (156,30,30)、alpha 137→207）。§5.52（SV1）：保存对话框只剩 `#save-dest` 只读 chip + 「保存」= 一次原生另存为对话框（`fs/pick{save:true, defaultName, startDir}` → `SaveFileDialog` → `pdf/save{targetPath}`），删 `#save-pick`/pathGrantId chip/targetPath 框/替换原文件切档（六键），`replaceOriginal` 通道 + `confirm-modal` 保留为 §7 `submitReplace` 驱动；`openResult` 新增 `path`；§7 新增 `saveViaDialog/saveToPath/submitReplace`，**verify 不再点 `#save-confirm`**（无头跑会弹真对话框）。§6 fs/pick 行登记 `{save:true…}` → `{targetPath}`；§11 新增 SV1 行、B1/B2 行链序改写。计数：i18n **140 → 137**、ui-ids 57 → 57（`save-pick` → `save-dest`）、词表字段 +2（`api.fs.pick.save/defaultName` 为 §2 行，无新控件）。
+
 ## 2026-11-10 — §5 新增 49–50（UI7 轮 SM1/SM2 快捷键 + CS1 滑杆配对缺陷）+ §11 一行
 
 §5.49：F1/F2 = 两个放置模式的键盘切档（互斥仍由 setter 承担；F 键在输入框聚焦时也答），Esc 优先级 = modal → 放置模式 → toast，窗口级 `contextmenu` 仅模式开启时抑制原生菜单并关掉两模式（模式关着时右键保持浏览器默认）；顺带缺陷修正 = `app-overlay` stage/affordance `pointerdown` 加 `button !== 0` 守卫（右按钮原本会误放置/起拖）。§5.50：CS1 = UI5-B2 像素链实测仍绿，真实缺陷只在 kernel `bindPlumbing` `input` capture 读 `readField`（配对首个元素 = range 半边，先于 pair sync）→ number 孪生框键入按滑杆旧值写入实例；修复 = 从 `e.target` 取值并保持 seg/checkbox 形态语义（`div.seg` 按按下按钮 `data-value`；初版直读 `.value` 会把 `ui.crosspage.binding` 覆写成 `undefined`、骑缝 alternate/none 坏，strip 段钉已钉住）。§11 新增「改快捷键 / 放置模式取消 / 滑杆配对」速查行。i18n **139 → 140**（`mode.cancel.hint`）。

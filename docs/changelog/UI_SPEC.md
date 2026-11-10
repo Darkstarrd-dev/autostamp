@@ -2,6 +2,10 @@
 
 > `docs/UI_SPEC.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-10 — §8 新增 CS2/SV1（UI8 轮：调色链序 + 覆盖提升；保存对话框退场为原生另存为）；§1 转移、§2（save 行 ctl=no + pick save/defaultName 行）、§3 保存弹窗两行、§4 i18n **140 → 137**、§6 ui-ids 57 → 57（`save-pick` → `save-dest`）、§7 新增保存驱动
+
+CS2 = 链序 ×bright → pow(ink)+alpha lift → sat（UI5-B2 旧序作废），tooltip 文案同步（hint 三键值重写，键数不变）。SV1 = 保存弹窗删 `#save-pick`/chip/targetPath 框/替换切档，新增 `#save-dest` chip（`save.dest.*` 三键）；`api.save.targetPath`/`replaceOriginal` 退 ctl=no；§7 新增 `saveViaDialog`/`saveToPath(path)`/`submitReplace`（headless 不可点按钮的替代通道）。
+
 ## 2026-11-10 — §8 新增 SM1/SM2/CS1：UI7 轮（放置模式快捷键 + 右键/Esc 取消 + 调色滑杆配对缺陷）；§4 i18n **139 → 140**、§6 ui-ids 57 不变
 
 `docs/UI_SPEC.md`：§8 决策表新增 SM1（F1/F2 键盘切档）、SM2（右键/Esc 取消开启态；顺带 right-button `pointerdown` 误放置/起拖的缺陷修正）、CS1（用户「三滑块有问题」审核：像素链实测绿，真实缺陷 = `bindPlumbing` capture 读配对首个元素 → number 孪生框落后一步，修复读 `e.target`）三行；§4 新增键 `mode.cancel.hint`（SHORTCUTS 表取消行），`gen-i18n.mjs` 重跑打印 140；§4 计数行同步「SM 加 1 → 140」。§2/§3/§6/§7 零变化。头「最后核对」换成 UI7 摘要，前轮（T1–T2/B1–B2/N1–N4）压成一行注记。

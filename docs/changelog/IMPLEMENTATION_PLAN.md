@@ -2,6 +2,10 @@
 
 > `docs/IMPLEMENTATION_PLAN.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-10 — §10.1 登记「调色链序 CS2 + 保存另存为 SV1（UI8 轮）」
+
+CS2：调色链序 ×bright → pow(ink)+alpha 覆盖提升 → CSS sat（`AdjustPNG`/`adjustedBitmap` 同式同序；FACTS §1.10 金值重钉）。SV1：保存对话框退场 = 「保存」一次原生另存为（`fs/pick{save:true}` → `{targetPath}`）+ `#save-dest` chip；`replaceOriginal`/`confirm-modal` 退 §7 驱动；契约计数 i18n 137、ui-ids 57（`save-pick`→`save-dest`）。门槛 = `build.ps1` 全量。
+
 ## 2026-11-10 — §10.1 登记「快捷键 SM1–SM2 + 调色滑杆缺陷 CS1（UI7 轮）」
 
 用户 2026-11-10 三项一批：F1/F2 = 加章/骑缝放置模式键盘切档；开启态右键或 Esc 关闭该态（顺带修右按钮误放置/起拖）；「颜色调节 Debug」审核 → 实测像素链仍绿，真实缺陷 = 滑杆/数值配对 capture 读旧值（number 框落后一步），修复 = 从 `e.target` 取值（seg 按按下按钮 `data-value`、checkbox 按 `checked`；初版直读 `.value` 把 seg 字段覆写成 `undefined`，已由 strip 段钉修回）。钉 = shell-sm SM1/SM2 + overlay-sm `filter` 真实手势段。i18n 139 → 140（`mode.cancel.hint`）。

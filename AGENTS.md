@@ -390,7 +390,8 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
     `<div class="section" id="panel-export">`（sec-title + 五个 `.field` =
     `api.export.mode/dpi/customDpi/quality/pages`（segs `#export-mode`/`#export-dpi`）+
     `#estimate`/`#estimate-total`/`#estimate-per-page`）搬进 `#save-modal`，位置 =
-    `#save-source` 之后、`#save-pick` 之前；**id 与 `data-field` 名全部不变**（词表面零变化），
+    `#save-source` 之后、**SV1（2026-11-10）起 = `#save-dest` 行之前**（当时位置在 `#save-pick` 前，
+    该按钮与路径输入框整组已被 SV1 删除，见 §5.52）；**id 与 `data-field` 名全部不变**（词表面零变化），
     样式只新增 `.modal .section` + `.modal .sec-title` 两条外壳规则，`#save-modal` 加
     `top: 8vh` + `max-height: 84vh` + `overflow-y: auto`（导出段在 modal 内滚动）。
     布局：`#app-main` grid 改**单列 full-bleed**（`grid-template-columns: minmax(0, 1fr)` +
@@ -509,8 +510,10 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
 47. **调色烘焙落盘（B2，2026-11-09 用户 ask 决定；`UI_SPEC §8` B2；修订 §5.5 预览-only 语义）**：
    `api.apply.brightness/saturate/ink`（ink = 曲线指数 g，范围 1..10 默认 1；saturate 范围
    0..3→**0..5**）三参数**随 apply 发送**并被 `pdfcore.AdjustPNG`（`internal/pdfcore/adjust.go`）
-   烘进印章像素，顺序 = **pow（v′=255·(v/255)^g）→ ×brightness → CSS saturate 矩阵**
-   （常数 0.213/0.715/0.072；每步 clamp 0..255、四舍五入、alpha 不变，straight-alpha）；
+   烘进印章像素，顺序 = **×brightness → pow（v′=255·(v/255)^g）→ CSS saturate 矩阵**
+   （常数 0.213/0.715/0.072；每步 clamp 0..255、只在最后一步四舍五入，straight-alpha；
+   **UI8-CS2 改钉，见 §5.51**：旧 pow→bright→sat 作废，alpha 只随密度的覆盖提升
+   `a′=255·(a/255)^(1/g)` 变，ink=1 恒等；gold 值表 = FACTS §1.10）；
    先调色、再 Z4 旋转、再切片（`AdjustPNG → RotatePNG → Strips`）。前端 `app-overlay.adjustedBitmap`
    （逐像素同公式 + 256 位 pow 查找表，按 (sealId,参数签名) 缓存）替换旧 `ctx.filter` 色链
    （`drawSeal` 不再设 filter；FACTS §1.4 污染保护的 `filter='none'` 复位仍保留），
@@ -554,13 +557,36 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
    `Number`；初版直读 `.value` 踩坑：seg 字段没有 `.value`，`ui.crosspage.binding` 被 `undefined`
    覆写 → 骑缝 alternate/none 坏，strip 段钉住后补回）。钉 = overlay-sm `filter` 段真实手势：拖 range → `params == el.value` 且
    复合 == 公式像素；number 框 `value="0.5"` + input/change → param=0.5、range 同步、像素 == 公式。
+51. **调色链序 + 密度覆盖提升（CS2，2026-11-10 用户人工验收反馈「三滑杆打最大印章又淡又糊」；`UI_SPEC §8` CS2；改 §5.47 的公式）**：
+   链序 = **×brightness → pow(ink) → CSS saturate**（明度先执行、pow 掌暗端：全开也不再被明度洗白；
+   每步只 clamp 不逐步取整，饱和步后统一四舍五入一次，`math.Round`/`Math.round` 半值进位）。
+   **密度同时做 alpha 覆盖提升** `a′=255·(a/255)^(1/g)`（与通道曲线互逆：g 次方压暗色、1/g 次方撑起
+   覆盖；ink=1 恒等 alpha 不动）——扫描淡章只有 alpha 差异，不做提升时密度滑杆在页面上真的无效果，
+   这就是用户症状的根因。gold：(200,40,40) ink3 → (123,1,1)；alpha137,ink3 → a′=207；链
+   bright1.5→ink3→sat0.5 → (113,21,21)（FACTS §1.10 重算）。Go `bakePixel`/`adjust_test` 同值，
+   `app-overlay.adjustedBitmap` 同公式（查找表只随参数签名重建，adjCache 无 alpha 特判）。
+   钉 = adjust_test gold + apply-sm `color` 段（回读 == 公式）+ overlay-sm `filter` 段链序。
+52. **保存对话框只剩原生另存为（SV1，2026-11-10 用户对话指令；`UI_SPEC §8` SV1；修订 §5.19/§6 save 行的 UI 面）**：
+   「保存」= 一次 `fs/pick{save:true, defaultName=同名.stamp.pdf, startDir=文档目录}`（Windows
+   `SaveFileDialog`；DefaultExt+AddExtension 保证单扩展名 `.pdf`，OverwritePrompt 原生代问二次覆盖；
+   取消 = 静默收尾）→ `pdf/save{targetPath}`。删 `#save-pick`、pathGrantId chip、`api.save.targetPath`
+   文本框、「替换原文件」切档（六 i18n 键删除，140→137）；新增 `#save-dest` 只读 chip（`save.dest.*`
+   三键；ui-ids 57→57：`save-pick`→`save-dest`）。后端：`fsx.SaveOptions/PickSave/saveScript` +
+   `pickBody{save,defaultName}`（`validSaveName` 只认纯 basename + 可选 `.pdf`；与 dir/multi/filePath
+   组合 → 400）+ **响应 `{targetPath}`**；`openResult` 新增 `path`（open/split/apply/export 都回显
+   `tmpstore` origin；上传态为空）→ 前端 `state.file.path`（startDir、confirm-path 也终于有真值）。
+   `replaceOriginal` 通道 + `confirm-modal`/replace-confirm 态**保留（§7 `S.submitReplace` 驱动，UI 无
+   入口）**；`targetPath`/`pathGrantId`/`mkdirs` 三通道后端语义不变。§7 新增 `saveViaDialog`/
+   `saveToPath(path)`/`submitReplace`——**verify 一律走 `saveToPath`，点按钮会在无头跑弹真对话框**。
+   钉 = fsx saveScript 形状测试（含撇号转义）+ api save 通道守卫（组合/坏名 400）+ shell-sm SV1
+   （chip 文案 + 三控件不在 DOM + 驱动函数存在）+ export-sm `driveSave` 已改驱动通道。
 
 ## 6. HTTP 契约（`/api/*`，全部 JSON；字段在 **P0.5 与用户确认后**才冻结，改动必须同步本文、`docs/UI_SPEC.md` 与前端）
 
 |路由|用途|
 |---|---|
 |`GET /api/health`|健康检查 + 版本号|
-|`POST /api/fs/pick`|原生文件选择器（`{filter,multi,startDir}`；filter 词表 `pdf|image|all`，`image` = 印章图选择器，见 HD8）或 `{"filePath":…}` 直开授权，返回 `pathGrantId`（owner 绑定，TTL）；取消回 `{cancelled:true, picks:[]}`，无选择器的平台回 501 `pick_unsupported`；`{dir:true}` 选**目录**（Windows `FolderBrowserDialog`；`{dir:true,filePath:<目录>}` = 无选择器平台的直开），回 `{dirPath, picks[]}` = 该目录**一层内**匹配的 PDF，每个带自己的 grant（批处理输入，BM1）|
+|`POST /api/fs/pick`|原生文件选择器（`{filter,multi,startDir}`；filter 词表 `pdf|image|all`，`image` = 印章图选择器，见 HD8）或 `{"filePath":…}` 直开授权，返回 `pathGrantId`（owner 绑定，TTL）；取消回 `{cancelled:true, picks:[]}`，无选择器的平台回 501 `pick_unsupported`；`{dir:true}` 选**目录**（Windows `FolderBrowserDialog`；`{dir:true,filePath:<目录>}` = 无选择器平台的直开），回 `{dirPath, picks[]}` = 该目录**一层内**匹配的 PDF，每个带自己的 grant（批处理输入，BM1）；`{save:true, defaultName, startDir}` = **另存为对话框**（UI8-SV1，Windows `SaveFileDialog`；不能与 dir/multi/filePath 组合；`defaultName` 只认纯 basename + 可选 `.pdf`，`validSaveName`），成功回 `{cancelled:false, targetPath}`，取消同普通取消|
 |`POST /api/pdf/open`|按 `pathGrantId` 或 multipart 上传打开 PDF → `assetId` + 页元数据（页数、每页 pt 尺寸、rotation、是否含文字）|
 |`GET /api/pdf/raw?id=`|原始 PDF 字节（支持 Range/ETag），供 pdf.js 直接取|
 |`POST /api/pdf/split`|**已实现**:切分词表 `{assetId, splitMode, rows, cols, customCuts[], splitVeto, vetoPages[], splitPages}`（词表 = `UI_SPEC §2.2`；`splitVeto` 是指针,`false` 是真答案；`vetoPages` = D3 逐页否决；`splitPages` 用 pages 词表限定可切页）→ 新 `assetId`（kind `split`）+ 同形状页元数据;原资产保留即「撤销切分」的实现|
@@ -735,7 +761,8 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
 |改切分/骑缝几何|`docs/FACTS.md` §2.3 + §1.8|`internal/pdfcore/split.go`（词表含 `vetoPages`/`splitPages`）、`sealimg.go`（落盘条带）、`web/static/app-preview.js`（`drawSplitMarks` 切点预览）、`web/static/app-overlay.js`（`stripGeometryFor/stripRectsFor` 条带）、`web/static/app-shell-docops.js`（`#split-veto` 逐页否决、`#split-undo`）|
 |改叠加层/印章通道|`docs/FACTS.md` §1.8 + §1.3 + §1.9|`web/static/app-overlay.js`（合成/affordance/快照 `state.surface`；实例画布只作 probe 背板、不挂 DOM——单绘制契约 §5.27；加章模式点击 `addInstanceAt` §5.29；滚轮已归 chrome 的全局缩放 §5.14 V7）、`web/static/app-seal.js`（multipart 上传 / `prepareFromGrant` pathGrantId 形态 / 去背撤销 / 左列预览 `renderPreview`）、`web/static/app-shell-seals.js` + `app-shell-instances.js`（`currentSeal`/最近印章下拉/浮动面板 `#instance-panel`）、`internal/api/seal.go`（两形态 + `SetRecentSeal`）|
 |改印章顶栏通道 / 实例面板（HD8–HD12）|`docs/UI_SPEC.md` §2/§4/§6/§8 HD8–HD12|`web/static/index.html`（顶栏 `#btn-seal-upload`+`#seal-recent-select`+`#btn-seal-add`、`#seal-preview`、`#instance-panel`）、`web/static/app-shell-{seals,instances,chrome,verify}.js`、`internal/config/{types,store,patch,sanitize}.go`（`recentSeals`、scale 0.05..5）、`internal/api/seal.go`（JSON 形态）、`internal/fsx/pick.go`（`image` 过滤词）|
-|改落盘/撤销/保存|`UI_SPEC §8` W1-W4 + 本文件 §5.16/§5.17 + FACTS §1.9 §2.6|`internal/api/apply.go`、`internal/api/save.go`、`internal/pdfcore/{apply,stamp,blend,validate,pxdims,pages}.go`、`web/static/app-shell-docops.js`（`stampIntoPDF`/`undoRoute`/`submitSave`）、`web/static/index.html`（`#save-modal`：目标路径/选择器/替换开关 + **SP5 起的导出设置段**；入口 = `#btn-save` + Ctrl+S）、`tools/verify/apply-smoke.mjs`|
+|改落盘/撤销/保存|`UI_SPEC §8` W1-W4 + 本文件 §5.16/§5.17 + FACTS §1.9 §2.6|`internal/api/apply.go`、`internal/api/save.go`、`internal/pdfcore/{apply,stamp,blend,validate,pxdims,pages}.go`、`web/static/app-shell-docops.js`（`stampIntoPDF`/`undoRoute`/`submitSave` + SV1 `saveViaDialog`/`saveToPath`/`submitReplace`）、`web/static/index.html`（`#save-modal`：**SV1 起 = `#save-dest` 只读 chip + SP5 起的导出设置段**；目标由原生另存为对话框给出；入口 = `#btn-save` + Ctrl+S）、`tools/verify/apply-smoke.mjs`|
+|改保存对话框/另存为通道（SV1）|`UI_SPEC §8` SV1 + 本文件 §5.52 + §6 fs/pick 行|`internal/fsx/pick.go`（`SaveOptions`/`PickSave`/`saveScript`；`pick_other.go` 501）、`internal/api/pdf.go`（`pickBody{save,defaultName}` + `validSaveName` + `openResult.path`）、`internal/api/save.go`（targetPath/pathGrantId/replaceOriginal 三通道语义不变）、`web/static/app-shell-docops.js`（`saveViaDialog`/`saveToPath`/`submitReplace`）、`app-shell-kernel.js`（`state.saveTarget`、`setModal` 预置 `#save-dest`）、`app-shell-chrome.js`（save-confirm → `saveViaDialog`；confirm-* → `submitReplace`）、`index.html`+`docs/ui/mockup.html`（`#save-dest` 行；`save-pick`/targetPath 框/替换切档删除）、`app-i18n.js`（`save.dest.*`）、`tools/verify/{pick_test,pdf_test,shell-sm SV1,export-sm driveSave}`|
 |改导出体积预估|`docs/FACTS.md` §4 + `UI_SPEC §8` E1|`web/static/app-shell-export.js`（`computeEstimate/refreshEstimate`、`probe('estimate')` 在 `app-shell-verify.js`）；控件面 = `web/static/index.html` 的 `#estimate`/`#estimate-total`/`#estimate-per-page`，**SP5 起在 `#save-modal` 的 `#panel-export` 段里**（与五个导出 `.field` 同段）|
 |改混合模式/透明度|`docs/FACTS.md` §1.2/§1.3/§2.2|`internal/pdfcore/blend.go`、`web/static/app-overlay.js`|
 |改导出 DPI/质量|`docs/FACTS.md` §4 + `UI_SPEC §8` W5/W6|`internal/pdfcore/raster.go`（writer 字节结构）、`internal/api/export.go`（协商两形态 + 硬限）、`web/static/index.html`（**SP5：导出设置段 = `#save-modal` 内的 `#panel-export`**，五个 `.field` + `#estimate` 都在保存对话框里）、`web/static/app-shell-export.js`（保存内的 raster 通道 + `MAX_EXPORT_PAGE_BYTES` 拦截 + `exportDpiOf/exportQualityOf` + `lastExport` 幂等；`submitSave` 在 `app-shell-docops.js`）+ `app-shell-chrome.js`（`#save-modal` 打开/关闭接线）、`tools/verify/export-smoke.mjs`|
@@ -746,7 +773,7 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
 |改骑缝不匀切片模拟（Z5）|`UI_SPEC §8` Z5 + 本文件 §5.43/§6（apply `slices` 字段）|`internal/pdfcore/stamp.go`（`StripsFractions` 累计列 + `Box` 的 `SlotFrac`）、`apply.go`（实例词表 `slices`）、`apply_test.go`/`stamp_test.go`（分数切片字节）、`internal/config/{types,defaults,patch,sanitize}.go`（`apply.cover`；`apply.sliceMode` 已由 N3 删除）、`web/static/index.html`（cp 组滑杆/重试；`#crosspage-slicemode` 切档已由 N3 删除）、`app-shell-instances.js`（`randomCrossFractions`/`drawCrossSlices`/`retryCrossSlices`）、`app-overlay.js`（`stripContext` frac/cum）、`app-shell-chrome.js`（seg/cover/retry 接线）、`probe('strips')` 读数、`tools/verify/{shell-smoke,overlay-smoke,apply-smoke}.mjs`（Z5 断言）。**UI4 轮 N3/N4 修订（2026-11-09）**：N3 删 `SliceMode` 三件套 + `#crosspage-slicemode` + `sliceMode.*` 四键（i18n 141 → 137、ui-ids 58 → 57、settings 字段对 −1），随机恒生效；N4 改 `startOffset` 为 0..100 百分比 —— `stamp.go` 的 `Box.Y = (1 − pct/100) × (pageH − h)`、`sanitize.go`/`apply.go` 校验同步、`apply_test.go`/`stamp_test.go` 断言按百分比、`index.html` 滑杆 `min 0 max 100`、`app-overlay.js` 的 `rectFor` strip 分支与 `moveDrag` 纵拖、`addCrossInstanceAt` 的点击换算、`tools/verify/{overlay,apply}-smoke` 的 startOffset 取样按百分比|
 |改实例参数面板停靠/滚动（IP1/IP2）|`UI_SPEC §8` IP1/IP2 + 本文件 §5.44（作废 §5.30/§5.34 的锚点半边）|`web/static/style.css`（`#instance-panel` = `right/top/bottom:10px` + `overflow-y:auto`；`#instance-fab` 右上角停靠）、`web/static/app-shell-instances.js`（`posInstancePanel` 只留 show/hide）、`docs/ui/mockup.html`（同形镜像）、`tools/verify/shell-smoke.mjs`（IP1 停靠几何 + IP2 短视口滚动断言）|
 |改主题配色 / tooltip / CN 排版（UI6 T1/T2）|`UI_SPEC §8` T1/T2 + 本文件 §5.48|`web/static/style.css`（`:root`/`html[data-theme="dark"]` token 值、`--tooltip-bg`/`--tooltip-fg`、`.app-tooltip`、`html:lang(zh-CN)` 行高/tracking、seg 药丸、按钮态、modal/toast 圆角、thin 滚动条、`.14s` 过渡）、`web/static/app-shell-chrome.js`（`bindTooltips` 引擎 + `boot()` 接线）、`docs/ui/mockup.html`（token/CSS 镜像；注意 ui-sm 的 brace-vs-cssRules 校验不能往 mock `<style>` 塞嵌套 `@media`）、`tools/verify/shell-smoke.mjs`（T1 tooltip 断言：show/hide、title 摘挂、aria-label 恒定、反色 token、8px/12.5px 读数）|
-|改调色烘焙 + 骑缝轮廓框（UI5 B1/B2）|`UI_SPEC §8` B1/B2 + 本文件 §5.46/§5.47 + §6 apply 行|`internal/pdfcore/adjust.go`（`AdjustPNG` pow→bright→sat）、`internal/pdfcore/apply.go`（调色→旋转→切片链）、`internal/api/apply.go`（实例 `brightness/saturate/ink` 词表）、`internal/config/{types,defaults,patch,sanitize}.go`（`apply.ink`、saturate 0..5）、`web/static/app-overlay.js`（`adjustedBitmap`/`transformCanvas` 像素链、`outlineFor`+`state.outlines` 轮廓框、`drawSeal` 无 filter）、`web/static/app-shell-docops.js`（`stampBodyOf` 发色调参数）、`web/static/app-shell-verify.js`（`probe('strips')` 的 `ox/oy/ow/oh`）、`web/static/index.html`+`docs/ui/mockup.html`（密度行、saturate 0..5、tooltip 文案）、`tools/verify/{overlay-smoke,apply-smoke,shell-smoke}.mjs`（色公式独立重算 + 轮廓断言）|
+|改调色烘焙 + 骑缝轮廓框（UI5 B1/B2）|`UI_SPEC §8` B1/B2 + 本文件 §5.46/§5.47 + §6 apply 行|`internal/pdfcore/adjust.go`（`AdjustPNG` bright→pow(+alpha 覆盖提升 `a′=255·(a/255)^(1/g)`)→sat，UI8-CS2 见 §5.51；gold 值 = FACTS §1.10 + `adjust_test.go`）、`internal/pdfcore/apply.go`（调色→旋转→切片链）、`internal/api/apply.go`（实例 `brightness/saturate/ink` 词表）、`internal/config/{types,defaults,patch,sanitize}.go`（`apply.ink`、saturate 0..5）、`web/static/app-overlay.js`（`adjustedBitmap`/`transformCanvas` 像素链、`outlineFor`+`state.outlines` 轮廓框、`drawSeal` 无 filter）、`web/static/app-shell-docops.js`（`stampBodyOf` 发色调参数）、`web/static/app-shell-verify.js`（`probe('strips')` 的 `ox/oy/ow/oh`）、`web/static/index.html`+`docs/ui/mockup.html`（密度行、saturate 0..5、tooltip 文案）、`tools/verify/{overlay-smoke,apply-smoke,shell-smoke}.mjs`（色公式独立重算 + 轮廓断言）|
 |改骑缝章放置/面板组（SP4）|`UI_SPEC §8` SP4 + 本文件 §5.36|`web/static/index.html`（`#btn-crosspage-add`、面板 cp 组）、`web/static/app-shell-seals.js`（`setCrosspageAdd` 互斥）、`web/static/app-shell-instances.js`（`addCrossInstanceAt`/`syncCpGroup`）、`web/static/app-overlay.js`（strip 几何/纵拖 startOffset/手柄）、`web/static/app-shell-chrome.js`（binding seg 实例语义、放置模式按钮接线）、`tools/verify/shell-smoke.mjs`（SP4 断言）与 `overlay-smoke`/`apply-smoke`（条带）|
 |改打包/发布物|本文件 §4（PC1）|`build.ps1`（`Start-Package`：`autostamp-<rev>-win64.zip` = strip 窗口版重命名 `autostamp.exe` + `README.md`，25 MB 体积门）、`README.md`（随 zip 一起出货，必须保持准确）、`build1.ps1`/`buildm.ps1`（单 exe 出口 `dist\autostamp.exe`；极限压缩走 UPX，见 FACTS §4.3）|
 |改粘贴/拖拽装载|`UI_SPEC §8` PD1/PD2 + 本文件 §5.23/§5.25/§5.38（无新路由/新字段）|`web/static/app-shell-docops.js`（`submitFiles`/`classifyLoad`/`state.loadLog`）+ `app-shell-chrome.js`（paste/dragover/drop 接线）、`web/static/index.html`（`#drop-hint`；装载入口 = `#empty-pick` 一枚大按钮，HD19 起无路径框、无隐藏 `file-input`）、`web/static/style.css`（`[data-drag]`+`#drop-hint`）、`web/static/app-seal.js`（图片经 `seal/prepare`）、`tools/verify/shell-smoke.mjs`（装载断言）|

@@ -261,10 +261,11 @@ func handleExportVector(w http.ResponseWriter, r *http.Request, store *tmpstore.
 		return
 	}
 	carryOrigin(log, store, body.AssetID, asset.ID, owner)
+	savePath, _ := store.OriginOf(asset.ID, owner)
 	log.Info("pdf exported vector", "from", body.AssetID, "into", asset.ID,
 		"pages", newDoc.PageCount, "bytes", asset.Size)
 	webx.Created(w, exportResult{
-		openResult: openResult{AssetID: asset.ID, Name: "", Size: asset.Size, Kind: "exported", Doc: *newDoc},
+		openResult: openResult{AssetID: asset.ID, Name: "", Path: savePath, Size: asset.Size, Kind: "exported", Doc: *newDoc},
 		Mode:       "vector",
 	})
 }
@@ -436,10 +437,11 @@ func handleExportRaster(w http.ResponseWriter, r *http.Request, store *tmpstore.
 		log.Warn("导出 PDF 无法重新解析", "asset", asset.ID, "err", err)
 		newDoc = doc // the raster output keeps the source page count
 	}
+	savePath, _ := store.OriginOf(asset.ID, owner)
 	log.Info("pdf exported raster", "from", spec.AssetID, "into", asset.ID,
 		"pages", len(pages), "dpi", dpi, "bytes", asset.Size)
 	webx.Created(w, exportResult{
-		openResult:   openResult{AssetID: asset.ID, Name: "", Size: asset.Size, Kind: "exported", Doc: *newDoc},
+		openResult:   openResult{AssetID: asset.ID, Name: "", Path: savePath, Size: asset.Size, Kind: "exported", Doc: *newDoc},
 		Mode:         "raster",
 		Dpi:          dpi,
 		Quality:      quality,

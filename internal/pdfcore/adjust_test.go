@@ -1,18 +1,21 @@
 package pdfcore
 
-// B2 goldens (UI5 契约 调色公式). The numbers are worked out by hand from the
+// B2/CS2 goldens (UI8 契约 调色公式). The numbers are worked out by hand from the
 // contract steps, so the Go bake and app-overlay.js adjustedBitmap cannot drift
-// apart. The fixture colour is (200,40,40):
+// apart. The fixture colour is (200,40,40), CS2 order = bright → pow(ink) +
+// alpha lift → sat:
 //
 //	ink 3:      r = 255*(200/255)^3 = 123.03 -> 123, g/b = 255*(40/255)^3 = 0.984 -> 1
+//	ink 3 alpha lift: 255*(137/255)^(1/3) = 207.35 -> 207
 //	bright 1.5: 200*1.5 = 300 -> clamp 255; 40*1.5 = 60
 //	sat 0:      0.213*200 + 0.715*40 + 0.072*40 = 74.08 -> 74 for all three channels
 //	sat 5:      4.148*200 - 2.86*40 - 0.288*40 = 703.7 -> clamp 255, green/b -> 0
 //	sat 2:      1.787*200 - 0.43*40 - 0.072*40 = 337.4 -> clamp 255, g/b = 6
-//	the chain (ink 3 -> bright 1.5 -> sat 0.5, per-step clamp):
-//	          pow -> (123.03, 0.984, 0.984)
-//	          bright -> (184.54, 1.476, 1.476)
-//	          sat -> 0.6065*184.54 + 0.3575*1.476 + 0.036*1.476 = 112.5 -> 113, g/b = 21
+//	the chain (bright 1.5 -> ink 3 -> sat 0.5, per-step clamp):
+//	          bright -> (300, 60, 60) -> clamp -> (255, 60, 60)
+//	          pow    -> 255*(255/255)^3 = 255; 255*(60/255)^3 = 3.32
+//	          sat    -> 0.6065*255 + 0.3575*3.32 + 0.036*3.32 = 155.9 -> 156, g/b:
+//	                     0.1065*255 + 0.8575*3.32 + 0.036*3.32 = 30.1 -> 30
 //	ink 1.5:    255*(200/255)^1.5 = 176.9 -> 177, 255*(40/255)^1.5 = 16.0 -> 16
 //	ink 10:     255*(200/255)^10 = 22.0 -> 22, 40 -> 0
 //	ink 1 / sat 1 / bright 0: everything to 0
@@ -79,7 +82,7 @@ func TestAdjustPNGGoldens(t *testing.T) {
 		{"saturate 0 collapses to the luminance grey", 1, 0, 1, 74, 74, 74},
 		{"saturate 5 pushes red out of the gamut", 1, 5, 1, 255, 0, 0},
 		{"saturate 2 clamps the red channel only", 1, 2, 1, 255, 6, 6},
-		{"the chain pow -> bright -> sat", 1.5, 0.5, 3, 113, 21, 21},
+		{"the chain bright -> pow -> sat", 1.5, 0.5, 3, 156, 30, 30},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := decodeBaked(t, mustBake(t, src, tc.bright, tc.sat, tc.ink))
@@ -109,21 +112,43 @@ func TestAdjustPNGIdentityKeepsBytes(t *testing.T) {
 	}
 }
 
-// TestAdjustPNGKeepsAlpha: alpha never moves, and the bitmap stays straight
-// alpha - the same colour under a half-alpha matte is darkened, not scaled
-// toward transparent.
-func TestAdjustPNGKeepsAlpha(t *testing.T) {
+// TestAdjustPNGAlphaLift: the density slider lifts semi-transparent coverage
+// with the inverse pow curve (a′ = 255·(a/255)^(1/g)), so a pale scan
+// actually puts more ink on the page; brightness/saturate never touch alpha,
+// and the colour under the half-alpha matte still darks with the pow curve.
+func TestAdjustPNGAlphaLift(t *testing.T) {
 	src := bakeSource(t)
 	before := decodeBaked(t, src)
-	after := decodeBaked(t, mustBake(t, src, 1, 1, 3))
-	for _, x := range []int{0, 1} {
-		a, b := before.NRGBAAt(x, x).A, after.NRGBAAt(x, x).A
-		if a != b {
-			t.Errorf("pixel (%d,%d) alpha = %d, want the unchanged %d", x, x, b, a)
-		}
+
+	// brightness / saturate alone: alpha byte-for-byte unchanged.
+	for _, tc := range []struct {
+		name             string
+		bright, sat, ink float64
+	}{
+		{"bright 1.5 keeps alpha", 1.5, 1, 1},
+		{"sat 2 keeps alpha", 1, 2, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			after := decodeBaked(t, mustBake(t, src, tc.bright, tc.sat, tc.ink))
+			for _, x := range []int{0, 1} {
+			a, b := before.NRGBAAt(x, x).A, after.NRGBAAt(x, x).A
+			if a != b {
+				t.Errorf("pixel (%d,%d) alpha = %d, want the unchanged %d", x, x, b, a)
+			}
+			}
+		})
 	}
-	if c := after.NRGBAAt(1, 1); c.A != 137 || c.R != 123 || c.G != 1 || c.B != 1 {
-		t.Errorf("pixel (1,1) = %+v, want the straight-alpha bake (123,1,1) a137", c)
+
+	after := decodeBaked(t, mustBake(t, src, 1, 1, 3))
+	if c := after.NRGBAAt(1, 1); c.A != 207 || c.R != 123 || c.G != 1 || c.B != 1 {
+		t.Errorf("pixel (1,1) = %+v, want density (123,1,1) a207 (255*(137/255)^(1/3))", c)
+	}
+	if c := after.NRGBAAt(0, 0); c.A != 255 {
+		t.Errorf("opaque pixel alpha = %d, want 255 (the lift keeps opacity at 1)", c.A)
+	}
+	// ink 10 lands the lift near the ceiling on this matte.
+	if c := decodeBaked(t, mustBake(t, src, 1, 1, 10)).NRGBAAt(1, 1); c.A != 240 {
+		t.Errorf("ink 10 alpha = %d, want 240", c.A)
 	}
 }
 

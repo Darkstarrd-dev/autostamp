@@ -73,3 +73,34 @@ func TestPickScriptShape(t *testing.T) {
 		t.Errorf("single-select script must say $false:\n%s", single)
 	}
 }
+
+// TestSaveScriptShape: the SV1 save dialog is a SaveFileDialog carrying the
+// single-extension pdf rule (DefaultExt + AddExtension), the overwrite prompt,
+// the pre-filled name, and the same cancel protocol (exit 3).
+func TestSaveScriptShape(t *testing.T) {
+	script := saveScript(SaveOptions{DefaultName: "report.stamp.pdf", StartDir: "C:\\Docs"})
+	for _, want := range []string{
+		"System.Windows.Forms.SaveFileDialog",
+		"$d.DefaultExt = 'pdf'",
+		"$d.AddExtension = $true",
+		"$d.OverwritePrompt = $true",
+		"$d.FileName = 'report.stamp.pdf'",
+		"$d.InitialDirectory = 'C:\\Docs'",
+		"exit 3",
+		"$d.FileName",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("save script missing %q:\n%s", want, script)
+		}
+	}
+	// Quote escaping: a document name with an apostle must not break out of
+	// the PowerShell single-quoted string.
+	esc := saveScript(SaveOptions{DefaultName: "it's ok.pdf"})
+	if !strings.Contains(esc, "$d.FileName = 'it''s ok.pdf'") {
+		t.Errorf("save script did not escape the apostle:\n%s", esc)
+	}
+	// An empty default name must not write an empty FileName line.
+	if bare := saveScript(SaveOptions{}); strings.Contains(bare, "$d.FileName = ") {
+		t.Errorf("bare save script should not set FileName:\n%s", bare)
+	}
+}

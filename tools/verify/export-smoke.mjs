@@ -8,7 +8,8 @@
 // asset,再写盘;mode=vector 不发该请求(源资产直接写,W5)。
 //
 // 四段(缺省全跑,`--only=<name>` 单跑):
-//   raster 保存链:双页样本 + 印章实例 -> 直接点 #save-confirm(用户同款按钮),
+//   raster 保存链:双页样本 + 印章实例 -> §7 驱动 saveToPath(目标路径;SV1 后
+//   按钮会开原生对话框,无头跑不可点),链上参数/幂等/请求数照常钉死,
 //          断言 ok.exported toast(页数/dpi/质量)、probe('chain') 的
 //          apply/export/save 记账、磁盘文件再 fs/pick+open 页数一致、每页
 //          pt 尺寸 == px*72/dpi(±1 pt)、导出页渲染像素含印章色(与导出前
@@ -347,14 +348,15 @@ async function toastLog(app) {
   return app.evaluate("window.__toastLog || []");
 }
 
-// driveSave 走用户同款按钮:#save-confirm 的 click -> submitSave(false)。
+// driveSave 走 §7 驱动通道 saveToPath(target):SV1 起 #save-confirm 的 click
+// 会弹出**真实**原生另存为对话框,无头跑根本答不了它,所以 verify 不再点按钮,
+// 直接喂目标路径(链上其余环节与用户按钮完全同一条 submitSave)。
 async function driveSave(app, target) {
   await armToastLog(app);
   await netBaseline(app);
   await app.evaluate(
-    `(async () => { window.__autoStampShell.setParam('api.save.targetPath', ${JSON.stringify(target)}); })()`
+    `(async () => { await window.__autoStampShell.saveToPath(${JSON.stringify(target)}); })()`
   );
-  await app.evaluate(`document.querySelector('#save-confirm').click()`);
 }
 
 let serverTail = [];

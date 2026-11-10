@@ -41,6 +41,58 @@ func PickFiles(ctx context.Context, o PickOptions) ([]string, error) {
 	return runPick(ctx, pickScript(o))
 }
 
+// SaveOptions describes a native save-as dialog (UI8-SV1): the user picks the
+// folder and types the file name in one step, which is what the save modal
+// used to emulate with an open-picker + a text box. DefaultName pre-fills the
+// name box (same-name-plus-.stamp.pdf when a document is open); StartDir
+// starts the browse at the current document's folder.
+type SaveOptions struct {
+	DefaultName string
+	StartDir    string
+}
+
+// PickSave shows the save dialog and reports the chosen absolute path. A
+// cancelled dialog is ErrPickCancelled like every other picker; the route
+// turns it into the same {cancelled:true} response.
+func PickSave(ctx context.Context, o SaveOptions) (string, error) {
+	paths, err := runPick(ctx, saveScript(o))
+	if err != nil {
+		return "", err
+	}
+	if len(paths) == 0 {
+		return "", ErrPickCancelled
+	}
+	return paths[0], nil
+}
+
+// saveScript is the SaveFileDialog twin of pickScript. The pdf filter plus
+// DefaultExt/AddExtension mean a typed name always ends in exactly one .pdf
+// extension (AGENTS §5.21's single-extension rule); OverwritePrompt is the
+// native "are you sure" for an existing file, so the UI never asks twice.
+func saveScript(o SaveOptions) string {
+	var b strings.Builder
+	b.WriteString("$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n")
+	b.WriteString("Add-Type -AssemblyName System.Windows.Forms\n")
+	b.WriteString("$d = New-Object System.Windows.Forms.SaveFileDialog\n")
+	b.WriteString("$d.Title = 'AutoStamp: 保存 PDF'\n")
+	b.WriteString("$d.Filter = 'PDF 文件 (*.pdf)|*.pdf'\n")
+	b.WriteString("$d.DefaultExt = 'pdf'\n")
+	b.WriteString("$d.AddExtension = $true\n")
+	b.WriteString("$d.OverwritePrompt = $true\n")
+	b.WriteString("$d.CheckPathExists = $true\n")
+	b.WriteString("$d.DereferenceLinks = $true\n")
+	if o.DefaultName != "" {
+		b.WriteString("$d.FileName = '" + strings.ReplaceAll(o.DefaultName, "'", "''") + "'\n")
+	}
+	if o.StartDir != "" {
+		b.WriteString("$d.InitialDirectory = '" + strings.ReplaceAll(o.StartDir, "'", "''") + "'\n")
+	}
+	b.WriteString("$r = $d.ShowDialog()\n")
+	b.WriteString("if ($r -ne [System.Windows.Forms.DialogResult]::OK) { exit 3 }\n")
+	b.WriteString("Write-Output $d.FileName\n")
+	return b.String()
+}
+
 // PickDirs opens the native folder dialog and reports the chosen directory. The batch
 // queue works on the files directly under this folder, so a folder is the contract
 // here rather than a file list (UI_SPEC §2 api.fs.pick.dir).

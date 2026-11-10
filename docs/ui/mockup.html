@@ -530,21 +530,21 @@ html:lang(zh-CN) .app-tooltip { line-height: 1.6; letter-spacing: .01em; }
           <input data-field="api.apply.opacity" type="number" min="0" max="1" step="0.05" value="0.6" aria-label="opacity">
         </div>
       </div>
-      <div class="field" data-i18n-title="api.apply.brightness.hint" data-i18n-title-cn="0..2；通道 ×系数后烘焙进印章位图，落盘像素与预览一致（UI5-B2）。" title="0..2; channel coefficient baked into the seal pixels before stamping; disk == preview." aria-label="0..2; channel coefficient baked into the seal pixels before stamping; disk == preview.">
+      <div class="field" data-i18n-title="api.apply.brightness.hint" data-i18n-title-cn="0..2；通道 ×系数先于密度曲线执行（UI8-CS2 顺序），烘焙进印章位图，落盘像素与预览一致。" title="0..2; channel coefficient baked into the seal pixels before stamping; disk == preview." aria-label="0..2; channel coefficient baked into the seal pixels before stamping; disk == preview.">
         <div class="flabel"><span data-i18n="api.apply.brightness.ctl" data-i18n-cn="明度">apply.brightness 0..2</span></div>
         <div class="num-pair">
           <input data-field="api.apply.brightness" type="range" min="0" max="2" step="0.05" value="1" aria-label="brightness">
           <input data-field="api.apply.brightness" type="number" min="0" max="2" step="0.05" value="1" aria-label="brightness">
         </div>
       </div>
-      <div class="field" data-i18n-title="api.apply.saturate.hint" data-i18n-title-cn="0..5（0=灰度）；CSS 饱和矩阵烘焙进印章位图，落盘像素与预览一致（UI5-B2）。" title="0..5 (0 = gray); CSS saturation matrix baked into the seal pixels; disk == preview." aria-label="0..5 (0 = gray); CSS saturation matrix baked into the seal pixels; disk == preview.">
+      <div class="field" data-i18n-title="api.apply.saturate.hint" data-i18n-title-cn="0..5（0=灰度）；CSS 饱和矩阵是调色烘焙的最后一步，落盘像素与预览一致。" title="0..5 (0 = gray); CSS saturation matrix baked into the seal pixels; disk == preview." aria-label="0..5 (0 = gray); CSS saturation matrix baked into the seal pixels; disk == preview.">
         <div class="flabel"><span data-i18n="api.apply.saturate.ctl" data-i18n-cn="饱和度">apply.saturate 0..5</span></div>
         <div class="num-pair">
           <input data-field="api.apply.saturate" type="range" min="0" max="5" step="0.05" value="1" aria-label="saturate">
           <input data-field="api.apply.saturate" type="number" min="0" max="5" step="0.05" value="1" aria-label="saturate">
         </div>
       </div>
-      <div class="field" data-i18n-title="api.apply.ink.hint" data-i18n-title-cn="色阶曲线 v′=255·(v/255)^g（g=1..10）：浅红→深红→全黑；先于明度/饱和度烘焙进印章位图（UI5-B2）。" title="Levels curve v′=255·(v/255)^g (g=1..10): pale red to deep red to black; baked first, before brightness/saturate; disk == preview." aria-label="Levels curve v′=255·(v/255)^g (g=1..10): pale red to deep red to black; baked first, before brightness/saturate; disk == preview.">
+      <div class="field" data-i18n-title="api.apply.ink.hint" data-i18n-title-cn="色阶曲线 v′=255·(v/255)^g（g=1..10，执行于明度之后），同时给半透明像素做覆盖提升 a′=255·(a/255)^(1/g) —— 扫描淡章因此真的变浓；烘焙进位图，落盘与预览一致（UI8-CS2）。" title="Levels curve v′=255·(v/255)^g (g=1..10): pale red to deep red to black; baked first, before brightness/saturate; disk == preview." aria-label="Levels curve v′=255·(v/255)^g (g=1..10): pale red to deep red to black; baked first, before brightness/saturate; disk == preview.">
         <div class="flabel"><span data-i18n="api.apply.ink.ctl" data-i18n-cn="密度">apply.ink 1..10</span></div>
         <div class="num-pair">
           <input data-field="api.apply.ink" type="range" min="1" max="10" step="0.05" value="1" aria-label="ink">
@@ -676,17 +676,9 @@ html:lang(zh-CN) .app-tooltip { line-height: 1.6; letter-spacing: .01em; }
         <div class="note" data-i18n="warn.export.tooBig" data-i18n-cn="单页位图超过 90 MB 上限：请把 DPI 降到 300 或少选几页。">page bitmap exceeds the 90 MB cap: lower DPI to 300 or fewer pages</div>
       </div>
     </div>
-    <div class="row">
-      <button type="button" id="save-pick" class="btn" data-i18n="save.pick.btn" data-i18n-cn="系统文件选择器">System file picker</button>
-      <span class="chip" data-field="api.fs.pick.pathGrantId" data-field-role="display" data-i18n="api.fs.pick.pathGrantId.ctl" data-i18n-cn="授权句柄">pathGrantId: -</span>
-    </div>
-    <div class="field" data-i18n-title="api.save.targetPath.hint" data-i18n-title-cn="留空则用同名 + .stamp.pdf；写盘走 temp+rename（原子写）。" title="Blank means same name + .stamp.pdf; atomic temp+rename." aria-label="Blank means same name + .stamp.pdf; atomic temp+rename.">
-      <div class="flabel"><span data-i18n="api.save.targetPath.ctl" data-i18n-cn="目标路径">save.targetPath</span><span class="tag">save.targetPath</span></div>
-      <input data-field="api.save.targetPath" type="text" value="C:\docs\contract.stamp.pdf">
-    </div>
-    <div class="field" data-i18n-title="save.replace.hint" data-i18n-title-cn="替换原文件需要再确认一次，且会丢弃原 PDF 的可选内容层。" title="Replacing the original needs a second confirmation." aria-label="Replacing the original needs a second confirmation.">
-      <div class="flabel"><span data-i18n="api.save.replaceOriginal.ctl" data-i18n-cn="替换原文件">save.replaceOriginal</span><span class="tag">save.replaceOriginal</span></div>
-      <label class="switch"><input data-field="api.save.replaceOriginal" type="checkbox"><span data-i18n="save.replace.on" data-i18n-cn="开">on</span></label>
+    <div class="field" data-i18n-title="save.dest.hint" data-i18n-title-cn="「保存」会先弹出系统文件浏览器：选择目录并输入文件名（必带 .pdf）；写盘走 temp+rename（原子写）。" title="The Save button opens a native save-as dialog: pick the folder and type the file name (.pdf required); atomic temp+rename." aria-label="The Save button opens a native save-as dialog: pick the folder and type the file name (.pdf required); atomic temp+rename.">
+      <div class="flabel"><span data-i18n="save.dest.label" data-i18n-cn="保存位置">Save location</span></div>
+      <div class="row"><span class="chip" id="save-dest" data-i18n="save.dest.none" data-i18n-cn="未选择 —— 点「保存」挑选位置">No location chosen yet</span></div>
     </div>
     <div class="btnrow">
       <button type="button" class="btn" id="save-cancel" data-i18n="modal.cancel" data-i18n-cn="取消">Cancel</button>
@@ -1584,16 +1576,16 @@ window.__autoStampMock = (function () {
     });
     q("#btn-save").addEventListener("click", function () { setState("save-confirm"); });
     q("#save-cancel").addEventListener("click", function () { setModal(null); });
-    q("#save-pick").addEventListener("click", function () {
-      S.p["fs.pick.pathGrantId"] = "grant-" + Math.random().toString(36).slice(2, 8);
-      setField("fs.pick.pathGrantId", S.p["fs.pick.pathGrantId"]);
-    });
     q("#save-confirm").addEventListener("click", function () {
-      if (S.p["save.replaceOriginal"]) { setState("replace-confirm"); return; }
+      // SV1: the real button asks the backend for a native save-as dialog; in
+      // the mock the fake dialog answer lands in the save-dest chip, then the
+      // same save chain finishes.
+      var dest = q("#save-dest");
+      if (dest) dest.textContent = "C:\\docs\\contract.stamp.pdf";
       finishSave();
     });
     q("#confirm-cancel").addEventListener("click", function () {
-      pset("save.replaceOriginal", false); setModal("save");
+      setModal("save");
     });
     q("#confirm-ok").addEventListener("click", finishSave);
     q("#pw-cancel").addEventListener("click", function () { setModal(null); });

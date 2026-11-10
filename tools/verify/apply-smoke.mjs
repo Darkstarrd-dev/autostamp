@@ -11,7 +11,7 @@
 //          误差 <= 1 pt(框内是印章、框外 2 pt 是底)。
 //   perpage 逐页落盘(HD11):实例 pages="2" 只盖第 2 页,第 1 页保持底。
 //   color  调色烘焙落盘(UI5-B2:AGENTS §5.47):ink/brightness/saturate 三参数烘进
-//          印章像素,落盘回读 == pow→bright→sat 公式独立重算(§5.47 顺序,±2/±3)。
+//          印章像素,落盘回读 == bright→pow→sat 公式独立重算(UI8-CS2 顺序,±2/±3)。
 //   chain  切分 + 落盘 + 保存的资产链:手动 2 拼切分 -> 新 asset(2 页) -> 盖章 ->
 //          保存到沙箱路径;磁盘文件能再 fs/pick + open,页数一致。
 //   undo   撤销盖章 / 撤销切分:资产 id 换回上一份、实例列表带印章回来、链上 id 归位;
@@ -652,7 +652,7 @@ async function checkPerPage(app, grantId, sealId) {
   console.log("  ok 逐页落盘:pages=\"2\" 只盖第 2 页、第 1 页保持底");
 }
 
-// UI5-B2: 调色三参数（ink pow → brightness → CSS saturate 矩阵）烘进落盘像素。
+// UI5-B2: 调色三参数（亮度 → pow(密度,含 alpha 提升) → CSS saturate 矩阵）烘进落盘像素。
 // 期望色独立重算（与 app-overlay.transformCanvas / pdfcore.AdjustPNG 同一契约），
 // 落盘回读必须 <=2 命中；「预览 == 落盘」在这条钉死（identity 参数不受影响）。
 async function checkColor(app, grantId, sealId) {
@@ -691,11 +691,13 @@ async function checkColor(app, grantId, sealId) {
     ];
     return [0, 1, 2].map((i) => clampR(m[3 * i] * c[0] + m[3 * i + 1] * c[1] + m[3 * i + 2] * c[2]));
   };
-  const want = satC(brightC(powC(INK, 2.2), 0.8), 1.5);
+  // UI8-CS2 chain order: brightness -> pow(ink) (+ alpha lift; the fixture
+  // sample is opaque so the lift is a no-op here) -> saturate.
+  const want = satC(powC(brightC(INK, 0.8), 2.2), 1.5);
   if (!isClose(r.inside, want, 3)) bad(`checkColor: 落盘像素 ${r.inside.join(",")} != 调色公式 ${want.join(",")}（UI5-B2 烘焙未进落盘?）`);
   if (!isClose(r.untouched, GROUND, 6)) bad(`checkColor: 框外底被改动: ${r.untouched.join(",")}`);
   if (isClose(r.inside, INK, 2)) bad(`checkColor: 落盘仍是原色（identity 假通过）`);
-  console.log(`  ok 调色烘焙落盘:ink2.2/bright0.8/sat1.5 回读 == 公式 (${want.join(",")})`);
+  console.log(`  ok 调色烘焙落盘(ink2.2/bright0.8/sat1.5, CS2 顺序): 回读 == 公式 (${want.join(",")})`);
 }
 // ---------- 段 3:切分 -> 落盘 -> 保存 ----------------------------------
 

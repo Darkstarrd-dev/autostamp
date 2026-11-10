@@ -2,6 +2,10 @@
 
 > `docs/FACTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-10 — §1.10 重算为 CS2 链序 + alpha 覆盖提升（UI8 轮）
+
+契约公式 ×bright → pow(ink)+`a′=255·(a/255)^(1/g)` → sat；金值表重钉（ink3 (123,1,1)、alpha 137→207、链 bright1.5→g3→sat0.5 → (156,30,30)）；identity 只在不烘色时短路，ink≠1 走 alpha lift。复现命令不变。
+
 ## 2026-11-10 — §5.1 shell-smoke 行扩 tooltip 断言（UI6 T1）；无新增实测表
 
 `docs/FACTS.md`：头「最后核对」换成 UI6 轮；§5.1 的 `shell-smoke.mjs` 行描述追加 tooltip 浮层断言（show/hide、title 摘挂、aria-label 恒定、反色 token、8px/12.5px 读数）。本轮**无新增实测表**：两主题正文对比 ≥4.5:1 是 ui-ux-pro-max skill pro-rules 的 WCAG 计算值（亮 muted 5.5–6.0、暗 7.2 等），非浏览器实测采样，已在 §5.1 头部注明。

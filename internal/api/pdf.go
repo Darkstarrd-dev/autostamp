@@ -39,6 +39,13 @@ type pickBody struct {
 	Filter   string `json:"filter"`
 	Multi    bool   `json:"multi"`
 	StartDir string `json:"startDir"`
+	// Save asks for a save-as dialog instead of an open dialog (UI8-SV1): the
+	// user picks folder + file name in one step and the response carries
+	// {targetPath}. It cannot combine with dir/multi/filePath.
+	Save bool `json:"save"`
+	// DefaultName pre-fills the save dialog's name box (basename only, no
+	// path separators; must end in .pdf or carry no extension).
+	DefaultName string `json:"defaultName"`
 	// FilePath is the typed-path channel (UI_SPEC §2 api.fs.pick.filePath):
 	// the caller shows a path box instead of a dialog, and the server only
 	// grants what is already on disk. An empty value means "show the dialog".
@@ -65,8 +72,12 @@ type pickResult struct {
 type openResult struct {
 	AssetID string `json:"assetId"`
 	Name    string `json:"name"`
-	Size    int64  `json:"size"`
-	Kind    string `json:"kind"`
+	// Path is the disk original when the asset came from a granted path (the
+	// save dialog starts there, and replaceOriginal still resolves it);
+	// uploads deliberately carry no path (AGENTS §6 /api/pdf/save).
+	Path string `json:"path,omitempty"`
+	Size int64  `json:"size"`
+	Kind string `json:"kind"`
 	pdfcore.Doc
 }
 
@@ -92,6 +103,32 @@ func handlePick(store *tmpstore.Store, log *slog.Logger) http.HandlerFunc {
 		case "", "pdf", "image", "all":
 		default:
 			webx.Fail(w, http.StatusBadRequest, "bad_body", "filter 只允许 pdf/image/all")
+			return
+		}
+		if body.Save {
+			// UI8-SV1: one native save-as dialog replaces the old "pick a file,
+			// then re-type the path" pair. The dialog's pdf filter + DefaultExt
+			// keep the single-extension .pdf rule (AGENTS §5.21), and the
+			// result is re-checked here so a hand-edged dialog name never
+			// reaches save's write path.
+			if body.Dir || body.Multi || body.FilePath != "" {
+				webx.Fail(w, http.StatusBadRequest, "bad_body", "save 选择不能与 dir/multi/filePath 组合")
+				return
+			}
+			if msg := validSaveName(body.DefaultName); msg != "" {
+				webx.Fail(w, http.StatusBadRequest, "bad_body", msg)
+				return
+			}
+			target, err := fsx.PickSave(r.Context(), fsx.SaveOptions{DefaultName: body.DefaultName, StartDir: body.StartDir})
+			if pickDialogError(w, log, err) {
+				return
+			}
+			if !filepath.IsAbs(target) || !strings.HasSuffix(strings.ToLower(target), ".pdf") {
+				webx.Fail(w, http.StatusBadRequest, "bad_body", "保存对话框未给出合法的 .pdf 绝对路径")
+				return
+			}
+			log.Info("save target chosen", "path", target)
+			webx.OK(w, map[string]any{"cancelled": false, "targetPath": target})
 			return
 		}
 		var paths []string
@@ -172,6 +209,26 @@ func handlePick(store *tmpstore.Store, log *slog.Logger) http.HandlerFunc {
 		}
 		webx.OK(w, map[string]any{"cancelled": false, "picks": out})
 	}
+}
+
+// validSaveName checks the save dialog's pre-filled name (UI8-SV1): it must
+// be a bare base name - no directory part, no volume, no traversal - and if it
+// carries an extension it must be .pdf. An empty name means "no default".
+// It returns "" when the name is usable and a Chinese error otherwise.
+func validSaveName(name string) string {
+	if name == "" {
+		return ""
+	}
+	if strings.ContainsAny(name, `/\:*?"<>|`) {
+		return "defaultName 必须是纯文件名，不含路径分隔符"
+	}
+	if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".") || strings.HasSuffix(name, " ") {
+		return "defaultName 不能以点或空格开头/结尾"
+	}
+	if ext := strings.ToLower(filepath.Ext(name)); ext != "" && ext != ".pdf" {
+		return "defaultName 的扩展名只能是 .pdf"
+	}
+	return ""
 }
 
 // pickDialogError maps the dialog failures onto the registered codes and reports
@@ -297,9 +354,11 @@ func handleOpen(settings *config.Store, store *tmpstore.Store, log *slog.Logger)
 			settings.SetRecent(openedDir)
 		}
 		log.Info("pdf opened", "asset", asset.ID, "pages", doc.PageCount, "name", name)
+		origin, _ := store.OriginOf(asset.ID, owner)
 		webx.Created(w, openResult{
 			AssetID: asset.ID,
 			Name:    name,
+			Path:    origin,
 			Size:    asset.Size,
 			Kind:    string(asset.Kind),
 			Doc:     *doc,
@@ -442,9 +501,11 @@ func handleSplit(store *tmpstore.Store, log *slog.Logger) http.HandlerFunc {
 			}
 		}
 		log.Info("pdf split", "from", body.AssetID, "into", asset.ID, "mode", mode, "pages", newDoc.PageCount)
+		carry, _ := store.OriginOf(asset.ID, owner)
 		webx.Created(w, openResult{
 			AssetID: asset.ID,
 			Name:    "",
+			Path:    carry,
 			Size:    asset.Size,
 			Kind:    string(asset.Kind),
 			Doc:     *newDoc,

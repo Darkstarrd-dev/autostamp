@@ -6,18 +6,26 @@ package pdfcore
 // adjustedBitmap runs the same numbers, in the same order, with the same
 // rounding.
 //
-// Every colour channel of every pixel (straight alpha, so no premultiply dance
-// and the alpha itself never moves) goes through three steps **in this order**,
-// each step clamped to 0..255 before the next one starts:
+// UI8-CS2 (2026-11-10, user acceptance feedback: every slider at max washed
+// the seal back to pale): the chain runs, in this order, each step clamped to
+// 0..255 before the next one starts:
 //
-//	1. ink (密度, pow curve): v = 255 * (v/255)^g, g = ink, 1 = identity
-//	2. brightness b:          v = v * b
+//	1. brightness b:          v = v * b
+//	2. ink (密度, pow curve): v = 255 * (v/255)^g, g = ink, 1 = identity —
+//	   AND the same density raises the alpha of semi-transparent pixels with
+//	   the inverse curve a′ = 255·(a/255)^(1/g), so the ink actually covers
+//	   the page harder (a pale scanned seal otherwise has no visible "more
+//	   ink" at all, which was the user's CS1 follow-up symptom)
 //	3. saturate s:            the CSS saturate 3x3 matrix (luminance weights
 //	                          0.213/0.715/0.072), so s = 0 collapses to grey
 //
 // The answer rounds half-up (math.Round / JS Math.round) and clamps to 0..255.
-// Steps 1+2 are a pure function of one input byte, so they collapse into a
-// 256-entry lookup and the pixel loop never calls math.Pow.
+// brightness first, then pow, is what makes the density slider own the dark
+// end even when brightness is turned up: the pow curve always lands last on
+// the colour, and the alpha lift is a pure function of one input byte too, so
+// all three steps collapse into 256-entry lookups and the pixel loop never
+// calls math.Pow. Alpha: ink == 1 leaves every alpha byte untouched (identity
+// path), ink != 1 runs the lift.
 
 import (
 	"bytes"
@@ -104,11 +112,23 @@ func AdjustPNG(data []byte, bright, sat, ink float64) ([]byte, error) {
 		return nil, fmt.Errorf("印章位图尺寸非法: %dx%d", w, h)
 	}
 
-	// Steps 1 and 2: pow then clamp, brightness then clamp.
+	// Colour LUT (CS2 order): brightness, clamp, then the ink pow curve.
 	var lut [256]float64
 	for v := range 256 {
-		f := clampBake(255 * math.Pow(float64(v)/255, ink))
-		lut[v] = clampBake(f * bright)
+		f := clampBake(float64(v) * bright)
+		lut[v] = clampBake(255 * math.Pow(f/255, ink))
+	}
+	// Alpha LUT: the density lifts semi-transparent coverage with the inverse
+	// curve (ink = 1 identity; the pixel loop only runs this when ink != 1).
+	var aLut [256]uint8
+	if ink != 1 {
+		for a := range 256 {
+			aLut[a] = uint8(math.Round(clampBake(255 * math.Pow(float64(a)/255, 1/ink))))
+		}
+	} else {
+		for a := range 256 {
+			aLut[a] = uint8(a)
+		}
 	}
 	// Step 3: the CSS saturate matrix — s = 1 is the identity, s = 0 drops the
 	// colour to the luminance greyscale.
@@ -125,7 +145,7 @@ func AdjustPNG(data []byte, bright, sat, ink float64) ([]byte, error) {
 			out.Pix[o] = uint8(math.Round(clampBake(mr[0]*r + mr[1]*g + mr[2]*b)))
 			out.Pix[o+1] = uint8(math.Round(clampBake(mg[0]*r + mg[1]*g + mg[2]*b)))
 			out.Pix[o+2] = uint8(math.Round(clampBake(mb[0]*r + mb[1]*g + mb[2]*b)))
-			out.Pix[o+3] = src.Pix[p+3] // straight alpha: untouched
+			out.Pix[o+3] = aLut[src.Pix[p+3]] // straight alpha: CS2 density lift
 		}
 	}
 

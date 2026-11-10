@@ -148,8 +148,10 @@
 
   // UI5-B2 (2026-11-09, 用户 ask 决定): 调色参数（brightness/saturate/ink）不再
   // 走 ctx.filter —— 逐像素烘进位图，公式与 pdfcore.AdjustPNG 逐字一致
-  // （pow → bright → sat，每步 clamp，四舍五入；straight-alpha，alpha 不变），
-  // 所以预览 == 落盘。缓存按 (sealId, 参数签名) 记忆化，滑杆拖动免费。
+  // （UI8-CS2 顺序：×brightness → pow(ink) 同时给半透明像素做 alpha 提升
+  // `a′ = 255·(a/255)^(1/g)` → CSS saturate 矩阵；每步 clamp 0..255、只在
+  // 最后四舍五入；straight-alpha），所以预览 == 落盘。缓存按
+  // (sealId, 参数签名) 记忆化，滑杆拖动免费。
   const LUMA_R = 0.213, LUMA_G = 0.715, LUMA_B = 0.072; // CSS saturate 常数
 
   function transformCanvas(img, bright, sat, ink) {
@@ -160,32 +162,28 @@
     ctx.drawImage(img, 0, 0);
     const data = ctx.getImageData(0, 0, c.width, c.height); // 非预乘
     const px = data.data;
-    // pow 曲线表（0..255 金值 = round(255·(v/255)^g)），与 Go 的 LUT 同公式。
-    const pow = ink === 1 ? null : (() => {
-      const t = new Uint8Array(256);
-      for (let v = 0; v <= 255; v += 1) t[v] = Math.max(0, Math.min(255, Math.round(255 * Math.pow(v / 255, ink))));
-      return t;
-    })();
+    const clampf = (v) => (v < 0 ? 0 : v > 255 ? 255 : v);
+    // CS2 颜色 LUT（float，与 Go 的 lut 完全同式）：先明度 clamp，再 pow 曲线。
+    const lut = new Float64Array(256);
+    for (let v = 0; v <= 255; v += 1) {
+      const f = clampf(v * bright);
+      lut[v] = clampf(255 * Math.pow(f / 255, ink));
+    }
+    // alpha 提升 LUT（ink == 1 时恒等，不改任何 alpha 字节）。
+    const aLut = new Uint8Array(256);
+    for (let a = 0; a <= 255; a += 1) {
+      aLut[a] = ink === 1 ? a : Math.round(clampf(255 * Math.pow(a / 255, 1 / ink)));
+    }
+    // 第 3 步：CSS saturate 矩阵 —— s = 1 恒等，s = 0 折叠到亮度灰。
     const r1 = LUMA_R + (1 - LUMA_R) * sat, g1 = LUMA_G - LUMA_G * sat, b1 = LUMA_B - LUMA_B * sat;
     const r2c = LUMA_R - LUMA_R * sat, g2c = LUMA_G + (1 - LUMA_G) * sat, b2c = LUMA_B - LUMA_B * sat;
     const r3c = LUMA_R - LUMA_R * sat, g3c = LUMA_G - LUMA_G * sat, b3c = LUMA_B + (1 - LUMA_B) * sat;
     for (let i = 0; i < px.length; i += 4) {
-      let r = px[i], g = px[i + 1], b = px[i + 2];
-      if (pow) { r = pow[r]; g = pow[g]; b = pow[b]; }
-      if (bright !== 1) {
-        r = Math.max(0, Math.min(255, Math.round(r * bright)));
-        g = Math.max(0, Math.min(255, Math.round(g * bright)));
-        b = Math.max(0, Math.min(255, Math.round(b * bright)));
-      }
-      if (sat !== 1) {
-        const nr = r * r1 + g * g1 + b * b1;
-        const ng = r * r2c + g * g2c + b * b2c;
-        const nb = r * r3c + g * g3c + b * b3c;
-        r = Math.max(0, Math.min(255, Math.round(nr)));
-        g = Math.max(0, Math.min(255, Math.round(ng)));
-        b = Math.max(0, Math.min(255, Math.round(nb)));
-      }
-      px[i] = r; px[i + 1] = g; px[i + 2] = b;
+      const r = lut[px[i]], g = lut[px[i + 1]], b = lut[px[i + 2]];
+      px[i] = Math.round(clampf(r1 * r + g1 * g + b1 * b));
+      px[i + 1] = Math.round(clampf(r2c * r + g2c * g + b2c * b));
+      px[i + 2] = Math.round(clampf(r3c * r + g3c * g + b3c * b));
+      px[i + 3] = aLut[px[i + 3]]; // straight-alpha：CS2 密度提升
     }
     ctx.putImageData(data, 0, 0);
     return c;

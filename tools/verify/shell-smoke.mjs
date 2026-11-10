@@ -506,12 +506,11 @@ async function main() {
   // /api/pdf/save is implemented (P4). Two separate truths:
   //  * the shell refuses to save when no document is open (client-side guard,
   //    err.apply.noDoc) — it must not send a request with no assetId, and it
-  //    must not pretend it succeeded;
+  //    must not pretend it succeeded; the SV1 dialog never opens;
   //  * a request that *does* reach the server without an assetId answers the
-  //    JSON envelope error (bad_body), not the old router 405 text.
+  //  JSON envelope error (bad_body), not the old router 405 text.
   const saveFail = await pageErr(`(function(){
     var s = window.__autoStampShell;
-    s.setParams({"api.save.targetPath": "C:/nope/x.pdf"});
     return s.setModal("save-modal");
   })()`);
   if (saveFail !== "save-modal") bad("save modal: " + saveFail);
@@ -532,6 +531,31 @@ async function main() {
   const saveNoAsset = await fetch(url + "/api/pdf/save", { method: "POST", headers: { "Content-Type": "application/json", "X-AutoStamp-Session": sessionTok }, body: "{}" });
   const saveNoAssetBody = await saveNoAsset.json();
   cmp("POST /api/pdf/save without an assetId answers bad_body", { status: saveNoAsset.status, ok: saveNoAssetBody.ok, code: saveNoAssetBody.code }, { status: 400, ok: false, code: "bad_body" });
+  // SV1 (2026-11-10, user ask decision): the save modal shows ONE read-only
+  // row — the save-dest chip — and the native save-as dialog owns the path
+  // choice. No targetPath input, no replace switch, no picker button remain;
+  // the drive channels (saveToPath/submitReplace/saveViaDialog) exist for
+  // verify and §7. A headless run must never click #save-confirm with a
+  // document open: fs/pick{save:true} would raise a real modal dialog.
+  const sv1 = await json(`(function(){
+    var s = window.__autoStampShell;
+    var el = document.querySelector("#save-dest");
+    var cat = window.__autoStampI18n.CATALOG["save.dest.none"];
+    var want = s.state.lang === "cn" ? cat.cn : cat.en;
+    return {
+      dest: el ? el.textContent : "(missing)",
+      destOk: Boolean(el) && el.textContent === want && el.getAttribute("data-i18n") === "save.dest.none",
+      destTitle: el && el.closest(".field").getAttribute("data-i18n-title"),
+      input: Boolean(document.querySelector('input[data-field="api.save.targetPath"]')),
+      switch: Boolean(document.querySelector('input[data-field="api.save.replaceOriginal"]')),
+      pick: Boolean(document.querySelector("#save-pick")),
+      funcs: [s.saveToPath, s.submitReplace, s.saveViaDialog].map(function (f) { return typeof f; }),
+    };
+  })()`);
+  if (!sv1.destOk) bad("save-dest chip must carry save.dest.none per the active lang, got: " + sv1.dest);
+  if (sv1.destTitle !== "save.dest.hint") bad("save-dest row must own the SV1 tooltip (N2 semantics): " + sv1.destTitle);
+  if (sv1.input || sv1.switch || sv1.pick) bad("SV1: targetPath input / replaceOriginal switch / #save-pick must be gone from the DOM");
+  cmp("SV1 drive channels exist", sv1.funcs, ["function", "function", "function"]);
   const toastSemantics = await json(`(function(){
     var t = document.querySelector("#error-toast");
     return { role: t.getAttribute("role"), live: t.getAttribute("aria-live") };

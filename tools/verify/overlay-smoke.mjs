@@ -927,9 +927,10 @@ async function main() {
     nearPixel("saturate 0.5 moves the composite on its own", pxS.rgb, expectPixel(CB2, fSaturate(CS2, 0.5), 1, "multiply"), 2);
     truthy("the two filters stay distinct", pxB.rgb.some((v, i) => Math.abs(v - pxS.rgb[i]) > 3));
 
-    // UI5-B2: the density curve (ink = pow exponent) rides the same pixel
-    // pipeline, and the three-step chain (pow → bright → sat) has one fixed
-    // order — the combo below fails if any step is dropped or reordered.
+    // UI5-B2/UI8-CS2: the density curve (ink = pow exponent, plus the alpha
+    // lift) rides the same pixel pipeline, and the three-step chain
+    // (bright → pow → sat) has one fixed order — the combo below fails if any
+    // step is dropped or reordered.
     const fPow = (c, g) => c.map((v) => clamp255(255 * Math.pow(v / 255, g)));
     await setParams(app, { "api.apply.brightness": 1, "api.apply.saturate": 1, "api.apply.ink": 2.6 });
     await sleep(220);
@@ -938,8 +939,8 @@ async function main() {
     await setParams(app, { "api.apply.ink": 2.6, "api.apply.brightness": 0.9, "api.apply.saturate": 1.6 });
     await sleep(220);
     const px3 = await sampleAt(app, fx, fy, "composite");
-    nearPixel("pow→bright→sat chain matches the formula (UI5-B2)", px3.rgb,
-      expectPixel(CB2, fSaturate(fBright(fPow(CS2, 2.6), 0.9), 1.6), 1, "multiply"), 2);
+    nearPixel("bright→pow→sat chain matches the formula (UI8-CS2)", px3.rgb,
+      expectPixel(CB2, fSaturate(fPow(fBright(CS2, 0.9), 2.6), 1.6), 1, "multiply"), 2);
     await setParams(app, { "api.apply.brightness": 1, "api.apply.saturate": 1, "api.apply.ink": 1 });
 
     // UI7 (2026-11-10, user-reported color-slider audit): every pin above

@@ -375,22 +375,27 @@ func nrgbaAt(img image.Image, x, y int) color.NRGBA {
 	return cell.NRGBAAt(0, 0)
 }
 
-// bakePixel mirrors the UI5-B2 contract formula for one colour sample: pow
-// curve, then brightness, then the CSS saturate matrix, each step clamped
-// before the next reads it. It is deliberately a copy of the contract rather
-// than a call into pdfcore, so the route test compares the stamped file with
-// the agreement both sides promise (±1 tolerance for pdfcpu's re-encode).
+// bakePixel mirrors the UI8-CS2 contract formula for one colour sample:
+// brightness, then the pow curve (plus the density alpha lift), then the CSS
+// saturate matrix, each step clamped before the next reads it. It is
+// deliberately a copy of the contract rather than a call into pdfcore, so the
+// route test compares the stamped file with the agreement both sides promise
+// (±1 tolerance for pdfcpu's re-encode).
 func bakePixel(c color.NRGBA, bright, sat, ink float64) color.NRGBA {
 	step := func(v uint8) float64 {
-		f := bakeClamp(255 * math.Pow(float64(v)/255, ink))
-		return bakeClamp(f * bright)
+		f := bakeClamp(float64(v) * bright)
+		return bakeClamp(255 * math.Pow(f/255, ink))
 	}
 	r, g, b := step(c.R), step(c.G), step(c.B)
+	a := c.A
+	if ink != 1 {
+		a = uint8(math.Round(bakeClamp(255 * math.Pow(float64(c.A)/255, 1/ink))))
+	}
 	return color.NRGBA{
 		R: uint8(math.Round(bakeClamp((0.213+0.787*sat)*r + (0.715-0.715*sat)*g + (0.072-0.072*sat)*b))),
 		G: uint8(math.Round(bakeClamp((0.213-0.213*sat)*r + (0.715+0.285*sat)*g + (0.072-0.072*sat)*b))),
 		B: uint8(math.Round(bakeClamp((0.213-0.213*sat)*r + (0.715-0.715*sat)*g + (0.072+0.928*sat)*b))),
-		A: c.A,
+		A: a,
 	}
 }
 
@@ -436,7 +441,7 @@ func TestApplyRouteBakesColourSlidersIntoTheStamp(t *testing.T) {
 		{"density alone darkens along the pow curve", 1, 1, 3, map[string]any{"ink": 3.0}},
 		{"saturate 0 greys the seal out", 1, 0, 1, map[string]any{"saturate": 0.0}},
 		{"saturate up to the new ceiling 5", 1, 5, 1, map[string]any{"saturate": 5.0}},
-		{"the chain pow -> bright -> sat", 1.5, 0.5, 3, map[string]any{"brightness": 1.5, "saturate": 0.5, "ink": 3.0}},
+		{"the chain bright -> pow -> sat", 1.5, 0.5, 3, map[string]any{"brightness": 1.5, "saturate": 0.5, "ink": 3.0}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			baked := stampedSealImage(t, mux, session, src, seal, tc.extra, "1")
