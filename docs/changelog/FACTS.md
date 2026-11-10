@@ -2,6 +2,10 @@
 
 > `docs/FACTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-10 — §5.1 shell-smoke 行扩 tooltip 断言（UI6 T1）；无新增实测表
+
+`docs/FACTS.md`：头「最后核对」换成 UI6 轮；§5.1 的 `shell-smoke.mjs` 行描述追加 tooltip 浮层断言（show/hide、title 摘挂、aria-label 恒定、反色 token、8px/12.5px 读数）。本轮**无新增实测表**：两主题正文对比 ≥4.5:1 是 ui-ux-pro-max skill pro-rules 的 WCAG 计算值（亮 muted 5.5–6.0、暗 7.2 等），非浏览器实测采样，已在 §5.1 头部注明。
+
 ## 2026-11-10 — §1.10 新增：调色烘焙「预览 == 落盘」金值与端到端（UI5-B2）
 
 - 新增 §1.10（UI5-B2，实测 2026-11-09）：契约公式顺序（pow→×brightness→CSS saturate 矩阵

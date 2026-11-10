@@ -2,6 +2,10 @@
 
 > `docs/IMPLEMENTATION_PLAN.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-10 — §10.1 登记「T1–T2 UI6 轮」+ 头「最后核对」= UI6 轮摘要
+
+`docs/IMPLEMENTATION_PLAN.md`：§10.1 尾行登记 UI6 轮（安装 ui-ux-pro-max skill → color/typography/ux 三域查询 + pro-rules 对照 → 亮暗两主题重配色、tooltip 引擎、CN 排版；门槛 = `build.ps1 -Task vet,test,verify` 失败 0 + `shell-smoke` 新 tooltip 断言）；头换成 UI6 摘要，B1–B2/N1–N4 明细留本文件历史段与 changelog。
+
 ## 2026-11-10 — §10.1 登记「UI5 轮（B1–B2）」+ 头「最后核对」= UI5 轮摘要
 
 - 头「最后核对」= **B1–B2 = UI5 轮**摘要（骑缝选择框 = 整章轮廓 / 调色烘焙落盘 + 密度滑杆

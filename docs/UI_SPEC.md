@@ -1,31 +1,6 @@
 # AutoStamp — UI_SPEC（P0.5 UI 契约）
 
-> 最后核对：2026-11-09（**B1–B2 = UI5 轮**：B1 **骑缝选择框 = 整章轮廓**——选中框宽 =
-> `scale × 页显示宽`（整章 fullW）、贴装订边（right 绑边 `x = pageW − w`）、高 = `w /`
-> 章纵横比（与普通章同一算法），页面内仍只画该页条带，条带落在轮廓之内
->（`app-overlay.outlineFor`/`state.outlines`，`probe('strips')` 回显 `ox/oy/ow/oh`，
-> 不新增字段/路由）；B2 **调色烘焙落盘 + 密度滑杆**：新增 `api.apply.ink`（密度 = 色阶
-> 曲线指数 g，1..10 默认 1），`saturate` 范围 **0..3 → 0..5**，`apply` 三参数
-> `brightness/saturate/ink` **全部烘进印章位图**（落盘 `pdfcore.AdjustPNG`，链序
-> 调色→旋转→切片；前端 `app-overlay.adjustedBitmap` 同公式缓存替换 `ctx.filter` 色链），
-> 公式 = `v′=255·(v/255)^g` → `×brightness` → CSS saturate 矩阵（0.213/0.715/0.072），
-> 每步 clamp、四舍五入，alpha 不变，**预览 == 落盘**；旧「brightness/saturate 仅预览、
-> 发送即 400」语义作废）。本轮改动：§2 新增 `api.apply.ink` 行 + brightness/saturate 行
-> 换烘焙语义、§4 **137 → 139**（ink 族 2 键）、§6 ui-ids **57 不变**（密度滑杆无独立
-> id）、§8 新增 B1/B2 两行。同日前一轮 **N1–N4 = UI4 轮**（初始透明度 0.6 复位、静态
-> hintline → tooltip、骑缝切片仅随机 + `sliceMode` 整条删除、`startOffset` 改 0..100
-> 百分比，§4 141 → 137、ui-ids 58 → 57）。更早一轮 **IP1/IP2 = 参数面板停靠轮**
->（AGENTS §5.44）。再早 **Z5 = 骑缝切片模拟轮**、「Z1–Z4 = 盖章默认值与骑缝旋转轮」。
-> 上一轮 **HD19 = 空态简化**、**SP5 = 右侧边栏退场**、**更早 SP1–SP4 = 侧栏收尾轮**。
-> 历史计数链 i18n 266 → 267 → 151 → 144 → 132 → 141 → 137 → **139**、ui-ids 96 → 63 →
-> 59 → 56 → 58 → **57**；HD13–HD18、HD1–HD7、顶栏收尾（2026-11-03）、V4–V7 与 P2–P6
-> 接线记录沿用 2026-10-30/11-02/11-03，历轮过程叙述见 `docs/changelog/`。
-> 本文是 **UI 语义唯一权威**：字段名/取值域/控件绑定/DOM id/状态机
-> 在此冻结；P0 起 `web/static/index.html` 必须照 §1 骨架与 §7 id 搭建，P1–P5 只换数据源。
-> 与 `AGENTS.md` §6 路由字段冲突时：先改本文 + §6（同一提交），再改代码。
-> 三方一致性由 `node tools/verify/ui-contract.mjs` 常驻校验；mock 行为 `node tools/verify/ui-smoke.mjs`。
-> **§8 决策表** 记录用户确认（选项文本 + 日期 + ask 原文摘要）；未确认项标 `待 P0.5 确认`，
-> 不得引用为已定，也不得虚构确认。
+> 最后核对：2026-11-10（**T1–T2 = UI6 轮：苹果系商务极简配色 + styled tooltip + CN 排版** —— T1 token 名不变、值全换：亮 = `#1d1d1f`/`#f5f5f7`/`#e9e9ee`/`#d5d8dd` + Apple 蓝 `#0071e3`；暗 = `#1c1c1e`/`#2c2c2e`/`#3a3a3c`/`#48484a` + 暗蓝 `#0a84ff`（accent 填充上文字近黑 `#08131f`）；**两主题正文对比 ≥4.5:1**；字体栈 SF Pro/Segoe UI Variable + PingFang SC/Microsoft YaHei；macOS segmented 选中药丸（不再 accent 实心）；按钮 hover = surface-2、active = surface-3；modal 10px/16px、toast 8px；thin 滚动条、`::selection`、`.14s` 过渡 + `prefers-reduced-motion` 守卫；新增 presentation token `--tooltip-bg`/`--tooltip-fg`。**tooltip 引擎** = `app-shell-chrome.bindTooltips`：`[data-i18n-title]` hover/focus → `.app-tooltip` 反色浮层（bg=`--fg`、fg=`--surface`、8px、12.5px/1.45、320px、140ms；wheel/Esc 即散），**title 仅在 hover/focus 期间摘除、按 stash 原文回挂，`aria-label` 恒不动**（N2 断言仍成立）；T2 = `html:lang(zh-CN)` line-height 1.6 + letter-spacing .01em（en 不加）。契约面：§4 i18n **139 不变**、§6 ui-ids **57 不变**、字段词表 52 不变，无新路由/新字段；§8 新增 T1/T2 决策行。前轮 B1–B2（UI5）/ N1–N4（UI4）见 `docs/changelog/UI_SPEC.md`。）
 
 ## 1. 组件层级与状态机
 
@@ -626,6 +601,8 @@ FACTS §1.4）、`snapshot`、`canvasRect`。另有 `imageDataOf(canvas)` 与
 |N4|`api.apply.startOffset` 的取值域与语义|用户直接指令|已确认（用户 2026-11-09 对话指令）：**改成百分比 0..100** —— 字段名不变，**0% = 条带下缘贴页面下边、100% = 条带上缘贴页面上边**。几何 `travel = pageH_disp − 条带盒高 h`（= `scale × pageW × aspect` 的整章盒高）、`box.Y = (1 − startOffset/100) × travel`（`travel` 可为负 = 盒比页高，钳位照旧），预览 `app-overlay.rectFor` 与落盘 `pdfcore.StampGeom.Box` 同一公式（`Y: g.StartOffset` → 百分比公式）。滑杆/数框 `min 0 max 100 step 1`，ctl 文案 = 「起始位置（%）」，hint 换 §4 新文本。Go：`sanitize.go` 的 StartOffset 0..200 pt → 0..100（消息「0..100 %」）、`api/apply.go` 校验同步（`defaultApplyStartOffset` 仍 0）。纵拖 = `newPct = basePct − dy/(pageH − rect.h) × 100`（clamp 0..100、`toFixed(2)`，`travel ≈ 0` 时不写）；放置点击 = `pct = clamp(round1((1 − pt.y/(pageH − h)) × 100), 0, 100)`|2026-11-09|用户 2026-11-09 对话指令（四项一批）|
 |B1|骑缝实例选择框形态（用户报「普通章与骑缝章 boundingbox 不一致 → 初始大小不一致」）|用户 ask 选择（2026-11-09）|已确认（用户 ask 选项 =「整章轮廓框」）：骑缝实例的**选择框/四角/旋转手柄/hitTest/拖拽基准 = 整章轮廓**（w = `scale × pageW`、贴装订边、高 = `fullW × aspect` 同普通章、y = N4 百分比公式），跨页每页都显示轮廓（Z5 gap 页也显示轮廓但无条带像素）；页面内仍只画该页条带，条带落在轮廓内；四角按整章宽调 scale（与普通章同语义）。落盘几何（条带切片/`Box`）不变——轮廓只是 affordance|2026-11-09|用户 2026-11-09 ask（两项一批）|
 |B2|明度/饱和度调节范围不足（浅红→深红→全黑做不到；现参数只预览不落盘）|用户 ask 选择（2026-11-09）|已确认（用户 ask 选项 =「新增密度滑杆+全部烘焙落盘」）：新增 `api.apply.ink`（密度 = 色阶曲线指数 g，1..10 默认 1），`saturate` 范围 0..3 → **0..5**；三参数**全部烘焙进印章位图**（`pdfcore.AdjustPNG` 落盘链 `Adjust→Rotate→Strips`，前端 `app-overlay.adjustedBitmap` 同公式缓存替换 `ctx.filter` 色链），**预览 == 落盘**；公式 = pow（v′=255·(v/255)^g）→ ×brightness → CSS saturate 矩阵（0.213/0.715/0.072），每步 clamp、四舍五入，alpha 不变，顺序固定|2026-11-09|用户 2026-11-09 ask（两项一批）|
+|T1|前端配色按「苹果、商务、极简」优化（亮/暗两套各自打磨）；tooltip 样式换可控的浮层|用户直接指令（2026-11-10 对话指令：安装 ui-ux-pro-max skill 并按其指引优化）|已确认（用户 2026-11-10 对话指令）：token **名字**不变、**值全换** —— 亮 = Apple 中性灰阶（`--fg #1d1d1f`、`--muted #5f646b`、`--surface #fff`/`#f5f5f7`/`#e9e9ee`、`--border #d5d8dd`、Apple 蓝 `--accent #0071e3`）；暗 = Apple elevated（`#1c1c1e`/`#2c2c2e`/`#3a3a3c`、`--border #48484a`、暗蓝 `#0a84ff`，accent 填充上文字 = 近黑 `#08131f` 对比 ≥4.5）；success/warning/error Apple 色相（亮 warning `#8f5d00`、暗 error `#ff6961`、`#ff9f0a`、`#30d158`）——**两主题正文对比 ≥4.5:1**（ui-ux-pro-max pro-rules 实测：亮 muted 5.5–6.0 / 暗 7.2）。字体栈 = SF Pro/Segoe UI Variable + PingFang SC/Microsoft YaHei/Noto Sans SC。macOS segmented 选中药丸（`surface` 浮起 + 软阴影，不再 accent 实心；语言/主题/导出切档同源）；按钮 hover = surface-2、active = surface-3；modal 10px/16px、toast 8px/10–14px；thin 滚动条、`::selection` accent 26%、`.14s` 过渡 + reduced-motion 守卫。**tooltip 换 styled 浮层**（`.app-tooltip` 引擎 = `app-shell-chrome.bindTooltips`）：`[data-i18n-title]` hover/focus 显示，文本 = 当前语言 pair（`pairFor(el,"title")`，与 N2 同源）；**title 属性仅在 hover/focus 期间摘除（原生 tooltip 抑制），离开时按 stash 原文回挂**——`aria-label` 恒定不动（可及名不丢，N2 的 title/aria-label 断言仍成立）；浮层 = 反色 token（bg=`--fg`、fg=`--surface`，两主题自动反色）、8px 圆角、12.5px/1.45、max-width 320px、140ms 淡入+位移；wheel/Esc 即散。新增 `--tooltip-bg`/`--tooltip-fg` 两个 presentation token|2026-11-10|用户 2026-11-10 对话指令（三项一批）|
+|T2|中英文字间距/行高优化（tooltip 样式与文字间距按语言分别打磨）|用户直接指令（2026-11-10，与 T1 同一批）|已确认：`html:lang(zh-CN)`（真壳 `applyLang` 写 `html.lang="zh-CN"`，mock 同源写 lang → 两个 surface 同一条选择器命中）→ `body { line-height: 1.6; letter-spacing: .01em }`，`.app-tooltip` 同款；en 保持 SF Pro/Segoe 系统原生度量不加 tracking。i18n 键与键数（139）、ui-ids（57）**零变化**|2026-11-10|用户 2026-11-10 对话指令（三项一批）|
 
 SP5 是 2026-11-06 用户在对话里直接下的指令：**右侧边栏整块删除** —— SP1 之后它只剩
 「导出设置 + 动作段」，SP5 把这最后两段也拆掉：「导出设置」段（含 `#estimate` 体积预估）

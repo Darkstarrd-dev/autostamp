@@ -1,29 +1,6 @@
 # PROJECT_MAP.md — AutoStamp 代码地图
 
-> 最后核对：2026-11-10（**B1–B2 = UI5 轮**：B1 **骑缝选择框 = 整章轮廓** —— `app-overlay.js`
-> `outlineFor`/`state.outlines`（宽 = `scale × 页显示宽`、贴装订边、高 = 整章盒高，与普通章同一
-> 尺寸语义；DOM 选择框/四角/旋转手柄/hitTest/拖拽基准走轮廓，页面内仍只画该页条带；
-> `probe('strips')` 新增 `ox/oy/ow/oh` 读数；无新字段/路由/id）；B2 **调色烘焙落盘 + 密度滑杆** ——
-> 新文件 `internal/pdfcore/adjust.go`（`AdjustPNG` pow→bright→sat 烘进印章位图，落盘链序
-> 调色→旋转→切条），`api.apply.ink`（1..10 默认 1）进 config 三件套、`saturate` 0..3→0..5、
-> `api/apply.go` 实例词表 `brightness/saturate/ink`、前端 `adjustedBitmap`/`transformCanvas`
-> 替换 `ctx.filter` 色链（`drawSeal` 无 filter），kernel `NUMERIC` + `applySettings` 含 ink；
-> 旧「brightness/saturate 仅预览、发送即 400」语义作废）。计数：i18n **139**（137 + ink 族 2 键）、
-> ui-ids **57 不变**、`data-field` +1（`api.apply.ink`）、字段词表 +1；AGENTS §5.46/§5.47、
-> `UI_SPEC §8` B1/B2、FACTS §1.10。同日前一轮 **N1–N4 = UI4 轮**（`sliceMode` 三件套删除、
-> `startOffset` 0..100 百分比、hintline → tooltip、初始透明度 0.6 复位；§4 141 → 137、
-> ui-ids 58 → 57）。更早一轮 **IP1/IP2 = 面板停靠右缘轮**（AGENTS §5.44）。更早 **Z5**
->（`StripsFractions` 累计列切条 + `apply.cover`）/**Z1–Z4**（`rotate.go`、`autoScale()`、
-> blend 默认 multiply、骑缝单击可选）/**HD19**/**SP5**/**HD13–HD18 + P0–P7 全绿**
->（预览卡 overlay、后端终端、装载只设当前印章、壳拆 7 模块）；**V7 = Ctrl+滚轮恒为整页缩放**
->（AGENTS §5.14）。历史计数 i18n 266 → 267 → 151 → 144 → 132 → 141 → 137 → **139**、ui-ids 96 →
-> 63 → 59 → 56 → 58 → **57**；出货件 = `build.ps1 -Task stripped,package` 的
-> `dist\autostamp-<rev>-win64.zip`；历轮增量（PD1/PD2、build1/buildm、HD1–HD12、V4–V6、P6/P7
-> 接线）与已删键的完整清单只在 `docs/changelog/PROJECT_MAP.md` 留叙述，正文只留当前态事实。
-> `app-crosspage.js` 这个计划名从未
-> 创建，真实形态在 `app-overlay.js` + `app-shell-*.js` 模块组（7 文件，见下表「壳模块拆分」行）。
->
-> 新增/删除包必须同步本文件（AGENTS §10.1）。阶段状态见 `docs/IMPLEMENTATION_PLAN.md §10`。
+> 最后核对：2026-11-10（**T1–T2 = UI6 轮：苹果系商务极简配色 + styled tooltip + CN 排版** —— `web/static/style.css` 的 `:root`/`html[data-theme="dark"]` token **名不变值全换**（亮 = Apple 中性灰阶 + `#0071e3`；暗 = Apple elevated + `#0a84ff`，accent 填充上文字近黑 `#08131f`；两主题正文对比 ≥4.5:1）+ CJK 字体栈 + macOS segmented 药丸 + 按钮 hover/active 两级 + modal/toast 圆角 + thin 滚动条 + `.14s` 过渡 + reduced-motion 守卫 + `html:lang(zh-CN)` 行高/tracking + 新增 presentation token `--tooltip-bg`/`--tooltip-fg`；`app-shell-chrome.js` 新增局部函数 **`bindTooltips`**（`.app-tooltip` 反色浮层引擎，`boot()` 接线；title 仅 hover/focus 摘除再 stash 回挂、aria-label 恒不动，不入门面）；`docs/ui/mockup.html` 同步镜像。计数：i18n **139 不变**、ui-ids **57 不变**、`data-field` 52 不变；AGENTS §5.48、`UI_SPEC §8` T1/T2。前轮 B1–B2（UI5）/ N1–N4（UI4）见 `docs/changelog/PROJECT_MAP.md`。）
 
 ## 1. 可执行入口（根包 `main`）
 

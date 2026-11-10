@@ -399,6 +399,54 @@ async function main() {
   })()`);
   if (themeTokens.light === themeTokens.dark) bad("theme tokens did not switch: " + JSON.stringify(themeTokens));
 
+  // UI6 (2026-11-10): the styled tooltip replaces the native title tip on the
+  // [data-i18n-title] channel. The accessible name never leaves aria-label;
+  // the title attribute (the N2 channel asserted just above) is detached only
+  // while the custom tip owns the hover/focus and restored on leave. The tip
+  // is token-inverted (bg = the theme's --fg) so it flips with either theme,
+  // and its text follows the current language.
+  const tip = await json(`(function(){
+    var s = window.__autoStampShell;
+    s.applyTheme("dark");
+    var el = document.querySelector("#btn-open");
+    var pair = window.__autoStampI18n.CATALOG["app.open.btn"];
+    var want = s.state.lang === "cn" ? pair.cn : pair.en;
+    el.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+    var t = document.querySelector(".app-tooltip");
+    var cs = t ? getComputedStyle(t) : null;
+    var inv = document.createElement("span");
+    inv.style.color = getComputedStyle(document.documentElement).getPropertyValue("--fg").trim();
+    document.body.appendChild(inv);
+    var invFg = getComputedStyle(inv).color;
+    inv.remove();
+    var during = {
+      shown: !!t && t.dataset.show === "true",
+      text: t ? t.textContent : null,
+      title: el.getAttribute("title"),
+      aria: el.getAttribute("aria-label"),
+      bg: cs && cs.backgroundColor,
+      invFg: invFg,
+      radius: cs && cs.borderTopLeftRadius,
+      fs: cs && cs.fontSize
+    };
+    el.dispatchEvent(new PointerEvent("pointerout", { bubbles: true }));
+    var after = { shown: t ? t.dataset.show : null, title: el.getAttribute("title"), aria: el.getAttribute("aria-label") };
+    el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    var focusShown = t.dataset.show === "true" && el.getAttribute("title") === null;
+    el.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    var focusHidden = t.dataset.show === "false" && el.getAttribute("title") === want;
+    s.applyTheme("light");
+    return JSON.stringify({ want: want, during: during, after: after, focusShown: focusShown, focusHidden: focusHidden });
+  })()`);
+  if (!(tip.during.shown && tip.during.text === tip.want)) bad("styled tooltip did not show with the current-language text: " + JSON.stringify(tip.during));
+  if (tip.during.title !== null) bad("native title not suppressed while the custom tip owns the hover: " + JSON.stringify(tip.during.title));
+  if (tip.during.aria !== tip.want || tip.after.aria !== tip.want) bad("aria-label moved during tooltip hover: " + JSON.stringify([tip.during.aria, tip.after.aria]));
+  if (tip.during.bg !== tip.during.invFg) bad(`tooltip bg is not the inverted theme fg: ${tip.during.bg} vs ${tip.during.invFg}`);
+  if (tip.during.radius !== "8px" || tip.during.fs !== "12.5px") bad("tooltip styling contract (8px radius / 12.5px text) not applied: " + JSON.stringify([tip.during.radius, tip.during.fs]));
+  if (tip.after.title !== tip.want) bad("title attribute not restored after pointerout: " + JSON.stringify(tip.after.title));
+  if (tip.after.shown !== "false") bad("custom tip still visible after pointerout: " + tip.after.shown);
+  if (!tip.focusShown || !tip.focusHidden) bad("focusin/focusout does not drive the tooltip: " + JSON.stringify([tip.focusShown, tip.focusHidden]));
+
   // ---------- settings round-trip (real /api) ----------
   await evaluate("window.__autoStampShell.applyLang('cn')");
   await new Promise((r) => setTimeout(r, 400));

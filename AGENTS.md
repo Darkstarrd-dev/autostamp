@@ -517,6 +517,25 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
    `effectiveBitmap` = 调色→旋转（rotCache 键进调色签名）。预览 == 落盘由 apply-sm 落盘回读
    色 == 公式独立重算（±2）钉死。config 三件套新增 `apply.ink`。
 
+48. **UI6 轮：苹果系商务配色 + styled tooltip + CN 排版（T1/T2，2026-11-10 用户对话指令；`UI_SPEC §8` T1/T2）**：
+   token **名字不变、值全换**（`docs/ui/mockup.html` 同步镜像）：亮 = Apple 中性灰阶（`--fg #1d1d1f`、
+   `--muted #5f646b`、`--surface`/`--surface-2`/`--surface-3` = `#fff`/`#f5f5f7`/`#e9e9ee`、`--border #d5d8dd`、
+   Apple 蓝 `--accent #0071e3`）；暗 = Apple elevated（`#1c1c1e`/`#2c2c2e`/`#3a3a3c`、`--border #48484a`、
+   暗蓝 `#0a84ff`，accent 填充上文字 = 近黑 `#08131f`）；success/warning/error Apple 色相（亮 warning
+   `#8f5d00`；暗 success/warning/error = `#30d158`/`#ff9f0a`/`#ff6961`），**两主题正文对比 ≥4.5:1**
+   （ui-ux-pro-max pro-rules 实测：亮 muted 5.5–6.0 / 暗 muted 7.2）。字体栈 SF Pro/Segoe UI Variable +
+   PingFang SC/Microsoft YaHei/Noto Sans SC；macOS segmented 选中药丸（`surface` 浮起 + 软阴影，不再
+   accent 实心，语言/主题/导出切档同源）；按钮 hover = surface-2、active = surface-3；modal 10px/16px、
+   toast 8px；thin 滚动条、`::selection` accent 26%、`.14s` 过渡 + `prefers-reduced-motion` 守卫；
+   `html:lang(zh-CN)` 加 line-height 1.6 + letter-spacing .01em（T2，真壳 `applyLang` 写 `html.lang`，
+   mock 同源写 lang → 一条选择器命中两个 surface）。**tooltip**：`app-shell-chrome.bindTooltips` 用
+   `.app-tooltip` 浮层替换原生 `title` 气泡（bg = `--fg`、fg = `--surface` 反色自动随主题、8px 圆角、
+   12.5px/1.45、max-width 320px、140ms 淡入+位移；wheel/Esc 即散）——`[data-i18n-title]` hover/focus →
+   当前语言 pair（`pairFor(el,"title")`，与 N2 同源）显示；**title 属性仅在 hover/focus 期间摘除
+   （原生气泡抑制），离开时按 stash 原文回挂**，`aria-label` 恒不动 —— 可及名不丢，N2 的
+   title/aria-label 断言仍成立。presentation token 新增 `--tooltip-bg`/`--tooltip-fg`；tooltip 引擎是
+   `app-shell-chrome.js` 局部函数（不进门面、无新路由）；i18n 139 / ui-ids 57 / 词表字段 52 零变化。
+
 ## 6. HTTP 契约（`/api/*`，全部 JSON；字段在 **P0.5 与用户确认后**才冻结，改动必须同步本文、`docs/UI_SPEC.md` 与前端）
 
 |路由|用途|
@@ -704,6 +723,7 @@ powershell -NoProfile -File buildm.ps1              # 极限压缩：同 build1 
 |改骑缝条带旋转 / 可选中性（Z3/Z4）|`UI_SPEC §8` Z3/Z4 + 本文件 §5.41/§5.42（修订 §5.7/§5.17 条带语义）|`internal/pdfcore/rotate.go`（`RotatePNG` 先旋转整枚）、`stamp.go`（`Strips` 切旋转位图、`StampGeom.Aspect` = 旋转 bbox）、`apply.go`（bake-then-slice）、`web/static/app-overlay.js`（`rotatedBitmapCanvas`/`effectiveBitmap`/`rectFor`/`hitTest` 骑缝跳过旋转帧）、`web/static/style.css`（删 crosspage sel-box/handle 隐藏规则）、`internal/pdfcore/rotate_test.go`、`tools/verify/{overlay-smoke,apply-smoke}.mjs`（strip 旋转断言）|
 |改骑缝不匀切片模拟（Z5）|`UI_SPEC §8` Z5 + 本文件 §5.43/§6（apply `slices` 字段）|`internal/pdfcore/stamp.go`（`StripsFractions` 累计列 + `Box` 的 `SlotFrac`）、`apply.go`（实例词表 `slices`）、`apply_test.go`/`stamp_test.go`（分数切片字节）、`internal/config/{types,defaults,patch,sanitize}.go`（`apply.cover`；`apply.sliceMode` 已由 N3 删除）、`web/static/index.html`（cp 组滑杆/重试；`#crosspage-slicemode` 切档已由 N3 删除）、`app-shell-instances.js`（`randomCrossFractions`/`drawCrossSlices`/`retryCrossSlices`）、`app-overlay.js`（`stripContext` frac/cum）、`app-shell-chrome.js`（seg/cover/retry 接线）、`probe('strips')` 读数、`tools/verify/{shell-smoke,overlay-smoke,apply-smoke}.mjs`（Z5 断言）。**UI4 轮 N3/N4 修订（2026-11-09）**：N3 删 `SliceMode` 三件套 + `#crosspage-slicemode` + `sliceMode.*` 四键（i18n 141 → 137、ui-ids 58 → 57、settings 字段对 −1），随机恒生效；N4 改 `startOffset` 为 0..100 百分比 —— `stamp.go` 的 `Box.Y = (1 − pct/100) × (pageH − h)`、`sanitize.go`/`apply.go` 校验同步、`apply_test.go`/`stamp_test.go` 断言按百分比、`index.html` 滑杆 `min 0 max 100`、`app-overlay.js` 的 `rectFor` strip 分支与 `moveDrag` 纵拖、`addCrossInstanceAt` 的点击换算、`tools/verify/{overlay,apply}-smoke` 的 startOffset 取样按百分比|
 |改实例参数面板停靠/滚动（IP1/IP2）|`UI_SPEC §8` IP1/IP2 + 本文件 §5.44（作废 §5.30/§5.34 的锚点半边）|`web/static/style.css`（`#instance-panel` = `right/top/bottom:10px` + `overflow-y:auto`；`#instance-fab` 右上角停靠）、`web/static/app-shell-instances.js`（`posInstancePanel` 只留 show/hide）、`docs/ui/mockup.html`（同形镜像）、`tools/verify/shell-smoke.mjs`（IP1 停靠几何 + IP2 短视口滚动断言）|
+|改主题配色 / tooltip / CN 排版（UI6 T1/T2）|`UI_SPEC §8` T1/T2 + 本文件 §5.48|`web/static/style.css`（`:root`/`html[data-theme="dark"]` token 值、`--tooltip-bg`/`--tooltip-fg`、`.app-tooltip`、`html:lang(zh-CN)` 行高/tracking、seg 药丸、按钮态、modal/toast 圆角、thin 滚动条、`.14s` 过渡）、`web/static/app-shell-chrome.js`（`bindTooltips` 引擎 + `boot()` 接线）、`docs/ui/mockup.html`（token/CSS 镜像；注意 ui-sm 的 brace-vs-cssRules 校验不能往 mock `<style>` 塞嵌套 `@media`）、`tools/verify/shell-smoke.mjs`（T1 tooltip 断言：show/hide、title 摘挂、aria-label 恒定、反色 token、8px/12.5px 读数）|
 |改调色烘焙 + 骑缝轮廓框（UI5 B1/B2）|`UI_SPEC §8` B1/B2 + 本文件 §5.46/§5.47 + §6 apply 行|`internal/pdfcore/adjust.go`（`AdjustPNG` pow→bright→sat）、`internal/pdfcore/apply.go`（调色→旋转→切片链）、`internal/api/apply.go`（实例 `brightness/saturate/ink` 词表）、`internal/config/{types,defaults,patch,sanitize}.go`（`apply.ink`、saturate 0..5）、`web/static/app-overlay.js`（`adjustedBitmap`/`transformCanvas` 像素链、`outlineFor`+`state.outlines` 轮廓框、`drawSeal` 无 filter）、`web/static/app-shell-docops.js`（`stampBodyOf` 发色调参数）、`web/static/app-shell-verify.js`（`probe('strips')` 的 `ox/oy/ow/oh`）、`web/static/index.html`+`docs/ui/mockup.html`（密度行、saturate 0..5、tooltip 文案）、`tools/verify/{overlay-smoke,apply-smoke,shell-smoke}.mjs`（色公式独立重算 + 轮廓断言）|
 |改骑缝章放置/面板组（SP4）|`UI_SPEC §8` SP4 + 本文件 §5.36|`web/static/index.html`（`#btn-crosspage-add`、面板 cp 组）、`web/static/app-shell-seals.js`（`setCrosspageAdd` 互斥）、`web/static/app-shell-instances.js`（`addCrossInstanceAt`/`syncCpGroup`）、`web/static/app-overlay.js`（strip 几何/纵拖 startOffset/手柄）、`web/static/app-shell-chrome.js`（binding seg 实例语义、放置模式按钮接线）、`tools/verify/shell-smoke.mjs`（SP4 断言）与 `overlay-smoke`/`apply-smoke`（条带）|
 |改打包/发布物|本文件 §4（PC1）|`build.ps1`（`Start-Package`：`autostamp-<rev>-win64.zip` = strip 窗口版重命名 `autostamp.exe` + `README.md`，25 MB 体积门）、`README.md`（随 zip 一起出货，必须保持准确）、`build1.ps1`/`buildm.ps1`（单 exe 出口 `dist\autostamp.exe`；极限压缩走 UPX，见 FACTS §4.3）|

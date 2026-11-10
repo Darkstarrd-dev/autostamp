@@ -2,6 +2,10 @@
 
 > `AGENTS.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-10 — §5 新增 48（UI6 轮 T1/T2：苹果系商务配色 + styled tooltip + CN 排版）+ §11 一行
+
+`AGENTS.md`：§5 新增决策 48（token 名不变值全换、亮/暗 Apple 系色板、两主题正文对比 ≥4.5:1、CJK 字体栈、macOS segmented 药丸、`bindTooltips` 替换原生气泡（title 摘挂语义）、`--tooltip-bg`/`--tooltip-fg` presentation token、i18n 139 / ui-ids 57 零变化）；§11 新增「改主题配色 / tooltip / CN 排版（UI6 T1/T2）」行（含 mock `<style>` 禁嵌套 `@media` 的 ui-sm 校验坑）。
+
 ## 2026-11-10 — §5 新增 46/47（UI5 轮 B1/B2：骑缝选择框 = 整章轮廓 + 调色烘焙落盘）+ §6 apply 行换义 + §11 一行
 
 - §5.46（B1）：骑缝实例的选择框 = **整章轮廓**（`outlineFor`：宽 = `scale × 页显示宽`、贴装订边

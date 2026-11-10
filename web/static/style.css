@@ -1,51 +1,72 @@
 /* AutoStamp shell styles.
    Token set is the contract (UI_SPEC §6 note in the mock header: "this is the
    style.css contract"); docs/ui/mockup.html keeps the same variables so the two
-   surfaces never drift. The layout is fixed to two columns (HD3, 2026-11-03). */
+   surfaces never drift. The layout is single-col full-bleed (SP5, 2026-11-06). */
 
+/* UI6 (2026-11-10): Apple-flavoured neutral palette (business-minimal). Token
+   NAMES are the contract — same names in docs/ui/mockup.html, never renamed.
+   Light = Apple grays (#f5f5f7 layering) + Apple blue #0071e3; dark = Apple
+   elevated grays (#1c1c1e / #2c2c2e / #3a3a3c) + dark-mode blue #0a84ff.
+   Contrast (ui-ux-pro-max pro-rules: normal text >=4.5:1 in BOTH themes):
+   light muted 5.5-6.0, success 5.4, warning 4.9, error 6.5; dark muted 7.2,
+   success 8.4, warning 8.3, error 5.0 (on --surface; >=4.1 on --surface-2);
+   filled accent keeps a >=4.5 label pair (white on #0071e3 light, near-black
+   on #0a84ff dark). */
 :root {
-  --fg: #14181d;
-  --muted: #6a717a;
-  --border: #d5dae1;
+  --fg: #1d1d1f;
+  --muted: #5f646b;
+  --border: #d5d8dd;
   --surface: #ffffff;
-  --surface-2: #f2f5f8;
-  --surface-3: #e7ebf0;
-  --accent: #2f6feb;
+  --surface-2: #f5f5f7;
+  --surface-3: #e9e9ee;
+  --accent: #0071e3;
   --accent-fg: #ffffff;
   --success: #1f7a3f;
-  --warning: #a86a00;
+  --warning: #8f5d00;
   --error: #b3261e;
   --radius: 6px;
   --gap: 10px;
   --gap-sm: 6px;
-  --font: 14px/1.45 ui-sans-serif, "Segoe UI", system-ui, sans-serif;
+  --font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text",
+    "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
   --mono: 12px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace;
-  --stage-bg: #6b7280;
-  --shadow: 0 2px 10px rgba(0, 0, 0, .18);
+  --stage-bg: #e6e7eb;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .07), 0 6px 18px rgba(0, 0, 0, .10);
+  --tooltip-bg: var(--fg);
+  --tooltip-fg: var(--surface);
 }
 
 html[data-theme="dark"] {
-  --fg: #e8ecf1;
-  --muted: #9aa3ad;
-  --border: #3a424c;
-  --surface: #1b1f25;
-  --surface-2: #232931;
-  --surface-3: #2c333c;
-  --accent: #5b8def;
-  --accent-fg: #0d1117;
-  --success: #4ac36f;
-  --warning: #d9a441;
-  --error: #ef6b62;
-  --stage-bg: #12161b;
-  --shadow: 0 2px 10px rgba(0, 0, 0, .5);
+  --fg: #f5f5f7;
+  --muted: #a8a8ad;
+  --border: #48484a;
+  --surface: #1c1c1e;
+  --surface-2: #2c2c2e;
+  --surface-3: #3a3a3c;
+  --accent: #0a84ff;
+  --accent-fg: #08131f;
+  --success: #30d158;
+  --warning: #ff9f0a;
+  --error: #ff6961;
+  --stage-bg: #0f1013;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .45), 0 6px 18px rgba(0, 0, 0, .55);
 }
 
 * { box-sizing: border-box; }
 html, body { height: 100%; }
+html { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 body { margin: 0; font: var(--font); color: var(--fg); background: var(--surface); overflow: hidden; }
 body, button, input, select { font: inherit; }
 button { cursor: pointer; color: inherit; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+::selection { background: color-mix(in srgb, var(--accent) 26%, transparent); }
+/* UI6: 140 ms interaction feedback (ui-ux-pro-max: no instant state changes,
+   no one-size transition), reduced-motion honoured. */
+.btn, .seg button, .chip, input, select, #instance-fab { transition: background-color .14s ease, border-color .14s ease, color .14s ease, box-shadow .14s ease; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
+/* UI6 CN typography: CJK runs need more leading and a hair of tracking than
+   Latin text at the same 14 px (data-lang is written by applyLang). */
+html:lang(zh-CN) body { line-height: 1.6; letter-spacing: .01em; }
 
 /* layout: single column, bleeding to the window edge (SP5, 2026-11-06; the
    380 px sidebar died with HD3's fixed two-col, UI_SPEC §8 HD3 retired) */
@@ -64,9 +85,11 @@ button { cursor: pointer; color: inherit; }
 .spacer { margin-left: auto; }
 
 .btn { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius); padding: 5px 10px; }
-.btn:hover { background: var(--surface-3); }
+.btn:hover { background: var(--surface-2); }
+.btn:active:not(:disabled) { background: var(--surface-3); }
 .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--surface-2); }
 .btn.danger { color: var(--error); border-color: var(--error); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 /* HD1: the remaining topbar controls are icon-only; the icon is decorative,
@@ -77,10 +100,14 @@ button { cursor: pointer; color: inherit; }
 .btn.icon .ic, .seg.sm .ic { width: 16px; height: 16px; display: block; }
 .seg.sm button { display: inline-flex; align-items: center; gap: var(--gap-sm); }
 
-.seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-.seg button { border: 0; background: var(--surface); padding: 5px 9px; }
-.seg button + button { border-left: 1px solid var(--border); }
-.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+/* UI6: segmented controls follow the macOS pattern — a recessed track with a
+   floating selected thumb (surface + soft shadow), not a solid accent fill;
+   the pressed state stays readable in both themes. */
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface-3); padding: 2px; }
+.seg button { border: 0; background: transparent; color: var(--fg); padding: 5px 9px; border-radius: 4px; }
+.seg button:hover { background: color-mix(in srgb, var(--fg) 7%, transparent); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, .18); }
 .seg.sm { height: 34px; }
 .seg.sm button { height: 100%; padding: 0 10px; font-size: 12px; }
 
@@ -94,6 +121,7 @@ input[type="text"], input[type="number"], input[type="password"], select {
 input[type="range"] { accent-color: var(--accent); width: 100%; }
 input[type="number"] { width: 74px; font: var(--mono); }
 input[type="text"] { width: 100%; }
+input:focus, select:focus { border-color: var(--accent); }
 
 /* preview */
 #preview { grid-area: preview; min-width: 0; position: relative; display: flex; flex-direction: column; background: var(--stage-bg); }
@@ -245,8 +273,8 @@ html:not([data-state="empty"]) #empty-state { display: none; }
 .modal {
   position: fixed; left: 50%; top: 14%; transform: translateX(-50%);
   width: min(560px, calc(100vw - 32px)); background: var(--surface);
-  border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow);
-  padding: 14px; display: none; z-index: 41;
+  border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
+  padding: 16px; display: none; z-index: 41;
 }
 .modal[data-open="true"] { display: block; }
 .modal h2 { margin: 0 0 8px; font-size: 16px; }
@@ -260,8 +288,8 @@ html:not([data-state="empty"]) #empty-state { display: none; }
 #error-toast {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
   background: var(--surface); color: var(--fg); border: 1px solid var(--error);
-  border-left: 4px solid var(--error); border-radius: var(--radius);
-  padding: 8px 12px; box-shadow: var(--shadow); display: none; z-index: 42;
+  border-left: 4px solid var(--error); border-radius: 8px;
+  padding: 10px 14px; box-shadow: var(--shadow); display: none; z-index: 42;
   max-width: min(720px, calc(100vw - 32px));
 }
 #error-toast[data-open="true"] { display: block; }
@@ -400,3 +428,26 @@ html[data-state="empty"] #log-console { bottom: 10px; }
   margin: 0; font: var(--mono); font-size: 11px; line-height: 1.5;
   white-space: pre-wrap; word-break: break-all;
 }
+
+/* UI6 (2026-11-10, user 2026-11-10 dialogue directive): the native title
+   tooltip is replaced by a styled hover/focus popover (`.app-tooltip`, built
+   by app-shell-chrome.bindTooltips). Apple HUD look: a solid inverted surface
+   (var(--fg) bg, var(--surface) text — auto-adapts to either theme), 8 px
+   radius, 12.5 px / 1.45 text, 320 px max width, 140 ms fade+lift. The
+   element's title attribute is held for accessibility (N2 channel: applyLang
+   still writes title + aria-label) and suppressed only while the custom tip
+   owns the hover; aria-label never changes, so screen-reader naming is
+   untouched. */
+.app-tooltip {
+  position: fixed; z-index: 60; pointer-events: none;
+  background: var(--tooltip-bg, var(--fg)); color: var(--tooltip-fg, var(--surface));
+  border-radius: 8px; padding: 7px 11px;
+  font-size: 12.5px; line-height: 1.45; max-width: 320px;
+  box-shadow: var(--shadow);
+  opacity: 0; transform: translateY(4px);
+  transition: opacity .14s ease, transform .14s ease;
+}
+.app-tooltip[data-show="true"] { opacity: 1; transform: none; }
+.app-tooltip[data-side="top"] { transform: translateY(-4px); }
+.app-tooltip[data-side="top"][data-show="true"] { transform: none; }
+html:lang(zh-CN) .app-tooltip { line-height: 1.6; letter-spacing: .01em; }

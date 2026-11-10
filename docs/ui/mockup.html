@@ -33,39 +33,42 @@
 <style>
 /* ---- token set: this is the style.css contract (UI_SPEC §6) ---- */
 :root {
-  --fg: #14181d;
-  --muted: #6a717a;
-  --border: #d5dae1;
+  --fg: #1d1d1f;
+  --muted: #5f646b;
+  --border: #d5d8dd;
   --surface: #ffffff;
-  --surface-2: #f2f5f8;
-  --surface-3: #e7ebf0;
-  --accent: #2f6feb;
+  --surface-2: #f5f5f7;
+  --surface-3: #e9e9ee;
+  --accent: #0071e3;
   --accent-fg: #ffffff;
   --success: #1f7a3f;
-  --warning: #a86a00;
+  --warning: #8f5d00;
   --error: #b3261e;
   --radius: 6px;
   --gap: 10px;
   --gap-sm: 6px;
-  --font: 14px/1.45 ui-sans-serif, "Segoe UI", system-ui, sans-serif;
+  --font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text",
+    "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
   --mono: 12px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace;
-  --stage-bg: #6b7280;
-  --shadow: 0 2px 10px rgba(0, 0, 0, .18);
+  --stage-bg: #e6e7eb;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .07), 0 6px 18px rgba(0, 0, 0, .10);
+  --tooltip-bg: var(--fg);
+  --tooltip-fg: var(--surface);
 }
 html[data-theme="dark"] {
-  --fg: #e8ecf1;
-  --muted: #9aa3ad;
-  --border: #3a424c;
-  --surface: #1b1f25;
-  --surface-2: #232931;
-  --surface-3: #2c333c;
-  --accent: #5b8def;
-  --accent-fg: #0d1117;
-  --success: #4ac36f;
-  --warning: #d9a441;
-  --error: #ef6b62;
-  --stage-bg: #12161b;
-  --shadow: 0 2px 10px rgba(0, 0, 0, .5);
+  --fg: #f5f5f7;
+  --muted: #a8a8ad;
+  --border: #48484a;
+  --surface: #1c1c1e;
+  --surface-2: #2c2c2e;
+  --surface-3: #3a3a3c;
+  --accent: #0a84ff;
+  --accent-fg: #08131f;
+  --success: #30d158;
+  --warning: #ff9f0a;
+  --error: #ff6961;
+  --stage-bg: #0f1013;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .45), 0 6px 18px rgba(0, 0, 0, .55);
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -75,7 +78,14 @@ body {
 }
 body, button, input, select { font: inherit; }
 button { cursor: pointer; color: inherit; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+html { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+::selection { background: color-mix(in srgb, var(--accent) 26%, transparent); }
+.btn, .seg button, .chip, input, select, #instance-fab { transition: background-color .14s ease, border-color .14s ease, color .14s ease, box-shadow .14s ease; }
+/* UI6 CN typography (mirror of style.css; applyLang writes html lang).
+   (The prefers-reduced-motion guard lives in style.css only — the nested
+   @media block would throw off ui-sm's brace-vs-cssRules parity check.) */
+html:lang(zh-CN) body { line-height: 1.6; letter-spacing: .01em; }
 
 /* ---- layout: single column, full bleed (SP5 2026-11-06: the right sidebar is gone) ---- */
 #app-main {
@@ -95,9 +105,11 @@ button { cursor: pointer; color: inherit; }
   border: 1px solid var(--border); background: var(--surface);
   border-radius: var(--radius); padding: 5px 10px;
 }
-.btn:hover { background: var(--surface-3); }
+.btn:hover { background: var(--surface-2); }
+.btn:active:not(:disabled) { background: var(--surface-3); }
 .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--surface-2); }
 .btn.danger { color: var(--error); border-color: var(--error); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 /* HD1: the remaining topbar controls are icon-only; the icon is decorative,
@@ -105,10 +117,10 @@ button { cursor: pointer; color: inherit; }
 .btn.icon { display: inline-flex; align-items: center; justify-content: center; height: 34px; padding: 0 8px; }
 .btn.icon .ic, .seg.sm .ic { width: 16px; height: 16px; display: block; }
 .seg.sm button { display: inline-flex; align-items: center; gap: var(--gap-sm); }
-.seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-.seg button { border: 0; background: var(--surface); padding: 5px 9px; }
-.seg button + button { border-left: 1px solid var(--border); }
-.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-3); padding: 2px; }
+.seg button { border: 0; background: transparent; color: var(--fg); padding: 5px 9px; border-radius: 4px; }
+.seg button:hover { background: color-mix(in srgb, var(--fg) 7%, transparent); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, .18); }
 .seg.sm { height: 34px; }
 .seg.sm button { height: 100%; padding: 0 10px; font-size: 12px; }
 #seal-recent-select { max-width: 190px; height: 34px; }
@@ -121,6 +133,7 @@ input[type="text"], input[type="number"], input[type="password"], select {
 input[type="range"] { accent-color: var(--accent); width: 100%; }
 input[type="number"] { width: 74px; font: var(--mono); }
 input[type="text"] { width: 100%; }
+input:focus, select:focus { border-color: var(--accent); }
 
 /* ---- preview ---- */
 #preview { grid-area: preview; min-width: 0; position: relative; display: flex; flex-direction: column; background: var(--stage-bg); }
@@ -326,7 +339,7 @@ html[data-modal="shortcuts"] #modal-layer, html[data-modal="confirm"] #modal-lay
 .modal {
   position: absolute; left: 50%; top: 12%; transform: translateX(-50%);
   width: min(560px, 92vw); background: var(--surface); color: var(--fg);
-  border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow);
+  border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
   display: none; flex-direction: column; gap: var(--gap); padding: 16px;
 }
 html[data-modal="save"] #save-modal, html[data-modal="password"] #password-modal,
@@ -348,7 +361,7 @@ html[data-modal="confirm"] #confirm-modal { display: flex; }
 
 #error-toast {
   position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
-  display: none; max-width: min(720px, 92vw); padding: 9px 13px; border-radius: var(--radius);
+  display: none; max-width: min(720px, 92vw); padding: 10px 14px; border-radius: 8px;
   background: var(--surface); border: 1px solid var(--error); color: var(--error);
   box-shadow: var(--shadow); z-index: 70;
 }
@@ -357,6 +370,21 @@ html[data-tone="warn"] #error-toast { border-color: var(--warning); color: var(-
 html[data-tone="ok"] #error-toast { border-color: var(--success); color: var(--success); }
 #error-toast .btn { margin-left: 10px; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+/* UI6 tooltip: styled popover replaces the native title tooltip (engine in
+   the real shell's app-shell-chrome.bindTooltips; this is the visual mirror). */
+.app-tooltip {
+  position: fixed; z-index: 60; pointer-events: none;
+  background: var(--tooltip-bg, var(--fg)); color: var(--tooltip-fg, var(--surface));
+  border-radius: 8px; padding: 7px 11px;
+  font-size: 12.5px; line-height: 1.45; max-width: 320px;
+  box-shadow: var(--shadow);
+  opacity: 0; transform: translateY(4px);
+  transition: opacity .14s ease, transform .14s ease;
+}
+.app-tooltip[data-show="true"] { opacity: 1; transform: none; }
+.app-tooltip[data-side="top"] { transform: translateY(-4px); }
+.app-tooltip[data-side="top"][data-show="true"] { transform: none; }
+html:lang(zh-CN) .app-tooltip { line-height: 1.6; letter-spacing: .01em; }
 </style>
 
 <body>

@@ -1,7 +1,9 @@
 # docs/FACTS.md — 实测事实（依赖与浏览器）
 
-> 最后核对：2026-11-10（**UI5-B2 = 调色烘焙轮**：新增 §1.10 金值表 + 端到端 `apply-sm --only=color`；
-> 落盘链序 = 调色→旋转→切条）。§1.2/§1.3/§1.4 由 `tools/verify/pixel-matrix.mjs`（2026-10-29）与
+> 最后核对：2026-11-10（**UI6 = 配色/tooltip 轮**：`shell-smoke` 新增 tooltip 浮层断言（UI6 T1，
+> show/hide、title 摘挂、aria-label 恒定、反色 token、8px/12.5px 读数）；本轮无新增实测表 ——
+> 两主题正文对比 ≥4.5:1 由 ui-ux-pro-max pro-rules 的 WCAG 算法计算，非浏览器实测）。
+> §1.2/§1.3/§1.4 由 `tools/verify/pixel-matrix.mjs`（2026-10-29）与
 > `tools/verify/overlay-smoke.mjs`（2026-10-30）在仓库内重跑；§1.7 P1、§1.8 P2、
 > §1.9 P4 回读、§1.10 调色烘焙、§2.3 切分、§2.6 落盘几何、§4 导出体积表（预估断言，见 §4 末）均可就地重跑，命令见 §5.1。
 > 本文只记录**已执行验证**得到的事实；决策引用本文编号，不得凭记忆改写。
@@ -477,7 +479,7 @@
 |命令|覆盖的本文编号|说明|
 |---|---|---|
 |`node tools/verify/ui-smoke.mjs`|§1.2 §1.3 §1.4|mock 的数值化 UI 校验(混合模式像素矩阵、`ctx.filter` 泄漏断言、切分几何、骑缝条带)|
-|`node tools/verify/shell-smoke.mjs`|§1.5 §4.2|真实二进制 + headless Chromium:壳契约/CSP/`/api` 往返/i18n/状态机/深链|
+|`node tools/verify/shell-smoke.mjs`|§1.5 §4.2|真实二进制 + headless Chromium:壳契约/CSP/`/api` 往返/i18n/状态机/深链/**tooltip 浮层(UI6 T1:show/hide、title 摘挂、aria-label 恒定、反色 token、8px/12.5px 读数)**|
 |`node tools/verify/ui-contract.mjs`|UI 契约|`docs/ui/mockup.html` ↔ `UI_SPEC` ↔ `AGENTS §6` 三方字段一致|
 |`node tools/verify/webview-launch.mjs`|§1.6|WebView2 构建真窗口启动(打印 `webview window opened` + 页内 `/api` 请求)|
 |`go run ./tools/verify/comprobe [-window]`|§1.6|COM `CoInitializeEx` 返回值实测(三种顺序)+ 真窗口泵消息|

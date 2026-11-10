@@ -249,9 +249,92 @@
   }
 
 
+  // UI6 (2026-11-10, user dialogue directive): the styled tooltip engine. The
+  // native title tooltip gets no theme/typography control, so a [data-i18n-
+  // title] hover/focus shows a `.app-tooltip` popover instead (styled in
+  // style.css: inverted surface, 8 px radius, 12.5 px/1.45, cn-aware leading).
+  // The title attribute is the N2 i18n channel (title + aria-label, asserted
+  // by shell-sm) — aria-label never moves; title is only detached while the
+  // custom tip owns the hover (native tooltip suppressed for that moment) and
+  // the derived pair text is re-put on leave, so a language switch mid-hover
+  // cannot restore stale text. Screen-reader naming stays on aria-label.
+  function bindTooltips() {
+    let tip = null;
+    let host = null;
+    let stashed = "";
+    const tipText = (el) => {
+      const p = S.pairFor(el, "title");
+      if (!p) return "";
+      return state.lang === "cn" ? p.cn : p.en;
+    };
+    const ensureTip = () => {
+      if (!tip) {
+        tip = doc.createElement("div");
+        tip.className = "app-tooltip";
+        tip.dataset.side = "bottom";
+        tip.setAttribute("aria-hidden", "true");
+        doc.body.appendChild(tip);
+      }
+      return tip;
+    };
+    const place = (anchor, t) => {
+      const r = anchor.getBoundingClientRect();
+      const tr = t.getBoundingClientRect();
+      let side = r.top - tr.height - 8 >= 0 ? "top" : "bottom";
+      if (side === "bottom" && r.bottom + tr.height + 8 > window.innerHeight) side = "top";
+      const top = side === "top"
+        ? Math.max(8, r.top - tr.height - 8)
+        : Math.min(window.innerHeight - tr.height - 8, r.bottom + 8);
+      let left = r.left + r.width / 2 - tr.width / 2;
+      left = Math.min(Math.max(8, left), window.innerWidth - tr.width - 8);
+      t.dataset.side = side;
+      t.style.left = left + "px";
+      t.style.top = top + "px";
+    };
+    const hide = () => {
+      if (!host) return;
+      if (stashed) host.setAttribute("title", stashed);
+      stashed = "";
+      host = null;
+      if (tip) tip.dataset.show = "false";
+    };
+    const show = (el) => {
+      const text = tipText(el);
+      if (!text) return;
+      if (el !== host) hide();
+      host = el;
+      stashed = text;
+      // Native tooltip suppression: drop the title attribute while the custom
+      // tip owns the hover (aria-label keeps the accessible name intact).
+      el.removeAttribute("title");
+      const t = ensureTip();
+      t.textContent = text;
+      place(el, t);
+      t.dataset.show = "true";
+    };
+    doc.addEventListener("pointerover", (e) => {
+      const el = e.target.closest && e.target.closest("[data-i18n-title]");
+      if (el) show(el);
+    });
+    doc.addEventListener("pointerout", (e) => {
+      const el = e.target.closest && e.target.closest("[data-i18n-title]");
+      if (el && el === host && !(el.contains && e.relatedTarget && el.contains(e.relatedTarget))) hide();
+    });
+    doc.addEventListener("focusin", (e) => {
+      const el = e.target.closest && e.target.closest("[data-i18n-title]");
+      if (el) show(el);
+    });
+    doc.addEventListener("focusout", () => hide());
+    // The stage pans/zooms without DOM scroll — a stale tip would float over
+    // the wrong anchor, so any wheel/drag gesture retires it immediately.
+    window.addEventListener("wheel", () => hide(), { passive: true, capture: true });
+    window.addEventListener("keydown", (e) => { if (e.key === "Escape") hide(); });
+  }
+
   function boot() {
     html.dataset.app = "autostamp";
     bindControls();
+    bindTooltips();
     renderShortcuts();
     // HD17 (2026-11-05): no boot-time default instance - instances exist only
     // when the user creates them (add-seal mode click / "Add instance").

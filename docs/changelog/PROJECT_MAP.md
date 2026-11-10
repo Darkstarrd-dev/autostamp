@@ -2,6 +2,10 @@
 
 > `PROJECT_MAP.md` 的变更叙述历史（最新在上）。正文只留当前态事实。
 
+## 2026-11-10 — UI6 轮（T1/T2）：`app-shell-chrome.js` 新增 `bindTooltips`、`style.css` token 值换 + `.app-tooltip`；计数 139 / 57 不变
+
+`PROJECT_MAP.md`：头「最后核对」换成 UI6 摘要（token 值全换、CJK 字体栈、seg 药丸、`bindTooltips` 引擎 = chrome 局部函数不入门面、mock 同步镜像、新增 presentation token ×2）。无新文件/新包 —— `web/static` 资产清单不变（`style.css`/`app-shell-chrome.js` 换内容）。
+
 ## 2026-11-10 — UI5 轮（B1/B2）：`internal/pdfcore` 新增 `adjust.go` 行、`app-overlay.js` 行换义（调色/轮廓）、计数 139 / 57
 
 - 头「最后核对」= B1/B2 摘要；UI4 轮降为「同日前一轮」（历轮摘要压成一行注记，禁止堆叠）；
